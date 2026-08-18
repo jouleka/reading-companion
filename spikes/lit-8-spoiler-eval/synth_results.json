@@ -1,0 +1,34 @@
+{
+ "results": [
+  {
+   "bookmark": 1,
+   "recap": "Fyodor Pavlovitch Karamazov, a landowner known for his senseless and vicious behavior, rose from humble beginnings to achieve a fortune of a hundred thousand roubles. He was married twice and fathered three sons: Dmitri from his first wife, Adelaïda Ivanovna Miüsov, and Ivan and Alexey from his second marriage. Adelaïda, who was from a wealthy noble family, initially eloped with Fyodor but soon grew to despise him. She eventually ran away with a divinity student to Petersburg, leaving their three-year-old son Dmitri with Fyodor. News of Adelaïda's sudden death reached Fyodor, who reacted with a mix of drunken joy and grief.",
+   "judge": {
+    "grounded": true,
+    "unsupported_claims": [],
+    "references_future": false,
+    "notes": "The recap accurately reflects the allowed facts without making unsupported claims, and it doesn't reference any future events."
+   }
+  },
+  {
+   "bookmark": 3,
+   "recap": "The story introduces Fyodor Pavlovitch Karamazov, a man who rose from obscurity to amass a fortune of a hundred thousand roubles. He married twice; his first wife, Adelaïda Ivanovna Miüsov, a noblewoman, eventually despised him and left with a divinity student, abandoning their son Dmitri, who was subsequently raised by the faithful servant Grigory. Fyodor’s second marriage to Sofya Ivanovna ended with her death after bearing two sons, Ivan and Alexey, who were later cared for by the general's widow. As Dmitri matured, he discovered that his inheritance had been squandered by Fyodor, leaving him in financial and emotional turmoil. Ivan, meanwhile, grew into a clever, self-sufficient young man who supported himself through writing and joined the family in a rare reunion, mediating between his father and Dmitri. Alexey, having entered the monastery as a novice, was also present during the family's first reunion in the town.",
+   "judge": {
+    "grounded": true,
+    "unsupported_claims": [],
+    "references_future": false,
+    "notes": "All claims in the recap are directly supported by the supplied facts."
+   }
+  },
+  {
+   "bookmark": 5,
+   "recap": "Fyodor Pavlovitch Karamazov, known for his vicious and foolish nature, rose from nothing to acquire a considerable fortune and led a chaotic family life. He married twice; first to Adelaïda Ivanovna Miüsov, who eloped with him and bore him a son, Dmitri, before eventually leaving him. Fyodor abandoned the young Dmitri, who was subsequently raised by the servant Grigory and later passed between various relatives. Dmitri grew up wild, expecting an inheritance that dwindled due to Fyodor's crafty dealings, leaving him bitter and overwhelmed when he discovered his financial ruin. Fyodor's second marriage to the meek Sofya Ivanovna brought two more sons, Ivan and Alexey, who were also abandoned after her death but raised by the generous intervention of the general's widow and Yefim Petrovitch Polenov. Ivan became a clever and self-reliant student, while Alexey, or Alyosha, was drawn to monastic life under the influence of the gentle elder Zossima, who he reverently served.",
+   "judge": {
+    "grounded": true,
+    "unsupported_claims": [],
+    "references_future": false,
+    "notes": "The recap captures the complete outlined events and character details from the provided facts without introducing unsupported claims or reference to future events."
+   }
+  }
+ ]
+}

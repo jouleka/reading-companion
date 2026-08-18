@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Litlet open book</title>
+  <rect width="512" height="512" rx="96" fill="#7d2a26"/>
+  <path d="M90 132c56-13 111 2 166 47v231c-52-39-107-54-166-43V132Z" fill="#f6f1e7"/>
+  <path d="M422 132c-56-13-111 2-166 47v231c52-39 107-54 166-43V132Z" fill="#eadfca"/>
+  <path d="M256 179v231" stroke="#56201e" stroke-width="12"/>
+  <path d="M126 190c37-3 70 7 98 29M126 241c37-3 70 7 98 29M288 219c28-22 61-32 98-29M288 270c28-22 61-32 98-29" fill="none" stroke="#7d2a26" stroke-width="13" stroke-linecap="round"/>
+</svg>

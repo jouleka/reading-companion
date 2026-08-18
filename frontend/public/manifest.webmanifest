@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Litlet Reading Companion",
+  "short_name": "Litlet",
+  "description": "A spoiler-safe EPUB reader that remembers only what you have read.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f1e7",
+  "theme_color": "#7d2a26",
+  "categories": ["books", "education", "productivity"],
+  "icons": [
+    {
+      "src": "/litlet-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

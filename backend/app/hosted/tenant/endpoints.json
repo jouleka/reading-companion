@@ -1,0 +1,386 @@
+{
+  "version": 12,
+  "required_surface_classes": [
+    "list",
+    "get",
+    "mutate",
+    "delete",
+    "import",
+    "export",
+    "search",
+    "memory",
+    "cost",
+    "job",
+    "credential",
+    "answer"
+  ],
+  "enabled": [
+    {
+      "method": "GET",
+      "path": "/api/limits",
+      "surface": "list",
+      "access": "limit-policy-read",
+      "repository_method": "limit_status",
+      "cross_tenant_test": "test_owner_limits_are_visible_atomic_and_owner_scoped"
+    },
+    {
+      "method": "GET",
+      "path": "/api/provider-settings",
+      "surface": "list",
+      "access": "provider-settings-read",
+      "repository_method": "list_provider_settings",
+      "cross_tenant_test": "test_provider_settings_and_validation_are_owner_scoped"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/provider-settings/{capability}",
+      "surface": "mutate",
+      "access": "provider-settings-write",
+      "repository_method": "upsert_provider_setting",
+      "cross_tenant_test": "test_provider_settings_and_validation_are_owner_scoped"
+    },
+    {
+      "method": "POST",
+      "path": "/api/provider-settings/{capability}/validate",
+      "surface": "mutate",
+      "access": "provider-settings-validate",
+      "repository_method": "record_provider_validation",
+      "cross_tenant_test": "test_provider_settings_and_validation_are_owner_scoped"
+    },
+    {
+      "method": "POST",
+      "path": "/api/credentials",
+      "surface": "credential",
+      "access": "credential-write",
+      "repository_method": "create_credential",
+      "cross_tenant_test": "test_hosted_credentials_are_owner_scoped_and_metadata_only"
+    },
+    {
+      "method": "GET",
+      "path": "/api/credentials",
+      "surface": "credential",
+      "access": "credential-read",
+      "repository_method": "list_credentials",
+      "cross_tenant_test": "test_hosted_credentials_are_owner_scoped_and_metadata_only"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/credentials/{credential_id}",
+      "surface": "credential",
+      "access": "credential-write",
+      "repository_method": "replace_credential",
+      "cross_tenant_test": "test_hosted_credentials_are_owner_scoped_and_metadata_only"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/credentials/{credential_id}",
+      "surface": "credential",
+      "access": "credential-delete",
+      "repository_method": "delete_credential",
+      "cross_tenant_test": "test_hosted_credentials_are_owner_scoped_and_metadata_only"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books",
+      "surface": "import",
+      "access": "upload",
+      "repository_method": "create_uploaded_book",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books",
+      "surface": "list",
+      "access": "read",
+      "repository_method": "list_books",
+      "cross_tenant_test": "test_list_and_cost_surfaces_never_include_another_owner"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}",
+      "surface": "get",
+      "access": "read",
+      "repository_method": "get_book",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/manifest",
+      "surface": "get",
+      "access": "read",
+      "repository_method": "get_book_manifest",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "surface": "job",
+      "access": "jobs",
+      "repository_method": "list_jobs",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/{job_id}",
+      "surface": "job",
+      "access": "jobs",
+      "repository_method": "get_job",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/{job_id}/cancel",
+      "surface": "job",
+      "access": "jobs",
+      "repository_method": "cancel_job",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/epub",
+      "surface": "get",
+      "access": "source",
+      "repository_method": "source_object",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/books/{book_id}",
+      "surface": "delete",
+      "access": "delete",
+      "repository_method": "soft_delete_book",
+      "cross_tenant_test": "test_hosted_source_lifecycle_is_owner_scoped"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/position",
+      "surface": "get",
+      "access": "read",
+      "repository_method": "get_position",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/preferences",
+      "surface": "get",
+      "access": "read",
+      "repository_method": "get_reader_preferences",
+      "cross_tenant_test": "test_reader_preferences_are_owner_scoped_and_validated"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/books/{book_id}/preferences",
+      "surface": "mutate",
+      "access": "write",
+      "repository_method": "upsert_reader_preferences",
+      "cross_tenant_test": "test_reader_preferences_are_owner_scoped_and_validated"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/search",
+      "surface": "search",
+      "access": "search",
+      "repository_method": "search_book",
+      "cross_tenant_test": "test_reader_search_is_owner_scoped_spoiler_bounded_and_deletion_aware"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/ask",
+      "surface": "answer",
+      "access": "cited-answer",
+      "repository_method": "ask_context",
+      "cross_tenant_test": "test_ask_the_book_is_owner_scoped_spoiler_bounded_and_costed"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/selection-action",
+      "surface": "answer",
+      "access": "selected-text-assistance",
+      "repository_method": "selection_action_context",
+      "cross_tenant_test": "test_reading_assistance_is_owner_scoped_frontier_bounded_and_costed"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/chapter-closeout",
+      "surface": "answer",
+      "access": "cited-chapter-closeout",
+      "repository_method": "chapter_closeout_context",
+      "cross_tenant_test": "test_reading_assistance_is_owner_scoped_frontier_bounded_and_costed"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/marks",
+      "surface": "get",
+      "access": "reader-marks-read",
+      "repository_method": "list_reader_marks",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/marks/export",
+      "surface": "export",
+      "access": "reader-marks-export",
+      "repository_method": "list_reader_marks",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/highlights",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "create_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/books/{book_id}/highlights/{mark_id}",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "update_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/books/{book_id}/highlights/{mark_id}",
+      "surface": "delete",
+      "access": "reader-marks-delete",
+      "repository_method": "delete_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/annotations",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "create_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/books/{book_id}/annotations/{mark_id}",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "update_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/books/{book_id}/annotations/{mark_id}",
+      "surface": "delete",
+      "access": "reader-marks-delete",
+      "repository_method": "delete_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/bookmarks",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "create_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/books/{book_id}/bookmarks/{mark_id}",
+      "surface": "mutate",
+      "access": "reader-marks-write",
+      "repository_method": "update_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/books/{book_id}/bookmarks/{mark_id}",
+      "surface": "delete",
+      "access": "reader-marks-delete",
+      "repository_method": "delete_reader_mark",
+      "cross_tenant_test": "test_reader_marks_are_owner_scoped_frontier_bounded_and_exportable"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/books/{book_id}/position",
+      "surface": "mutate",
+      "access": "write",
+      "repository_method": "update_position",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/position/reset",
+      "surface": "mutate",
+      "access": "write",
+      "repository_method": "reset_position",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/memory",
+      "surface": "memory",
+      "access": "read",
+      "repository_method": "memory_snapshot",
+      "cross_tenant_test": "test_foreign_book_is_hidden_from_every_identifier_endpoint"
+    },
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/memory-corrections",
+      "surface": "memory",
+      "access": "read",
+      "repository_method": "memory_corrections",
+      "cross_tenant_test": "test_reader_memory_corrections_are_owner_scoped_and_frontier_bounded"
+    },
+    {
+      "method": "POST",
+      "path": "/api/books/{book_id}/memory-corrections",
+      "surface": "mutate",
+      "access": "write",
+      "repository_method": "replace_memory_entity",
+      "cross_tenant_test": "test_reader_memory_corrections_are_owner_scoped_and_frontier_bounded"
+    },
+    {
+      "method": "GET",
+      "path": "/api/costs",
+      "surface": "cost",
+      "access": "cost",
+      "repository_method": "list_costs",
+      "cross_tenant_test": "test_list_and_cost_surfaces_never_include_another_owner"
+    }
+  ],
+  "background": [
+    {
+      "resource": "worker-claim-and-mutations",
+      "operations": ["claim", "start", "heartbeat", "reserve-spend", "commit", "fail", "succeed"],
+      "cross_tenant_test": "test_worker_claim_is_owner_and_book_fenced_against_foreign_identifiers"
+    },
+    {
+      "resource": "worker-credential-resolution",
+      "operations": ["resolve-credential"],
+      "cross_tenant_test": "test_worker_resolves_only_claim_bound_owner_credential_just_in_time"
+    },
+    {
+      "resource": "filesystem-source-storage",
+      "operations": ["put", "get", "exists", "delete"],
+      "cross_tenant_test": "test_encrypted_filesystem_contract_is_owner_scoped_bounded_and_authenticated"
+    },
+    {
+      "resource": "s3-source-storage",
+      "operations": ["put", "get", "exists", "delete"],
+      "cross_tenant_test": "test_s3_contract_derives_owner_path_and_enforces_checksum_content_type_and_sse"
+    },
+    {
+      "resource": "runtime-cache-and-locks",
+      "operations": ["cache", "serialize"],
+      "cross_tenant_test": "test_same_owner_book_serializes_but_same_uuid_for_another_owner_does_not"
+    }
+  ],
+  "unavailable": [
+    {
+      "method": "GET",
+      "path": "/api/books/{book_id}/export",
+      "surface": "export",
+      "access": "export",
+      "expected_status": 404,
+      "owner": "LIT-50",
+      "reason": "Hosted account/book export requires the audited migration/export workflow.",
+      "cross_tenant_test": "test_unavailable_cross_tenant_surfaces_are_non_disclosing"
+    }
+  ]
+}

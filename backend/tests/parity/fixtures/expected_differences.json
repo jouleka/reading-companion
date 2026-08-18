@@ -1,0 +1,34 @@
+[
+  {
+    "id": "raw-chapter-retention",
+    "scope": "storage-omission",
+    "behavioral_impact": "none",
+    "status": "accepted",
+    "reviewed_in": "ADR-0018",
+    "reason": "Full raw chapters remain local-only; PostgreSQL parity covers structured memory and chunks, not hosted full-text retention."
+  },
+  {
+    "id": "physical-identifiers-and-vector-encoding",
+    "scope": "representation",
+    "behavioral_impact": "none",
+    "status": "accepted",
+    "reviewed_in": "ADR-0019",
+    "reason": "SQLite integer ids and combined model-space identity are normalized against PostgreSQL UUIDs and separate embedding-space fields."
+  },
+  {
+    "id": "cache-token-bytes",
+    "scope": "representation",
+    "behavioral_impact": "none",
+    "status": "accepted",
+    "reviewed_in": "ADR-0019",
+    "reason": "Physical row identities differ, so token bytes may differ; stability and invalidation transitions must match."
+  },
+  {
+    "id": "ingest-progress-source",
+    "scope": "representation",
+    "behavioral_impact": "none",
+    "status": "accepted",
+    "reviewed_in": "ADR-0017",
+    "reason": "Local catalog keeps ingest_progress; hosted progress is derived from durable receipts and jobs. Reset parity compares receipt state, bookmark, cursor, and epoch."
+  }
+]

@@ -1,0 +1,2992 @@
+[
+  {
+    "book": {
+      "gid": 28054,
+      "slug": "karamazov",
+      "note": "Brothers Karamazov (Dostoevsky/Garnett) - intro + 12 Books + Epilogue",
+      "title": "The Brothers Karamazov",
+      "version": "2.0",
+      "nav_kind": "ncx",
+      "spine_len": 100,
+      "toc_entries": 99
+    },
+    "segmentation": {
+      "chapter_count": 94,
+      "front_stripped": 3,
+      "back_stripped": 3,
+      "flags": [],
+      "chapters": [
+        {
+          "key": "ch_0001",
+          "title": "Chapter I. Fyodor Pavlovitch Karamazov",
+          "href": "OEBPS/8647304830250799261_28054-h-2.htm.html",
+          "words": 1345
+        },
+        {
+          "key": "ch_0002",
+          "title": "Chapter II. He Gets Rid Of His Eldest Son",
+          "href": "OEBPS/8647304830250799261_28054-h-3.htm.html",
+          "words": 1317
+        },
+        {
+          "key": "ch_0003",
+          "title": "Chapter III. The Second Marriage And The Second Family",
+          "href": "OEBPS/8647304830250799261_28054-h-4.htm.html",
+          "words": 2606
+        },
+        {
+          "key": "ch_0004",
+          "title": "Chapter IV. The Third Son, Alyosha",
+          "href": "OEBPS/8647304830250799261_28054-h-5.htm.html",
+          "words": 3527
+        },
+        {
+          "key": "ch_0005",
+          "title": "Chapter V. Elders",
+          "href": "OEBPS/8647304830250799261_28054-h-6.htm.html",
+          "words": 3645
+        },
+        {
+          "key": "ch_0006",
+          "title": "Book II. An Unfortunate Gathering",
+          "href": "OEBPS/8647304830250799261_28054-h-7.htm.html",
+          "words": 1818
+        },
+        {
+          "key": "ch_0007",
+          "title": "Chapter II. The Old Buffoon",
+          "href": "OEBPS/8647304830250799261_28054-h-8.htm.html",
+          "words": 3589
+        },
+        {
+          "key": "ch_0008",
+          "title": "Chapter III. Peasant Women Who Have Faith",
+          "href": "OEBPS/8647304830250799261_28054-h-9.htm.html",
+          "words": 3254
+        },
+        {
+          "key": "ch_0009",
+          "title": "Chapter IV. A Lady Of Little Faith",
+          "href": "OEBPS/8647304830250799261_28054-h-10.htm.html",
+          "words": 3049
+        },
+        {
+          "key": "ch_0010",
+          "title": "Chapter V. So Be It! So Be It!",
+          "href": "OEBPS/8647304830250799261_28054-h-11.htm.html",
+          "words": 3686
+        },
+        {
+          "key": "ch_0011",
+          "title": "Chapter VI. Why Is Such A Man Alive?",
+          "href": "OEBPS/8647304830250799261_28054-h-12.htm.html",
+          "words": 3946
+        },
+        {
+          "key": "ch_0012",
+          "title": "Chapter VII. A Young Man Bent On A Career",
+          "href": "OEBPS/8647304830250799261_28054-h-13.htm.html",
+          "words": 3481
+        },
+        {
+          "key": "ch_0013",
+          "title": "Chapter VIII. The Scandalous Scene",
+          "href": "OEBPS/8647304830250799261_28054-h-14.htm.html",
+          "words": 3532
+        },
+        {
+          "key": "ch_0014",
+          "title": "Book III. The Sensualists",
+          "href": "OEBPS/8647304830250799261_28054-h-15.htm.html",
+          "words": 2276
+        },
+        {
+          "key": "ch_0015",
+          "title": "Chapter II. Lizaveta",
+          "href": "OEBPS/8647304830250799261_28054-h-16.htm.html",
+          "words": 1661
+        },
+        {
+          "key": "ch_0016",
+          "title": "Chapter III. The Confession Of A Passionate Heart\u2014In Verse",
+          "href": "OEBPS/8647304830250799261_28054-h-17.htm.html",
+          "words": 3345
+        },
+        {
+          "key": "ch_0017",
+          "title": "Chapter IV. The Confession Of A Passionate Heart\u2014In Anecdote",
+          "href": "OEBPS/8647304830250799261_28054-h-18.htm.html",
+          "words": 3397
+        },
+        {
+          "key": "ch_0018",
+          "title": "Chapter V. The Confession Of A Passionate Heart\u2014\u201cHeels Up\u201d",
+          "href": "OEBPS/8647304830250799261_28054-h-19.htm.html",
+          "words": 3389
+        },
+        {
+          "key": "ch_0019",
+          "title": "Chapter VI. Smerdyakov",
+          "href": "OEBPS/8647304830250799261_28054-h-20.htm.html",
+          "words": 2165
+        },
+        {
+          "key": "ch_0020",
+          "title": "Chapter VII. The Controversy",
+          "href": "OEBPS/8647304830250799261_28054-h-21.htm.html",
+          "words": 2187
+        },
+        {
+          "key": "ch_0021",
+          "title": "Chapter VIII. Over The Brandy",
+          "href": "OEBPS/8647304830250799261_28054-h-22.htm.html",
+          "words": 2891
+        },
+        {
+          "key": "ch_0022",
+          "title": "Chapter IX. The Sensualists",
+          "href": "OEBPS/8647304830250799261_28054-h-23.htm.html",
+          "words": 2072
+        },
+        {
+          "key": "ch_0023",
+          "title": "Chapter X. Both Together",
+          "href": "OEBPS/8647304830250799261_28054-h-24.htm.html",
+          "words": 4459
+        },
+        {
+          "key": "ch_0024",
+          "title": "Chapter XI. Another Reputation Ruined",
+          "href": "OEBPS/8647304830250799261_28054-h-25.htm.html",
+          "words": 3144
+        },
+        {
+          "key": "ch_0025",
+          "title": "PART II",
+          "href": "OEBPS/8647304830250799261_28054-h-26.htm.html",
+          "words": 4140
+        },
+        {
+          "key": "ch_0026",
+          "title": "Chapter II. At His Father\u2019s",
+          "href": "OEBPS/8647304830250799261_28054-h-27.htm.html",
+          "words": 1968
+        },
+        {
+          "key": "ch_0027",
+          "title": "Chapter III. A Meeting With The Schoolboys",
+          "href": "OEBPS/8647304830250799261_28054-h-28.htm.html",
+          "words": 1837
+        },
+        {
+          "key": "ch_0028",
+          "title": "Chapter IV. At The Hohlakovs\u2019",
+          "href": "OEBPS/8647304830250799261_28054-h-29.htm.html",
+          "words": 2335
+        },
+        {
+          "key": "ch_0029",
+          "title": "Chapter V. A Laceration In The Drawing-Room",
+          "href": "OEBPS/8647304830250799261_28054-h-30.htm.html",
+          "words": 4524
+        },
+        {
+          "key": "ch_0030",
+          "title": "Chapter VI. A Laceration In The Cottage",
+          "href": "OEBPS/8647304830250799261_28054-h-31.htm.html",
+          "words": 3332
+        },
+        {
+          "key": "ch_0031",
+          "title": "Chapter VII. And In The Open Air",
+          "href": "OEBPS/8647304830250799261_28054-h-32.htm.html",
+          "words": 4401
+        },
+        {
+          "key": "ch_0032",
+          "title": "Book V. Pro And Contra",
+          "href": "OEBPS/8647304830250799261_28054-h-33.htm.html",
+          "words": 4445
+        },
+        {
+          "key": "ch_0033",
+          "title": "Chapter II. Smerdyakov With A Guitar",
+          "href": "OEBPS/8647304830250799261_28054-h-34.htm.html",
+          "words": 2557
+        },
+        {
+          "key": "ch_0034",
+          "title": "Chapter III. The Brothers Make Friends",
+          "href": "OEBPS/8647304830250799261_28054-h-35.htm.html",
+          "words": 3849
+        },
+        {
+          "key": "ch_0035",
+          "title": "Chapter IV. Rebellion",
+          "href": "OEBPS/8647304830250799261_28054-h-36.htm.html",
+          "words": 4940
+        },
+        {
+          "key": "ch_0036",
+          "title": "Chapter V. The Grand Inquisitor",
+          "href": "OEBPS/8647304830250799261_28054-h-37.htm.html",
+          "words": 9291
+        },
+        {
+          "key": "ch_0037",
+          "title": "Chapter VI. For Awhile A Very Obscure One",
+          "href": "OEBPS/8647304830250799261_28054-h-38.htm.html",
+          "words": 4345
+        },
+        {
+          "key": "ch_0038",
+          "title": "Chapter VII. \u201cIt\u2019s Always Worth While Speaking To A Clever M",
+          "href": "OEBPS/8647304830250799261_28054-h-39.htm.html",
+          "words": 3423
+        },
+        {
+          "key": "ch_0039",
+          "title": "Book VI. The Russian Monk",
+          "href": "OEBPS/8647304830250799261_28054-h-40.htm.html",
+          "words": 6386
+        },
+        {
+          "key": "ch_0040",
+          "title": "Chapter II. The Duel",
+          "href": "OEBPS/8647304830250799261_28054-h-41.htm.html",
+          "words": 9155
+        },
+        {
+          "key": "ch_0041",
+          "title": "Chapter III. Conversations And Exhortations Of Father Zossim",
+          "href": "OEBPS/8647304830250799261_28054-h-42.htm.html",
+          "words": 6253
+        },
+        {
+          "key": "ch_0042",
+          "title": "PART III",
+          "href": "OEBPS/8647304830250799261_28054-h-43.htm.html",
+          "words": 5201
+        },
+        {
+          "key": "ch_0043",
+          "title": "Chapter II. A Critical Moment",
+          "href": "OEBPS/8647304830250799261_28054-h-44.htm.html",
+          "words": 2435
+        },
+        {
+          "key": "ch_0044",
+          "title": "Chapter III. An Onion",
+          "href": "OEBPS/8647304830250799261_28054-h-45.htm.html",
+          "words": 7832
+        },
+        {
+          "key": "ch_0045",
+          "title": "Chapter IV. Cana Of Galilee",
+          "href": "OEBPS/8647304830250799261_28054-h-46.htm.html",
+          "words": 2077
+        },
+        {
+          "key": "ch_0046",
+          "title": "Book VIII. Mitya",
+          "href": "OEBPS/8647304830250799261_28054-h-47.htm.html",
+          "words": 4785
+        },
+        {
+          "key": "ch_0047",
+          "title": "Chapter II. Lyagavy",
+          "href": "OEBPS/8647304830250799261_28054-h-48.htm.html",
+          "words": 2983
+        },
+        {
+          "key": "ch_0048",
+          "title": "Chapter III. Gold-Mines",
+          "href": "OEBPS/8647304830250799261_28054-h-49.htm.html",
+          "words": 4744
+        },
+        {
+          "key": "ch_0049",
+          "title": "Chapter IV. In The Dark",
+          "href": "OEBPS/8647304830250799261_28054-h-50.htm.html",
+          "words": 2402
+        },
+        {
+          "key": "ch_0050",
+          "title": "Chapter V. A Sudden Resolution",
+          "href": "OEBPS/8647304830250799261_28054-h-51.htm.html",
+          "words": 6301
+        },
+        {
+          "key": "ch_0051",
+          "title": "Chapter VI. \u201cI Am Coming, Too!\u201d",
+          "href": "OEBPS/8647304830250799261_28054-h-52.htm.html",
+          "words": 3131
+        },
+        {
+          "key": "ch_0052",
+          "title": "Chapter VII. The First And Rightful Lover",
+          "href": "OEBPS/8647304830250799261_28054-h-53.htm.html",
+          "words": 6421
+        },
+        {
+          "key": "ch_0053",
+          "title": "Chapter VIII. Delirium",
+          "href": "OEBPS/8647304830250799261_28054-h-54.htm.html",
+          "words": 5554
+        },
+        {
+          "key": "ch_0054",
+          "title": "Book IX. The Preliminary Investigation",
+          "href": "OEBPS/8647304830250799261_28054-h-55.htm.html",
+          "words": 2822
+        },
+        {
+          "key": "ch_0055",
+          "title": "Chapter II. The Alarm",
+          "href": "OEBPS/8647304830250799261_28054-h-56.htm.html",
+          "words": 2716
+        },
+        {
+          "key": "ch_0056",
+          "title": "Chapter III. The Sufferings Of A Soul, The First Ordeal",
+          "href": "OEBPS/8647304830250799261_28054-h-57.htm.html",
+          "words": 3587
+        },
+        {
+          "key": "ch_0057",
+          "title": "Chapter IV. The Second Ordeal",
+          "href": "OEBPS/8647304830250799261_28054-h-58.htm.html",
+          "words": 3028
+        },
+        {
+          "key": "ch_0058",
+          "title": "Chapter V. The Third Ordeal",
+          "href": "OEBPS/8647304830250799261_28054-h-59.htm.html",
+          "words": 4421
+        },
+        {
+          "key": "ch_0059",
+          "title": "Chapter VI. The Prosecutor Catches Mitya",
+          "href": "OEBPS/8647304830250799261_28054-h-60.htm.html",
+          "words": 3181
+        },
+        {
+          "key": "ch_0060",
+          "title": "Chapter VII. Mitya\u2019s Great Secret. Received With Hisses",
+          "href": "OEBPS/8647304830250799261_28054-h-61.htm.html",
+          "words": 4781
+        },
+        {
+          "key": "ch_0061",
+          "title": "Chapter VIII. The Evidence Of The Witnesses. The Babe",
+          "href": "OEBPS/8647304830250799261_28054-h-62.htm.html",
+          "words": 3940
+        },
+        {
+          "key": "ch_0062",
+          "title": "Chapter IX. They Carry Mitya Away",
+          "href": "OEBPS/8647304830250799261_28054-h-63.htm.html",
+          "words": 1537
+        },
+        {
+          "key": "ch_0063",
+          "title": "PART IV",
+          "href": "OEBPS/8647304830250799261_28054-h-64.htm.html",
+          "words": 2271
+        },
+        {
+          "key": "ch_0064",
+          "title": "Chapter II. Children",
+          "href": "OEBPS/8647304830250799261_28054-h-65.htm.html",
+          "words": 2282
+        },
+        {
+          "key": "ch_0065",
+          "title": "Chapter III. The Schoolboy",
+          "href": "OEBPS/8647304830250799261_28054-h-66.htm.html",
+          "words": 2927
+        },
+        {
+          "key": "ch_0066",
+          "title": "Chapter IV. The Lost Dog",
+          "href": "OEBPS/8647304830250799261_28054-h-67.htm.html",
+          "words": 3277
+        },
+        {
+          "key": "ch_0067",
+          "title": "Chapter V. By Ilusha\u2019s Bedside",
+          "href": "OEBPS/8647304830250799261_28054-h-68.htm.html",
+          "words": 6680
+        },
+        {
+          "key": "ch_0068",
+          "title": "Chapter VI. Precocity",
+          "href": "OEBPS/8647304830250799261_28054-h-69.htm.html",
+          "words": 2654
+        },
+        {
+          "key": "ch_0069",
+          "title": "Chapter VII. Ilusha",
+          "href": "OEBPS/8647304830250799261_28054-h-70.htm.html",
+          "words": 1405
+        },
+        {
+          "key": "ch_0070",
+          "title": "Book XI. Ivan",
+          "href": "OEBPS/8647304830250799261_28054-h-71.htm.html",
+          "words": 3959
+        },
+        {
+          "key": "ch_0071",
+          "title": "Chapter II. The Injured Foot",
+          "href": "OEBPS/8647304830250799261_28054-h-72.htm.html",
+          "words": 4396
+        },
+        {
+          "key": "ch_0072",
+          "title": "Chapter III. A Little Demon",
+          "href": "OEBPS/8647304830250799261_28054-h-73.htm.html",
+          "words": 2582
+        },
+        {
+          "key": "ch_0073",
+          "title": "Chapter IV. A Hymn And A Secret",
+          "href": "OEBPS/8647304830250799261_28054-h-74.htm.html",
+          "words": 5813
+        },
+        {
+          "key": "ch_0074",
+          "title": "Chapter V. Not You, Not You!",
+          "href": "OEBPS/8647304830250799261_28054-h-75.htm.html",
+          "words": 2255
+        },
+        {
+          "key": "ch_0075",
+          "title": "Chapter VI. The First Interview With Smerdyakov",
+          "href": "OEBPS/8647304830250799261_28054-h-76.htm.html",
+          "words": 4017
+        },
+        {
+          "key": "ch_0076",
+          "title": "Chapter VII. The Second Visit To Smerdyakov",
+          "href": "OEBPS/8647304830250799261_28054-h-77.htm.html",
+          "words": 3870
+        },
+        {
+          "key": "ch_0077",
+          "title": "Chapter VIII. The Third And Last Interview With Smerdyakov",
+          "href": "OEBPS/8647304830250799261_28054-h-78.htm.html",
+          "words": 6423
+        },
+        {
+          "key": "ch_0078",
+          "title": "Chapter IX. The Devil. Ivan\u2019s Nightmare",
+          "href": "OEBPS/8647304830250799261_28054-h-79.htm.html",
+          "words": 7978
+        },
+        {
+          "key": "ch_0079",
+          "title": "Chapter X. \u201cIt Was He Who Said That\u201d",
+          "href": "OEBPS/8647304830250799261_28054-h-80.htm.html",
+          "words": 2270
+        },
+        {
+          "key": "ch_0080",
+          "title": "Book XII. A Judicial Error",
+          "href": "OEBPS/8647304830250799261_28054-h-81.htm.html",
+          "words": 2836
+        },
+        {
+          "key": "ch_0081",
+          "title": "Chapter II. Dangerous Witnesses",
+          "href": "OEBPS/8647304830250799261_28054-h-82.htm.html",
+          "words": 3823
+        },
+        {
+          "key": "ch_0082",
+          "title": "Chapter III. The Medical Experts And A Pound Of Nuts",
+          "href": "OEBPS/8647304830250799261_28054-h-83.htm.html",
+          "words": 2332
+        },
+        {
+          "key": "ch_0083",
+          "title": "Chapter IV. Fortune Smiles On Mitya",
+          "href": "OEBPS/8647304830250799261_28054-h-84.htm.html",
+          "words": 3997
+        },
+        {
+          "key": "ch_0084",
+          "title": "Chapter V. A Sudden Catastrophe",
+          "href": "OEBPS/8647304830250799261_28054-h-85.htm.html",
+          "words": 4141
+        },
+        {
+          "key": "ch_0085",
+          "title": "Chapter VI. The Prosecutor\u2019s Speech. Sketches Of Character",
+          "href": "OEBPS/8647304830250799261_28054-h-86.htm.html",
+          "words": 4063
+        },
+        {
+          "key": "ch_0086",
+          "title": "Chapter VII. An Historical Survey",
+          "href": "OEBPS/8647304830250799261_28054-h-87.htm.html",
+          "words": 2078
+        },
+        {
+          "key": "ch_0087",
+          "title": "Chapter VIII. A Treatise On Smerdyakov",
+          "href": "OEBPS/8647304830250799261_28054-h-88.htm.html",
+          "words": 4120
+        },
+        {
+          "key": "ch_0088",
+          "title": "Chapter IX. The Galloping Troika. The End Of The Prosecutor\u2019",
+          "href": "OEBPS/8647304830250799261_28054-h-89.htm.html",
+          "words": 4603
+        },
+        {
+          "key": "ch_0089",
+          "title": "Chapter X. The Speech For The Defense. An Argument That Cuts",
+          "href": "OEBPS/8647304830250799261_28054-h-90.htm.html",
+          "words": 1727
+        },
+        {
+          "key": "ch_0090",
+          "title": "Chapter XI. There Was No Money. There Was No Robbery",
+          "href": "OEBPS/8647304830250799261_28054-h-91.htm.html",
+          "words": 2839
+        },
+        {
+          "key": "ch_0091",
+          "title": "Chapter XII. And There Was No Murder Either",
+          "href": "OEBPS/8647304830250799261_28054-h-92.htm.html",
+          "words": 3437
+        },
+        {
+          "key": "ch_0092",
+          "title": "Chapter XIII. A Corrupter Of Thought",
+          "href": "OEBPS/8647304830250799261_28054-h-93.htm.html",
+          "words": 3435
+        },
+        {
+          "key": "ch_0093",
+          "title": "Chapter XIV. The Peasants Stand Firm",
+          "href": "OEBPS/8647304830250799261_28054-h-94.htm.html",
+          "words": 2589
+        },
+        {
+          "key": "ch_0094",
+          "title": "EPILOGUE",
+          "href": "OEBPS/8647304830250799261_28054-h-95.htm.html",
+          "words": 2227
+        }
+      ]
+    },
+    "items": [
+      {
+        "idx": 0,
+        "href": "OEBPS/wrap0000.html",
+        "base": "wrap0000.html",
+        "type": "application/xhtml+xml",
+        "label": "",
+        "heading": "\"Cover\"",
+        "words": 1,
+        "pg": false,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 1,
+        "href": "OEBPS/8647304830250799261_28054-h-0.htm.html",
+        "base": "8647304830250799261_28054-h-0.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "The Brothers Karamazov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 818,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 2,
+        "href": "OEBPS/8647304830250799261_28054-h-1.htm.html",
+        "base": "8647304830250799261_28054-h-1.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "PART I",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 20,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 3,
+        "href": "OEBPS/8647304830250799261_28054-h-2.htm.html",
+        "base": "8647304830250799261_28054-h-2.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter I. Fyodor Pavlovitch Karamazov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1345,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 4,
+        "href": "OEBPS/8647304830250799261_28054-h-3.htm.html",
+        "base": "8647304830250799261_28054-h-3.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. He Gets Rid Of His Eldest Son",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1317,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 5,
+        "href": "OEBPS/8647304830250799261_28054-h-4.htm.html",
+        "base": "8647304830250799261_28054-h-4.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Second Marriage And The Second Family",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2606,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 6,
+        "href": "OEBPS/8647304830250799261_28054-h-5.htm.html",
+        "base": "8647304830250799261_28054-h-5.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. The Third Son, Alyosha",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3527,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 7,
+        "href": "OEBPS/8647304830250799261_28054-h-6.htm.html",
+        "base": "8647304830250799261_28054-h-6.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. Elders",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3645,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 8,
+        "href": "OEBPS/8647304830250799261_28054-h-7.htm.html",
+        "base": "8647304830250799261_28054-h-7.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book II. An Unfortunate Gathering",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1818,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 9,
+        "href": "OEBPS/8647304830250799261_28054-h-8.htm.html",
+        "base": "8647304830250799261_28054-h-8.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. The Old Buffoon",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3589,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 10,
+        "href": "OEBPS/8647304830250799261_28054-h-9.htm.html",
+        "base": "8647304830250799261_28054-h-9.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. Peasant Women Who Have Faith",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3254,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 11,
+        "href": "OEBPS/8647304830250799261_28054-h-10.htm.html",
+        "base": "8647304830250799261_28054-h-10.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. A Lady Of Little Faith",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3049,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 12,
+        "href": "OEBPS/8647304830250799261_28054-h-11.htm.html",
+        "base": "8647304830250799261_28054-h-11.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. So Be It! So Be It!",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3686,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 13,
+        "href": "OEBPS/8647304830250799261_28054-h-12.htm.html",
+        "base": "8647304830250799261_28054-h-12.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. Why Is Such A Man Alive?",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3946,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 14,
+        "href": "OEBPS/8647304830250799261_28054-h-13.htm.html",
+        "base": "8647304830250799261_28054-h-13.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. A Young Man Bent On A Career",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3481,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 15,
+        "href": "OEBPS/8647304830250799261_28054-h-14.htm.html",
+        "base": "8647304830250799261_28054-h-14.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. The Scandalous Scene",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3532,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 16,
+        "href": "OEBPS/8647304830250799261_28054-h-15.htm.html",
+        "base": "8647304830250799261_28054-h-15.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book III. The Sensualists",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2276,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 17,
+        "href": "OEBPS/8647304830250799261_28054-h-16.htm.html",
+        "base": "8647304830250799261_28054-h-16.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. Lizaveta",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1661,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 18,
+        "href": "OEBPS/8647304830250799261_28054-h-17.htm.html",
+        "base": "8647304830250799261_28054-h-17.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Confession Of A Passionate Heart\u2014In Verse",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3345,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 19,
+        "href": "OEBPS/8647304830250799261_28054-h-18.htm.html",
+        "base": "8647304830250799261_28054-h-18.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. The Confession Of A Passionate Heart\u2014In Anecdote",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3397,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 20,
+        "href": "OEBPS/8647304830250799261_28054-h-19.htm.html",
+        "base": "8647304830250799261_28054-h-19.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. The Confession Of A Passionate Heart\u2014\u201cHeels Up\u201d",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3389,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 21,
+        "href": "OEBPS/8647304830250799261_28054-h-20.htm.html",
+        "base": "8647304830250799261_28054-h-20.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. Smerdyakov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2165,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 22,
+        "href": "OEBPS/8647304830250799261_28054-h-21.htm.html",
+        "base": "8647304830250799261_28054-h-21.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. The Controversy",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2187,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 23,
+        "href": "OEBPS/8647304830250799261_28054-h-22.htm.html",
+        "base": "8647304830250799261_28054-h-22.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. Over The Brandy",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2891,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 24,
+        "href": "OEBPS/8647304830250799261_28054-h-23.htm.html",
+        "base": "8647304830250799261_28054-h-23.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IX. The Sensualists",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2072,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 25,
+        "href": "OEBPS/8647304830250799261_28054-h-24.htm.html",
+        "base": "8647304830250799261_28054-h-24.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter X. Both Together",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4459,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 26,
+        "href": "OEBPS/8647304830250799261_28054-h-25.htm.html",
+        "base": "8647304830250799261_28054-h-25.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter XI. Another Reputation Ruined",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3144,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 27,
+        "href": "OEBPS/8647304830250799261_28054-h-26.htm.html",
+        "base": "8647304830250799261_28054-h-26.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "PART II",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4140,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 28,
+        "href": "OEBPS/8647304830250799261_28054-h-27.htm.html",
+        "base": "8647304830250799261_28054-h-27.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. At His Father\u2019s",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1968,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 29,
+        "href": "OEBPS/8647304830250799261_28054-h-28.htm.html",
+        "base": "8647304830250799261_28054-h-28.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. A Meeting With The Schoolboys",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1837,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 30,
+        "href": "OEBPS/8647304830250799261_28054-h-29.htm.html",
+        "base": "8647304830250799261_28054-h-29.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. At The Hohlakovs\u2019",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2335,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 31,
+        "href": "OEBPS/8647304830250799261_28054-h-30.htm.html",
+        "base": "8647304830250799261_28054-h-30.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. A Laceration In The Drawing-Room",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4524,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 32,
+        "href": "OEBPS/8647304830250799261_28054-h-31.htm.html",
+        "base": "8647304830250799261_28054-h-31.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. A Laceration In The Cottage",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3332,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 33,
+        "href": "OEBPS/8647304830250799261_28054-h-32.htm.html",
+        "base": "8647304830250799261_28054-h-32.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. And In The Open Air",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4401,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 34,
+        "href": "OEBPS/8647304830250799261_28054-h-33.htm.html",
+        "base": "8647304830250799261_28054-h-33.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book V. Pro And Contra",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4445,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 35,
+        "href": "OEBPS/8647304830250799261_28054-h-34.htm.html",
+        "base": "8647304830250799261_28054-h-34.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. Smerdyakov With A Guitar",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2557,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 36,
+        "href": "OEBPS/8647304830250799261_28054-h-35.htm.html",
+        "base": "8647304830250799261_28054-h-35.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Brothers Make Friends",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3849,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 37,
+        "href": "OEBPS/8647304830250799261_28054-h-36.htm.html",
+        "base": "8647304830250799261_28054-h-36.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. Rebellion",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4940,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 38,
+        "href": "OEBPS/8647304830250799261_28054-h-37.htm.html",
+        "base": "8647304830250799261_28054-h-37.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. The Grand Inquisitor",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 9291,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 39,
+        "href": "OEBPS/8647304830250799261_28054-h-38.htm.html",
+        "base": "8647304830250799261_28054-h-38.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. For Awhile A Very Obscure One",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4345,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 40,
+        "href": "OEBPS/8647304830250799261_28054-h-39.htm.html",
+        "base": "8647304830250799261_28054-h-39.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. \u201cIt\u2019s Always Worth While Speaking To A Clever M",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3423,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 41,
+        "href": "OEBPS/8647304830250799261_28054-h-40.htm.html",
+        "base": "8647304830250799261_28054-h-40.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book VI. The Russian Monk",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6386,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 42,
+        "href": "OEBPS/8647304830250799261_28054-h-41.htm.html",
+        "base": "8647304830250799261_28054-h-41.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. The Duel",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 9155,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 43,
+        "href": "OEBPS/8647304830250799261_28054-h-42.htm.html",
+        "base": "8647304830250799261_28054-h-42.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. Conversations And Exhortations Of Father Zossim",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6253,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 44,
+        "href": "OEBPS/8647304830250799261_28054-h-43.htm.html",
+        "base": "8647304830250799261_28054-h-43.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "PART III",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 5201,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 45,
+        "href": "OEBPS/8647304830250799261_28054-h-44.htm.html",
+        "base": "8647304830250799261_28054-h-44.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. A Critical Moment",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2435,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 46,
+        "href": "OEBPS/8647304830250799261_28054-h-45.htm.html",
+        "base": "8647304830250799261_28054-h-45.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. An Onion",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 7832,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 47,
+        "href": "OEBPS/8647304830250799261_28054-h-46.htm.html",
+        "base": "8647304830250799261_28054-h-46.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. Cana Of Galilee",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2077,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 48,
+        "href": "OEBPS/8647304830250799261_28054-h-47.htm.html",
+        "base": "8647304830250799261_28054-h-47.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book VIII. Mitya",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4785,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 49,
+        "href": "OEBPS/8647304830250799261_28054-h-48.htm.html",
+        "base": "8647304830250799261_28054-h-48.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. Lyagavy",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2983,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 50,
+        "href": "OEBPS/8647304830250799261_28054-h-49.htm.html",
+        "base": "8647304830250799261_28054-h-49.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. Gold-Mines",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4744,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 51,
+        "href": "OEBPS/8647304830250799261_28054-h-50.htm.html",
+        "base": "8647304830250799261_28054-h-50.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. In The Dark",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2402,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 52,
+        "href": "OEBPS/8647304830250799261_28054-h-51.htm.html",
+        "base": "8647304830250799261_28054-h-51.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. A Sudden Resolution",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6301,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 53,
+        "href": "OEBPS/8647304830250799261_28054-h-52.htm.html",
+        "base": "8647304830250799261_28054-h-52.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. \u201cI Am Coming, Too!\u201d",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3131,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 54,
+        "href": "OEBPS/8647304830250799261_28054-h-53.htm.html",
+        "base": "8647304830250799261_28054-h-53.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. The First And Rightful Lover",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6421,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 55,
+        "href": "OEBPS/8647304830250799261_28054-h-54.htm.html",
+        "base": "8647304830250799261_28054-h-54.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. Delirium",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 5554,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 56,
+        "href": "OEBPS/8647304830250799261_28054-h-55.htm.html",
+        "base": "8647304830250799261_28054-h-55.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book IX. The Preliminary Investigation",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2822,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 57,
+        "href": "OEBPS/8647304830250799261_28054-h-56.htm.html",
+        "base": "8647304830250799261_28054-h-56.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. The Alarm",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2716,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 58,
+        "href": "OEBPS/8647304830250799261_28054-h-57.htm.html",
+        "base": "8647304830250799261_28054-h-57.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Sufferings Of A Soul, The First Ordeal",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3587,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 59,
+        "href": "OEBPS/8647304830250799261_28054-h-58.htm.html",
+        "base": "8647304830250799261_28054-h-58.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. The Second Ordeal",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3028,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 60,
+        "href": "OEBPS/8647304830250799261_28054-h-59.htm.html",
+        "base": "8647304830250799261_28054-h-59.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. The Third Ordeal",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4421,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 61,
+        "href": "OEBPS/8647304830250799261_28054-h-60.htm.html",
+        "base": "8647304830250799261_28054-h-60.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. The Prosecutor Catches Mitya",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3181,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 62,
+        "href": "OEBPS/8647304830250799261_28054-h-61.htm.html",
+        "base": "8647304830250799261_28054-h-61.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. Mitya\u2019s Great Secret. Received With Hisses",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4781,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 63,
+        "href": "OEBPS/8647304830250799261_28054-h-62.htm.html",
+        "base": "8647304830250799261_28054-h-62.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. The Evidence Of The Witnesses. The Babe",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3940,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 64,
+        "href": "OEBPS/8647304830250799261_28054-h-63.htm.html",
+        "base": "8647304830250799261_28054-h-63.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IX. They Carry Mitya Away",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1537,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 65,
+        "href": "OEBPS/8647304830250799261_28054-h-64.htm.html",
+        "base": "8647304830250799261_28054-h-64.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "PART IV",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2271,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 66,
+        "href": "OEBPS/8647304830250799261_28054-h-65.htm.html",
+        "base": "8647304830250799261_28054-h-65.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. Children",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2282,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 67,
+        "href": "OEBPS/8647304830250799261_28054-h-66.htm.html",
+        "base": "8647304830250799261_28054-h-66.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Schoolboy",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2927,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 68,
+        "href": "OEBPS/8647304830250799261_28054-h-67.htm.html",
+        "base": "8647304830250799261_28054-h-67.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. The Lost Dog",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3277,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 69,
+        "href": "OEBPS/8647304830250799261_28054-h-68.htm.html",
+        "base": "8647304830250799261_28054-h-68.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. By Ilusha\u2019s Bedside",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6680,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 70,
+        "href": "OEBPS/8647304830250799261_28054-h-69.htm.html",
+        "base": "8647304830250799261_28054-h-69.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. Precocity",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2654,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 71,
+        "href": "OEBPS/8647304830250799261_28054-h-70.htm.html",
+        "base": "8647304830250799261_28054-h-70.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. Ilusha",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1405,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 72,
+        "href": "OEBPS/8647304830250799261_28054-h-71.htm.html",
+        "base": "8647304830250799261_28054-h-71.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book XI. Ivan",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3959,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 73,
+        "href": "OEBPS/8647304830250799261_28054-h-72.htm.html",
+        "base": "8647304830250799261_28054-h-72.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. The Injured Foot",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4396,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 74,
+        "href": "OEBPS/8647304830250799261_28054-h-73.htm.html",
+        "base": "8647304830250799261_28054-h-73.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. A Little Demon",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2582,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 75,
+        "href": "OEBPS/8647304830250799261_28054-h-74.htm.html",
+        "base": "8647304830250799261_28054-h-74.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. A Hymn And A Secret",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 5813,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 76,
+        "href": "OEBPS/8647304830250799261_28054-h-75.htm.html",
+        "base": "8647304830250799261_28054-h-75.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. Not You, Not You!",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2255,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 77,
+        "href": "OEBPS/8647304830250799261_28054-h-76.htm.html",
+        "base": "8647304830250799261_28054-h-76.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. The First Interview With Smerdyakov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4017,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 78,
+        "href": "OEBPS/8647304830250799261_28054-h-77.htm.html",
+        "base": "8647304830250799261_28054-h-77.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. The Second Visit To Smerdyakov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3870,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 79,
+        "href": "OEBPS/8647304830250799261_28054-h-78.htm.html",
+        "base": "8647304830250799261_28054-h-78.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. The Third And Last Interview With Smerdyakov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 6423,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 80,
+        "href": "OEBPS/8647304830250799261_28054-h-79.htm.html",
+        "base": "8647304830250799261_28054-h-79.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IX. The Devil. Ivan\u2019s Nightmare",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 7978,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 81,
+        "href": "OEBPS/8647304830250799261_28054-h-80.htm.html",
+        "base": "8647304830250799261_28054-h-80.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter X. \u201cIt Was He Who Said That\u201d",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2270,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 82,
+        "href": "OEBPS/8647304830250799261_28054-h-81.htm.html",
+        "base": "8647304830250799261_28054-h-81.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Book XII. A Judicial Error",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2836,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 83,
+        "href": "OEBPS/8647304830250799261_28054-h-82.htm.html",
+        "base": "8647304830250799261_28054-h-82.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. Dangerous Witnesses",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3823,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 84,
+        "href": "OEBPS/8647304830250799261_28054-h-83.htm.html",
+        "base": "8647304830250799261_28054-h-83.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. The Medical Experts And A Pound Of Nuts",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2332,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 85,
+        "href": "OEBPS/8647304830250799261_28054-h-84.htm.html",
+        "base": "8647304830250799261_28054-h-84.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IV. Fortune Smiles On Mitya",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3997,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 86,
+        "href": "OEBPS/8647304830250799261_28054-h-85.htm.html",
+        "base": "8647304830250799261_28054-h-85.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter V. A Sudden Catastrophe",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4141,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 87,
+        "href": "OEBPS/8647304830250799261_28054-h-86.htm.html",
+        "base": "8647304830250799261_28054-h-86.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VI. The Prosecutor\u2019s Speech. Sketches Of Character",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4063,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 88,
+        "href": "OEBPS/8647304830250799261_28054-h-87.htm.html",
+        "base": "8647304830250799261_28054-h-87.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VII. An Historical Survey",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2078,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 89,
+        "href": "OEBPS/8647304830250799261_28054-h-88.htm.html",
+        "base": "8647304830250799261_28054-h-88.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter VIII. A Treatise On Smerdyakov",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4120,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 90,
+        "href": "OEBPS/8647304830250799261_28054-h-89.htm.html",
+        "base": "8647304830250799261_28054-h-89.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter IX. The Galloping Troika. The End Of The Prosecutor\u2019",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4603,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 91,
+        "href": "OEBPS/8647304830250799261_28054-h-90.htm.html",
+        "base": "8647304830250799261_28054-h-90.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter X. The Speech For The Defense. An Argument That Cuts",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 1727,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 92,
+        "href": "OEBPS/8647304830250799261_28054-h-91.htm.html",
+        "base": "8647304830250799261_28054-h-91.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter XI. There Was No Money. There Was No Robbery",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2839,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 93,
+        "href": "OEBPS/8647304830250799261_28054-h-92.htm.html",
+        "base": "8647304830250799261_28054-h-92.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter XII. And There Was No Murder Either",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3437,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 94,
+        "href": "OEBPS/8647304830250799261_28054-h-93.htm.html",
+        "base": "8647304830250799261_28054-h-93.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter XIII. A Corrupter Of Thought",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3435,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 95,
+        "href": "OEBPS/8647304830250799261_28054-h-94.htm.html",
+        "base": "8647304830250799261_28054-h-94.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter XIV. The Peasants Stand Firm",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2589,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 96,
+        "href": "OEBPS/8647304830250799261_28054-h-95.htm.html",
+        "base": "8647304830250799261_28054-h-95.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "EPILOGUE",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 2227,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 97,
+        "href": "OEBPS/8647304830250799261_28054-h-96.htm.html",
+        "base": "8647304830250799261_28054-h-96.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter II. For A Moment The Lie Becomes Truth",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3111,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 98,
+        "href": "OEBPS/8647304830250799261_28054-h-97.htm.html",
+        "base": "8647304830250799261_28054-h-97.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter III. Ilusha\u2019s Funeral. The Speech At The Stone",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 4056,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 99,
+        "href": "OEBPS/8647304830250799261_28054-h-98.htm.html",
+        "base": "8647304830250799261_28054-h-98.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "FOOTNOTES",
+        "heading": "The Project Gutenberg eBook of The Brothers Karamazov by Fyodor Dostoyevsky",
+        "words": 3043,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      }
+    ]
+  },
+  {
+    "book": {
+      "gid": 1524,
+      "slug": "hamlet",
+      "note": "Hamlet (Shakespeare) - Dramatis Personae + Acts/Scenes",
+      "title": "Hamlet",
+      "version": "2.0",
+      "nav_kind": "ncx",
+      "spine_len": 8,
+      "toc_entries": 7
+    },
+    "segmentation": {
+      "chapter_count": 2,
+      "front_stripped": 3,
+      "back_stripped": 3,
+      "flags": [],
+      "chapters": [
+        {
+          "key": "ch_0001",
+          "title": "ACT I",
+          "href": "OEBPS/4686719283168243299_1524-h-2.htm.html",
+          "words": 7065
+        },
+        {
+          "key": "ch_0002",
+          "title": "ACT II",
+          "href": "OEBPS/4686719283168243299_1524-h-3.htm.html",
+          "words": 5969
+        }
+      ]
+    },
+    "items": [
+      {
+        "idx": 0,
+        "href": "OEBPS/wrap0000.html",
+        "base": "wrap0000.html",
+        "type": "application/xhtml+xml",
+        "label": "",
+        "heading": "\"Cover\"",
+        "words": 1,
+        "pg": false,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 1,
+        "href": "OEBPS/4686719283168243299_1524-h-0.htm.html",
+        "base": "4686719283168243299_1524-h-0.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "THE TRAGEDY OF HAMLET, PRINCE OF DENMARK",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 146,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 2,
+        "href": "OEBPS/4686719283168243299_1524-h-1.htm.html",
+        "base": "4686719283168243299_1524-h-1.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Contents",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 247,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 3,
+        "href": "OEBPS/4686719283168243299_1524-h-2.htm.html",
+        "base": "4686719283168243299_1524-h-2.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "ACT I",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 7065,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 4,
+        "href": "OEBPS/4686719283168243299_1524-h-3.htm.html",
+        "base": "4686719283168243299_1524-h-3.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "ACT II",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 5969,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 5,
+        "href": "OEBPS/4686719283168243299_1524-h-4.htm.html",
+        "base": "4686719283168243299_1524-h-4.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "ACT III",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 7662,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 6,
+        "href": "OEBPS/4686719283168243299_1524-h-5.htm.html",
+        "base": "4686719283168243299_1524-h-5.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "ACT IV",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 5523,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 7,
+        "href": "OEBPS/4686719283168243299_1524-h-6.htm.html",
+        "base": "4686719283168243299_1524-h-6.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "ACT V",
+        "heading": "Hamlet | Project Gutenberg",
+        "words": 8891,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      }
+    ]
+  },
+  {
+    "book": {
+      "gid": 1342,
+      "slug": "pride",
+      "note": "Pride and Prejudice (Austen) - 61 chapters",
+      "title": "Pride and Prejudice",
+      "version": "2.0",
+      "nav_kind": "ncx",
+      "spine_len": 16,
+      "toc_entries": 15
+    },
+    "segmentation": {
+      "chapter_count": 10,
+      "front_stripped": 3,
+      "back_stripped": 3,
+      "flags": [],
+      "chapters": [
+        {
+          "key": "ch_0001",
+          "title": "Covering a screen. CHAPTER VIII.",
+          "href": "OEBPS/6265119778213834401_1342-h-2.htm.html",
+          "words": 6863
+        },
+        {
+          "key": "ch_0002",
+          "title": "Piling up the fire. CHAPTER XI.",
+          "href": "OEBPS/6265119778213834401_1342-h-3.htm.html",
+          "words": 7505
+        },
+        {
+          "key": "ch_0003",
+          "title": "delighted to see their dear friend again. CHAPTER XVII.",
+          "href": "OEBPS/6265119778213834401_1342-h-4.htm.html",
+          "words": 11380
+        },
+        {
+          "key": "ch_0004",
+          "title": "CHAPTER XX.",
+          "href": "OEBPS/6265119778213834401_1342-h-5.htm.html",
+          "words": 9576
+        },
+        {
+          "key": "ch_0005",
+          "title": "\u201cWill you come and see me.\u201d CHAPTER XXVI.",
+          "href": "OEBPS/6265119778213834401_1342-h-6.htm.html",
+          "words": 8926
+        },
+        {
+          "key": "ch_0006",
+          "title": "CHAPTER XXXI.",
+          "href": "OEBPS/6265119778213834401_1342-h-7.htm.html",
+          "words": 10777
+        },
+        {
+          "key": "ch_0007",
+          "title": "CHAPTER XXXVI.",
+          "href": "OEBPS/6265119778213834401_1342-h-8.htm.html",
+          "words": 7488
+        },
+        {
+          "key": "ch_0008",
+          "title": "\u201cWhen Colonel Miller\u2019s regiment went.\u201d CHAPTER XLI.",
+          "href": "OEBPS/6265119778213834401_1342-h-9.htm.html",
+          "words": 10030
+        },
+        {
+          "key": "ch_0009",
+          "title": "\u201cEngaged by the river.\u201d CHAPTER XLV.",
+          "href": "OEBPS/6265119778213834401_1342-h-10.htm.html",
+          "words": 9658
+        },
+        {
+          "key": "ch_0010",
+          "title": "\u201cThe Post.\u201d CHAPTER XLVIII.",
+          "href": "OEBPS/6265119778213834401_1342-h-11.htm.html",
+          "words": 9691
+        }
+      ]
+    },
+    "items": [
+      {
+        "idx": 0,
+        "href": "OEBPS/wrap0000.html",
+        "base": "wrap0000.html",
+        "type": "application/xhtml+xml",
+        "label": "",
+        "heading": "\"Cover\"",
+        "words": 1,
+        "pg": false,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 1,
+        "href": "OEBPS/6265119778213834401_1342-h-0.htm.html",
+        "base": "6265119778213834401_1342-h-0.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "PRIDE. and PREJUDICE",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 5317,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 2,
+        "href": "OEBPS/6265119778213834401_1342-h-1.htm.html",
+        "base": "6265119778213834401_1342-h-1.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "I hope Mr. Bingley will like it. CHAPTER II.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 8434,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 3,
+        "href": "OEBPS/6265119778213834401_1342-h-2.htm.html",
+        "base": "6265119778213834401_1342-h-2.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Covering a screen. CHAPTER VIII.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 6863,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 4,
+        "href": "OEBPS/6265119778213834401_1342-h-3.htm.html",
+        "base": "6265119778213834401_1342-h-3.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Piling up the fire. CHAPTER XI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 7505,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 5,
+        "href": "OEBPS/6265119778213834401_1342-h-4.htm.html",
+        "base": "6265119778213834401_1342-h-4.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "delighted to see their dear friend again. CHAPTER XVII.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 11380,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 6,
+        "href": "OEBPS/6265119778213834401_1342-h-5.htm.html",
+        "base": "6265119778213834401_1342-h-5.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "CHAPTER XX.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 9576,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 7,
+        "href": "OEBPS/6265119778213834401_1342-h-6.htm.html",
+        "base": "6265119778213834401_1342-h-6.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cWill you come and see me.\u201d CHAPTER XXVI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 8926,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 8,
+        "href": "OEBPS/6265119778213834401_1342-h-7.htm.html",
+        "base": "6265119778213834401_1342-h-7.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "CHAPTER XXXI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 10777,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 9,
+        "href": "OEBPS/6265119778213834401_1342-h-8.htm.html",
+        "base": "6265119778213834401_1342-h-8.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "CHAPTER XXXVI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 7488,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 10,
+        "href": "OEBPS/6265119778213834401_1342-h-9.htm.html",
+        "base": "6265119778213834401_1342-h-9.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cWhen Colonel Miller\u2019s regiment went.\u201d CHAPTER XLI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 10030,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 11,
+        "href": "OEBPS/6265119778213834401_1342-h-10.htm.html",
+        "base": "6265119778213834401_1342-h-10.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cEngaged by the river.\u201d CHAPTER XLV.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 9658,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 12,
+        "href": "OEBPS/6265119778213834401_1342-h-11.htm.html",
+        "base": "6265119778213834401_1342-h-11.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cThe Post.\u201d CHAPTER XLVIII.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 9691,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 13,
+        "href": "OEBPS/6265119778213834401_1342-h-12.htm.html",
+        "base": "6265119778213834401_1342-h-12.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cMr. Darcy with him.\u201d CHAPTER LIII.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 10553,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 14,
+        "href": "OEBPS/6265119778213834401_1342-h-13.htm.html",
+        "base": "6265119778213834401_1342-h-13.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "\u201cBut now it comes out.\u201d CHAPTER LVII.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 9769,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 15,
+        "href": "OEBPS/6265119778213834401_1342-h-14.htm.html",
+        "base": "6265119778213834401_1342-h-14.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "CHAPTER LXI.",
+        "heading": "Pride and prejudice | Project Gutenberg",
+        "words": 4657,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      }
+    ]
+  },
+  {
+    "book": {
+      "gid": 1661,
+      "slug": "holmes",
+      "note": "Adventures of Sherlock Holmes (Doyle) - 12 standalone stories",
+      "title": "The Adventures of Sherlock Holmes",
+      "version": "2.0",
+      "nav_kind": "ncx",
+      "spine_len": 15,
+      "toc_entries": 14
+    },
+    "segmentation": {
+      "chapter_count": 9,
+      "front_stripped": 3,
+      "back_stripped": 3,
+      "flags": [],
+      "chapters": [
+        {
+          "key": "ch_0001",
+          "title": "II. THE RED-HEADED LEAGUE",
+          "href": "OEBPS/5186027266282590649_1661-h-2.htm.html",
+          "words": 9125
+        },
+        {
+          "key": "ch_0002",
+          "title": "III. A CASE OF IDENTITY",
+          "href": "OEBPS/5186027266282590649_1661-h-3.htm.html",
+          "words": 6992
+        },
+        {
+          "key": "ch_0003",
+          "title": "IV. THE BOSCOMBE VALLEY MYSTERY",
+          "href": "OEBPS/5186027266282590649_1661-h-4.htm.html",
+          "words": 9633
+        },
+        {
+          "key": "ch_0004",
+          "title": "V. THE FIVE ORANGE PIPS",
+          "href": "OEBPS/5186027266282590649_1661-h-5.htm.html",
+          "words": 7332
+        },
+        {
+          "key": "ch_0005",
+          "title": "VI. THE MAN WITH THE TWISTED LIP",
+          "href": "OEBPS/5186027266282590649_1661-h-6.htm.html",
+          "words": 9221
+        },
+        {
+          "key": "ch_0006",
+          "title": "VII. THE ADVENTURE OF THE BLUE CARBUNCLE",
+          "href": "OEBPS/5186027266282590649_1661-h-7.htm.html",
+          "words": 7836
+        },
+        {
+          "key": "ch_0007",
+          "title": "VIII. THE ADVENTURE OF THE SPECKLED BAND",
+          "href": "OEBPS/5186027266282590649_1661-h-8.htm.html",
+          "words": 9821
+        },
+        {
+          "key": "ch_0008",
+          "title": "IX. THE ADVENTURE OF THE ENGINEER\u2019S THUMB",
+          "href": "OEBPS/5186027266282590649_1661-h-9.htm.html",
+          "words": 8301
+        },
+        {
+          "key": "ch_0009",
+          "title": "X. THE ADVENTURE OF THE NOBLE BACHELOR",
+          "href": "OEBPS/5186027266282590649_1661-h-10.htm.html",
+          "words": 8134
+        }
+      ]
+    },
+    "items": [
+      {
+        "idx": 0,
+        "href": "OEBPS/wrap0000.html",
+        "base": "wrap0000.html",
+        "type": "application/xhtml+xml",
+        "label": "",
+        "heading": "\"Cover\"",
+        "words": 1,
+        "pg": false,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 1,
+        "href": "OEBPS/5186027266282590649_1661-h-0.htm.html",
+        "base": "5186027266282590649_1661-h-0.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "The Adventures of Sherlock Holmes",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 258,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 2,
+        "href": "OEBPS/5186027266282590649_1661-h-1.htm.html",
+        "base": "5186027266282590649_1661-h-1.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "I. A SCANDAL IN BOHEMIA",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 8536,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 3,
+        "href": "OEBPS/5186027266282590649_1661-h-2.htm.html",
+        "base": "5186027266282590649_1661-h-2.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "II. THE RED-HEADED LEAGUE",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9125,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 4,
+        "href": "OEBPS/5186027266282590649_1661-h-3.htm.html",
+        "base": "5186027266282590649_1661-h-3.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "III. A CASE OF IDENTITY",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 6992,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 5,
+        "href": "OEBPS/5186027266282590649_1661-h-4.htm.html",
+        "base": "5186027266282590649_1661-h-4.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "IV. THE BOSCOMBE VALLEY MYSTERY",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9633,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 6,
+        "href": "OEBPS/5186027266282590649_1661-h-5.htm.html",
+        "base": "5186027266282590649_1661-h-5.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "V. THE FIVE ORANGE PIPS",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 7332,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 7,
+        "href": "OEBPS/5186027266282590649_1661-h-6.htm.html",
+        "base": "5186027266282590649_1661-h-6.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "VI. THE MAN WITH THE TWISTED LIP",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9221,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 8,
+        "href": "OEBPS/5186027266282590649_1661-h-7.htm.html",
+        "base": "5186027266282590649_1661-h-7.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "VII. THE ADVENTURE OF THE BLUE CARBUNCLE",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 7836,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 9,
+        "href": "OEBPS/5186027266282590649_1661-h-8.htm.html",
+        "base": "5186027266282590649_1661-h-8.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "VIII. THE ADVENTURE OF THE SPECKLED BAND",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9821,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 10,
+        "href": "OEBPS/5186027266282590649_1661-h-9.htm.html",
+        "base": "5186027266282590649_1661-h-9.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "IX. THE ADVENTURE OF THE ENGINEER\u2019S THUMB",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 8301,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 11,
+        "href": "OEBPS/5186027266282590649_1661-h-10.htm.html",
+        "base": "5186027266282590649_1661-h-10.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "X. THE ADVENTURE OF THE NOBLE BACHELOR",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 8134,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 12,
+        "href": "OEBPS/5186027266282590649_1661-h-11.htm.html",
+        "base": "5186027266282590649_1661-h-11.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "XI. THE ADVENTURE OF THE BERYL CORONET",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9695,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 13,
+        "href": "OEBPS/5186027266282590649_1661-h-12.htm.html",
+        "base": "5186027266282590649_1661-h-12.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "XII. THE ADVENTURE OF THE COPPER BEECHES",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 9963,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 14,
+        "href": "OEBPS/5186027266282590649_1661-h-13.htm.html",
+        "base": "5186027266282590649_1661-h-13.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "THE FULL PROJECT GUTENBERG\u2122 LICENSE",
+        "heading": "The Adventures of Sherlock Holmes | Project Gutenberg",
+        "words": 2919,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      }
+    ]
+  },
+  {
+    "book": {
+      "gid": 84,
+      "slug": "frankenstein",
+      "note": "Frankenstein (Shelley) - letters frame + chapters",
+      "title": "Frankenstein; or, the modern prometheus",
+      "version": "2.0",
+      "nav_kind": "ncx",
+      "spine_len": 31,
+      "toc_entries": 30
+    },
+    "segmentation": {
+      "chapter_count": 25,
+      "front_stripped": 3,
+      "back_stripped": 3,
+      "flags": [],
+      "chapters": [
+        {
+          "key": "ch_0001",
+          "title": "Letter 1",
+          "href": "OEBPS/84465895825224579_84-h-2.htm.html",
+          "words": 1204
+        },
+        {
+          "key": "ch_0002",
+          "title": "Letter 2",
+          "href": "OEBPS/84465895825224579_84-h-3.htm.html",
+          "words": 1315
+        },
+        {
+          "key": "ch_0003",
+          "title": "Letter 3",
+          "href": "OEBPS/84465895825224579_84-h-4.htm.html",
+          "words": 304
+        },
+        {
+          "key": "ch_0004",
+          "title": "Letter 4",
+          "href": "OEBPS/84465895825224579_84-h-5.htm.html",
+          "words": 2734
+        },
+        {
+          "key": "ch_0005",
+          "title": "Chapter 1",
+          "href": "OEBPS/84465895825224579_84-h-6.htm.html",
+          "words": 1770
+        },
+        {
+          "key": "ch_0006",
+          "title": "Chapter 2",
+          "href": "OEBPS/84465895825224579_84-h-7.htm.html",
+          "words": 2210
+        },
+        {
+          "key": "ch_0007",
+          "title": "Chapter 3",
+          "href": "OEBPS/84465895825224579_84-h-8.htm.html",
+          "words": 2679
+        },
+        {
+          "key": "ch_0008",
+          "title": "Chapter 4",
+          "href": "OEBPS/84465895825224579_84-h-9.htm.html",
+          "words": 2539
+        },
+        {
+          "key": "ch_0009",
+          "title": "Chapter 5",
+          "href": "OEBPS/84465895825224579_84-h-10.htm.html",
+          "words": 2362
+        },
+        {
+          "key": "ch_0010",
+          "title": "Chapter 6",
+          "href": "OEBPS/84465895825224579_84-h-11.htm.html",
+          "words": 2722
+        },
+        {
+          "key": "ch_0011",
+          "title": "Chapter 7",
+          "href": "OEBPS/84465895825224579_84-h-12.htm.html",
+          "words": 3564
+        },
+        {
+          "key": "ch_0012",
+          "title": "Chapter 8",
+          "href": "OEBPS/84465895825224579_84-h-13.htm.html",
+          "words": 3097
+        },
+        {
+          "key": "ch_0013",
+          "title": "Chapter 9",
+          "href": "OEBPS/84465895825224579_84-h-14.htm.html",
+          "words": 2217
+        },
+        {
+          "key": "ch_0014",
+          "title": "Chapter 10",
+          "href": "OEBPS/84465895825224579_84-h-15.htm.html",
+          "words": 2363
+        },
+        {
+          "key": "ch_0015",
+          "title": "Chapter 11",
+          "href": "OEBPS/84465895825224579_84-h-16.htm.html",
+          "words": 2911
+        },
+        {
+          "key": "ch_0016",
+          "title": "Chapter 12",
+          "href": "OEBPS/84465895825224579_84-h-17.htm.html",
+          "words": 2076
+        },
+        {
+          "key": "ch_0017",
+          "title": "Chapter 13",
+          "href": "OEBPS/84465895825224579_84-h-18.htm.html",
+          "words": 2037
+        },
+        {
+          "key": "ch_0018",
+          "title": "Chapter 14",
+          "href": "OEBPS/84465895825224579_84-h-19.htm.html",
+          "words": 1858
+        },
+        {
+          "key": "ch_0019",
+          "title": "Chapter 15",
+          "href": "OEBPS/84465895825224579_84-h-20.htm.html",
+          "words": 3022
+        },
+        {
+          "key": "ch_0020",
+          "title": "Chapter 16",
+          "href": "OEBPS/84465895825224579_84-h-21.htm.html",
+          "words": 3203
+        },
+        {
+          "key": "ch_0021",
+          "title": "Chapter 17",
+          "href": "OEBPS/84465895825224579_84-h-22.htm.html",
+          "words": 1921
+        },
+        {
+          "key": "ch_0022",
+          "title": "Chapter 18",
+          "href": "OEBPS/84465895825224579_84-h-23.htm.html",
+          "words": 2848
+        },
+        {
+          "key": "ch_0023",
+          "title": "Chapter 19",
+          "href": "OEBPS/84465895825224579_84-h-24.htm.html",
+          "words": 2616
+        },
+        {
+          "key": "ch_0024",
+          "title": "Chapter 20",
+          "href": "OEBPS/84465895825224579_84-h-25.htm.html",
+          "words": 3527
+        },
+        {
+          "key": "ch_0025",
+          "title": "Chapter 21",
+          "href": "OEBPS/84465895825224579_84-h-26.htm.html",
+          "words": 3743
+        }
+      ]
+    },
+    "items": [
+      {
+        "idx": 0,
+        "href": "OEBPS/wrap0000.html",
+        "base": "wrap0000.html",
+        "type": "application/xhtml+xml",
+        "label": "",
+        "heading": "\"Cover\"",
+        "words": 1,
+        "pg": false,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 1,
+        "href": "OEBPS/84465895825224579_84-h-0.htm.html",
+        "base": "84465895825224579_84-h-0.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Frankenstein;",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 177,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 2,
+        "href": "OEBPS/84465895825224579_84-h-1.htm.html",
+        "base": "84465895825224579_84-h-1.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "CONTENTS",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 61,
+        "pg": true,
+        "role": "front",
+        "is_nav": false
+      },
+      {
+        "idx": 3,
+        "href": "OEBPS/84465895825224579_84-h-2.htm.html",
+        "base": "84465895825224579_84-h-2.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Letter 1",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 1204,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 4,
+        "href": "OEBPS/84465895825224579_84-h-3.htm.html",
+        "base": "84465895825224579_84-h-3.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Letter 2",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 1315,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 5,
+        "href": "OEBPS/84465895825224579_84-h-4.htm.html",
+        "base": "84465895825224579_84-h-4.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Letter 3",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 304,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 6,
+        "href": "OEBPS/84465895825224579_84-h-5.htm.html",
+        "base": "84465895825224579_84-h-5.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Letter 4",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2734,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 7,
+        "href": "OEBPS/84465895825224579_84-h-6.htm.html",
+        "base": "84465895825224579_84-h-6.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 1",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 1770,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 8,
+        "href": "OEBPS/84465895825224579_84-h-7.htm.html",
+        "base": "84465895825224579_84-h-7.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 2",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2210,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 9,
+        "href": "OEBPS/84465895825224579_84-h-8.htm.html",
+        "base": "84465895825224579_84-h-8.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 3",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2679,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 10,
+        "href": "OEBPS/84465895825224579_84-h-9.htm.html",
+        "base": "84465895825224579_84-h-9.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 4",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2539,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 11,
+        "href": "OEBPS/84465895825224579_84-h-10.htm.html",
+        "base": "84465895825224579_84-h-10.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 5",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2362,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 12,
+        "href": "OEBPS/84465895825224579_84-h-11.htm.html",
+        "base": "84465895825224579_84-h-11.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 6",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2722,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 13,
+        "href": "OEBPS/84465895825224579_84-h-12.htm.html",
+        "base": "84465895825224579_84-h-12.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 7",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3564,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 14,
+        "href": "OEBPS/84465895825224579_84-h-13.htm.html",
+        "base": "84465895825224579_84-h-13.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 8",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3097,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 15,
+        "href": "OEBPS/84465895825224579_84-h-14.htm.html",
+        "base": "84465895825224579_84-h-14.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 9",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2217,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 16,
+        "href": "OEBPS/84465895825224579_84-h-15.htm.html",
+        "base": "84465895825224579_84-h-15.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 10",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2363,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 17,
+        "href": "OEBPS/84465895825224579_84-h-16.htm.html",
+        "base": "84465895825224579_84-h-16.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 11",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2911,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 18,
+        "href": "OEBPS/84465895825224579_84-h-17.htm.html",
+        "base": "84465895825224579_84-h-17.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 12",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2076,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 19,
+        "href": "OEBPS/84465895825224579_84-h-18.htm.html",
+        "base": "84465895825224579_84-h-18.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 13",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2037,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 20,
+        "href": "OEBPS/84465895825224579_84-h-19.htm.html",
+        "base": "84465895825224579_84-h-19.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 14",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 1858,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 21,
+        "href": "OEBPS/84465895825224579_84-h-20.htm.html",
+        "base": "84465895825224579_84-h-20.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 15",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3022,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 22,
+        "href": "OEBPS/84465895825224579_84-h-21.htm.html",
+        "base": "84465895825224579_84-h-21.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 16",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3203,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 23,
+        "href": "OEBPS/84465895825224579_84-h-22.htm.html",
+        "base": "84465895825224579_84-h-22.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 17",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 1921,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 24,
+        "href": "OEBPS/84465895825224579_84-h-23.htm.html",
+        "base": "84465895825224579_84-h-23.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 18",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2848,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 25,
+        "href": "OEBPS/84465895825224579_84-h-24.htm.html",
+        "base": "84465895825224579_84-h-24.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 19",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2616,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 26,
+        "href": "OEBPS/84465895825224579_84-h-25.htm.html",
+        "base": "84465895825224579_84-h-25.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 20",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3527,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 27,
+        "href": "OEBPS/84465895825224579_84-h-26.htm.html",
+        "base": "84465895825224579_84-h-26.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 21",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3743,
+        "pg": true,
+        "role": "chapter",
+        "is_nav": false
+      },
+      {
+        "idx": 28,
+        "href": "OEBPS/84465895825224579_84-h-27.htm.html",
+        "base": "84465895825224579_84-h-27.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 22",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 3424,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 29,
+        "href": "OEBPS/84465895825224579_84-h-28.htm.html",
+        "base": "84465895825224579_84-h-28.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 23",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 2599,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      },
+      {
+        "idx": 30,
+        "href": "OEBPS/84465895825224579_84-h-29.htm.html",
+        "base": "84465895825224579_84-h-29.htm.html",
+        "type": "application/xhtml+xml",
+        "label": "Chapter 24",
+        "heading": "Frankenstein | Project Gutenberg",
+        "words": 11154,
+        "pg": true,
+        "role": "back",
+        "is_nav": false
+      }
+    ]
+  }
+]

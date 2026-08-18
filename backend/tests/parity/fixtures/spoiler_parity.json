@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "book": {
+    "key": "parity-book",
+    "title": "The Parity Book",
+    "author": "Fixture Author",
+    "max_bookmark": 6
+  },
+  "embedding": {
+    "model": "parity-model",
+    "dimension": 3,
+    "space": "space-a",
+    "distance_metric": "cosine"
+  },
+  "reading_state": {
+    "bookmark": 4,
+    "cfi": "chapter-4",
+    "position_epoch": 0
+  },
+  "chapters": [
+    {"key": "ch1", "ordinal": 1, "title": "Arrival", "text": "Alyosha arrives at the monastery.", "summary": "Alyosha arrives.", "rolling_summary": "Alyosha arrives at the monastery."},
+    {"key": "ch2", "ordinal": 2, "title": "Promise", "text": "Dmitri and Katerina announce an engagement.", "summary": "An engagement is announced.", "rolling_summary": "Alyosha arrives; Dmitri and Katerina become engaged."},
+    {"key": "ch3", "ordinal": 3, "title": "Correction", "text": "The reader learns Alexandra is distinct from Alexander.", "summary": "Alexandra is distinguished from Alexander.", "rolling_summary": "Alexandra is now known as a distinct person."},
+    {"key": "ch4", "ordinal": 4, "title": "Reversal", "text": "The engagement ends and a rumor is disproved.", "summary": "The engagement ends.", "rolling_summary": "The engagement has ended and the rumor is disproved."},
+    {"key": "ch5", "ordinal": 5, "title": "Revelation", "text": "The shadow is finally identified as the hidden witness.", "summary": "The hidden witness is identified.", "rolling_summary": "The shadow is revealed as the hidden witness."},
+    {"key": "ch6", "ordinal": 6, "title": "Retracted draft", "text": "A draft chapter that must never remain live.", "summary": "A retracted draft.", "rolling_summary": "A retracted draft recap.", "retracted": true}
+  ],
+  "entities": [
+    {"key": "alyosha", "name": "Alyosha", "type": "character", "revealed_at": 1, "source_chapter": "ch1"},
+    {"key": "dmitri", "name": "Dmitri", "type": "character", "revealed_at": 1, "source_chapter": "ch1"},
+    {"key": "monastery", "name": "Monastery", "type": "place", "revealed_at": 1, "source_chapter": "ch1"},
+    {"key": "katerina", "name": "Katerina", "type": "character", "revealed_at": 2, "source_chapter": "ch2"},
+    {"key": "alexander", "name": "Alexander", "type": "character", "revealed_at": 2, "invalid_at": 3, "source_chapter": "ch2"},
+    {"key": "alexandra", "name": "Alexandra", "type": "character", "revealed_at": 3, "source_chapter": "ch3"},
+    {"key": "shadow", "name": "The Shadow", "type": "character", "revealed_at": 5, "source_chapter": "ch5"}
+  ],
+  "aliases": [
+    {"entity": "alyosha", "surface": "Alexei", "revealed_at": 1, "source_chapter": "ch1"},
+    {"entity": "alexander", "surface": "Sasha", "revealed_at": 2, "source_chapter": "ch2"},
+    {"entity": "alexandra", "surface": "Sasha", "revealed_at": 3, "source_chapter": "ch3"},
+    {"entity": "shadow", "surface": "Hidden witness", "revealed_at": 2, "source_chapter": "ch2"}
+  ],
+  "edges": [
+    {"key": "brothers", "src": "dmitri", "dst": "alyosha", "type": "family", "label": "brothers", "revealed_at": 1, "source_chapter": "ch1"},
+    {"key": "engaged", "src": "dmitri", "dst": "katerina", "type": "love", "label": "engaged", "revealed_at": 2, "invalid_at": 4, "source_chapter": "ch2"},
+    {"key": "estranged", "src": "dmitri", "dst": "katerina", "type": "rivalry", "label": "estranged", "revealed_at": 4, "source_chapter": "ch4"},
+    {"key": "future-reference", "src": "dmitri", "dst": "shadow", "type": "suspicion", "label": "distrusts an unknown figure", "revealed_at": 2, "source_chapter": "ch2"}
+  ],
+  "events": [
+    {"key": "engagement", "summary": "Dmitri and Katerina become engaged", "kind": "beat", "revealed_at": 2, "order_idx": 1, "source_chapter": "ch2", "participants": [{"entity": "dmitri", "role": "subject"}, {"entity": "katerina", "role": "subject"}]},
+    {"key": "shadow-meeting", "summary": "An unidentified witness is discussed", "kind": "beat", "revealed_at": 2, "order_idx": 2, "source_chapter": "ch2", "participants": [{"entity": "dmitri", "role": "witness"}, {"entity": "shadow", "role": "subject"}]},
+    {"key": "rumor", "summary": "A rumor spreads", "kind": "rumor", "revealed_at": 2, "invalid_at": 4, "order_idx": 3, "source_chapter": "ch2", "participants": [{"entity": "dmitri", "role": "subject"}]},
+    {"key": "rumor-disproved", "summary": "The rumor is disproved", "kind": "beat", "revealed_at": 4, "order_idx": 1, "source_chapter": "ch4", "participants": [{"entity": "alyosha", "role": "witness"}]}
+  ],
+  "themes": [
+    {"key": "faith", "name": "Faith", "description": "Trust guides the brothers.", "revealed_at": 1, "invalid_at": 4, "source_chapter": "ch1"},
+    {"key": "doubt", "name": "Doubt", "description": "Certainty gives way to doubt.", "revealed_at": 4, "source_chapter": "ch4"}
+  ],
+  "states": [
+    {"key": "alyosha-monastery", "entity": "alyosha", "status": {"location": "monastery"}, "revealed_at": 1, "invalid_at": 3, "source_chapter": "ch1"},
+    {"key": "alyosha-town", "entity": "alyosha", "status": {"location": "town"}, "revealed_at": 3, "source_chapter": "ch3"}
+  ],
+  "chunks": [
+    {"key": "chunk-arrival", "chapter": "ch1", "revealed_at": 1, "text": "Alyosha enters the monastery.", "vector": [0.0, 1.0, 0.0]},
+    {"key": "chunk-engagement", "chapter": "ch2", "revealed_at": 2, "text": "Dmitri and Katerina announce their engagement.", "vector": [0.8, 0.2, 0.0]},
+    {"key": "chunk-correction", "chapter": "ch3", "revealed_at": 3, "text": "Alexandra is not Alexander.", "vector": [0.2, 0.8, 0.0]},
+    {"key": "chunk-future-canary", "chapter": "ch5", "revealed_at": 5, "text": "The hidden witness is the Shadow.", "vector": [1.0, 0.0, 0.0]},
+    {"key": "chunk-retracted-canary", "chapter": "ch6", "revealed_at": 6, "text": "A retracted exact-match draft.", "vector": [1.0, 0.0, 0.0]}
+  ],
+  "queries": [
+    {"key": "witness", "vector": [1.0, 0.0, 0.0], "k": 3},
+    {"key": "monastery", "vector": [0.0, 1.0, 0.0], "k": 3}
+  ]
+}

@@ -1,0 +1,13 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Explicit synthetic credentials and RFC test vectors"
+condition = "AND"
+paths = ['''(?:^|/)backend/tests/''']
+regexTarget = "line"
+regexes = [
+  '''(?:sk-(?:test|private-canary-7H3k|owner-a-replacement-9Zq2)|test-client-secret|test-secret-key|not-a-real-secret)''',
+  '''(?:dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk|E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM)''',
+  '''AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=''',
+]

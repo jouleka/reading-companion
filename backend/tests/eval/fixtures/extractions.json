@@ -1,0 +1,1910 @@
+{
+ "extractions": [
+  {
+   "ordinal": 1,
+   "key": "karamazov:OEBPS/8647304830250799261_28054-h-2.htm.html",
+   "title": "Chapter I. Fyodor Pavlovitch Karamazov",
+   "extraction": {
+    "chapter_summary": "The narrator introduces Fyodor Pavlovitch Karamazov, a senseless, vicious, buffoonish landowner who rose from nothing to a fortune of a hundred thousand roubles. Married twice, he had three sons: Dmitri by his first wife Adelaïda Ivanovna, and Ivan and Alexey by his second. Adelaïda, a wealthy noblewoman of the Miüsov family, eloped with him, quickly came to despise him, and finally ran away with a divinity student to Petersburg, leaving the three-year-old Dmitri behind. When news came of her death, Fyodor reacted with both drunken joy and weeping.",
+    "entities": [
+     {
+      "canonical_name": "Fyodor Pavlovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Fyodor Pavlovitch",
+       "the landowner",
+       "the buffoon"
+      ],
+      "matched_roster": false,
+      "state": "alive"
+     },
+     {
+      "canonical_name": "Alexey Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Alexey"
+      ],
+      "matched_roster": false,
+      "state": "alive (infant)"
+     },
+     {
+      "canonical_name": "Dmitri Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Dmitri",
+       "Mitya"
+      ],
+      "matched_roster": false,
+      "state": "alive (child)"
+     },
+     {
+      "canonical_name": "Ivan Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Ivan"
+      ],
+      "matched_roster": false,
+      "state": "alive"
+     },
+     {
+      "canonical_name": "Adelaïda Ivanovna Miüsov",
+      "type": "character",
+      "aliases": [
+       "Adelaïda Ivanovna",
+       "Fyodor Pavlovitch's first wife",
+       "the runaway bride"
+      ],
+      "matched_roster": false,
+      "state": "dead"
+     },
+     {
+      "canonical_name": "the divinity student",
+      "type": "character",
+      "aliases": [
+       "a destitute divinity student"
+      ],
+      "matched_roster": false,
+      "state": "alive"
+     },
+     {
+      "canonical_name": "the Miüsovs",
+      "type": "faction",
+      "aliases": [
+       "Adelaïda Ivanovna's family",
+       "the Miüsov family"
+      ],
+      "matched_roster": false,
+      "state": null
+     },
+     {
+      "canonical_name": "the narrator",
+      "type": "character",
+      "aliases": [
+       "I",
+       "us"
+      ],
+      "matched_roster": false,
+      "state": "alive"
+     },
+     {
+      "canonical_name": "Petersburg",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": false,
+      "state": null
+     },
+     {
+      "canonical_name": "our district",
+      "type": "place",
+      "aliases": [
+       "the province",
+       "our town"
+      ],
+      "matched_roster": false,
+      "state": null
+     }
+    ],
+    "relationships": [
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "family",
+      "label": "third son of"
+     },
+     {
+      "src": "Dmitri Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "family",
+      "label": "eldest son of (by first wife)"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "family",
+      "label": "son of (by second wife)"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Adelaïda Ivanovna Miüsov",
+      "rel_type": "family",
+      "label": "first husband of"
+     },
+     {
+      "src": "Dmitri Fyodorovitch Karamazov",
+      "dst": "Adelaïda Ivanovna Miüsov",
+      "rel_type": "family",
+      "label": "son of"
+     },
+     {
+      "src": "Adelaïda Ivanovna Miüsov",
+      "dst": "the Miüsovs",
+      "rel_type": "family",
+      "label": "member of noble landowning family"
+     },
+     {
+      "src": "Adelaïda Ivanovna Miüsov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "rivalry",
+      "label": "despised and fought with husband"
+     },
+     {
+      "src": "Adelaïda Ivanovna Miüsov",
+      "dst": "the divinity student",
+      "rel_type": "love",
+      "label": "ran away with"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "full brothers (same second wife)"
+     }
+    ],
+    "events": [
+     {
+      "summary": "Fyodor Pavlovitch rises from next to nothing to amass a hundred thousand roubles by his death.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Fyodor Pavlovitch and Adelaïda Ivanovna elope and marry, though without mutual love.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Adelaïda Ivanovna Miüsov"
+      ]
+     },
+     {
+      "summary": "Fyodor seizes Adelaïda's money (up to twenty-five thousand roubles) and tries to transfer her property to his name, but her family intervenes.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Adelaïda Ivanovna Miüsov",
+       "the Miüsovs"
+      ]
+     },
+     {
+      "summary": "Adelaïda runs away with a divinity student to Petersburg, leaving the three-year-old Mitya with Fyodor.",
+      "participants": [
+       "Adelaïda Ivanovna Miüsov",
+       "the divinity student",
+       "Dmitri Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Fyodor turns the house into a harem of drunken orgies and tours the province parading himself as the injured husband.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "News arrives of Adelaïda's sudden death in Petersburg; the drunken Fyodor reacts with both shouts of joy and uncontrolled weeping.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Adelaïda Ivanovna Miüsov"
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Buffoonery and self-degradation",
+      "description": "Fyodor delights in playing the ridiculous, injured-husband role, performing his woes for an audience."
+     },
+     {
+      "name": "Greed and worldly cunning",
+      "description": "Despite his senselessness, Fyodor is shrewd about money, seizing his wife's dowry and fortune."
+     },
+     {
+      "name": "Senselessness as a national type",
+      "description": "The narrator frames Fyodor as a peculiarly Russian form of senseless yet shrewd character."
+     },
+     {
+      "name": "Marriage without love and feminine rebellion",
+      "description": "Adelaïda marries and elopes out of caprice and a desire for independence rather than love."
+     },
+     {
+      "name": "Human contradiction and naïveté",
+      "description": "Fyodor both rejoices and weeps at his wife's death, illustrating that even the wicked are simpler and more contradictory than supposed."
+     }
+    ]
+   }
+  },
+  {
+   "ordinal": 2,
+   "key": "karamazov:OEBPS/8647304830250799261_28054-h-3.htm.html",
+   "title": "Chapter II. He Gets Rid Of His Eldest Son",
+   "extraction": {
+    "chapter_summary": "After abandoning his infant son out of sheer forgetfulness, Fyodor Pavlovitch leaves three-year-old Mitya to be raised by the faithful family servant Grigory. Mitya's mother's cousin, Pyotr Alexandrovitch Miüsov, returns from Paris and intervenes to take over the boy's education, becoming joint guardian, but soon forgets him too and passes him through a succession of relatives. Growing up believing he had property, Dmitri leads a wild, irregular life, and on coming of age discovers his father has whittled away his inheritance through doled-out installments and crafty agreements. A second visit confirms Dmitri has nothing left, leaving him beside himself and setting up the coming catastrophe.",
+    "entities": [
+     {
+      "canonical_name": "Fyodor Pavlovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Fyodor Pavlovitch",
+       "the father"
+      ],
+      "matched_roster": true,
+      "state": "Negligent father who forgets his son and schemes to keep Dmitri's inheritance"
+     },
+     {
+      "canonical_name": "Dmitri Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Mitya",
+       "Dmitri",
+       "the eldest son",
+       "the firstborn",
+       "the child"
+      ],
+      "matched_roster": true,
+      "state": "Grown into a wild, dissipated young man; overwhelmed to find his inheritance gone"
+     },
+     {
+      "canonical_name": "Adelaïda Ivanovna Miüsov",
+      "type": "character",
+      "aliases": [
+       "Adelaïda Ivanovna",
+       "Mitya's mother"
+      ],
+      "matched_roster": true,
+      "state": "Deceased; Mitya's mother, left him a small property"
+     },
+     {
+      "canonical_name": "Grigory",
+      "type": "character",
+      "aliases": [
+       "old Grigory",
+       "a faithful servant of the family"
+      ],
+      "matched_roster": false,
+      "state": "Servant who took the abandoned three-year-old Mitya into his care"
+     },
+     {
+      "canonical_name": "Pyotr Alexandrovitch Miüsov",
+      "type": "character",
+      "aliases": [
+       "Pyotr Alexandrovitch",
+       "a cousin of Mitya's mother",
+       "this cousin"
+      ],
+      "matched_roster": false,
+      "state": "Enlightened young liberal back from Paris; became joint guardian then forgot Mitya and returned abroad"
+     },
+     {
+      "canonical_name": "the narrator",
+      "type": "character",
+      "aliases": [
+       "I"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "the Miüsovs",
+      "type": "faction",
+      "aliases": [
+       "the Miüsov family"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "Mitya's grandmother",
+      "type": "character",
+      "aliases": [
+       "his widow",
+       "the grandmother"
+      ],
+      "matched_roster": false,
+      "state": "Moved to Moscow and was seriously ill"
+     },
+     {
+      "canonical_name": "the Moscow lady",
+      "type": "character",
+      "aliases": [
+       "a lady living in Moscow",
+       "one of his cousins"
+      ],
+      "matched_roster": false,
+      "state": "Took charge of Mitya in Moscow; later died"
+     },
+     {
+      "canonical_name": "Petersburg",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "our district",
+      "type": "place",
+      "aliases": [
+       "our little town",
+       "our neighborhood",
+       "our town"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "Paris",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": false,
+      "state": null
+     },
+     {
+      "canonical_name": "Moscow",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": false,
+      "state": null
+     },
+     {
+      "canonical_name": "the monastery",
+      "type": "place",
+      "aliases": [
+       "our famous monastery"
+      ],
+      "matched_roster": false,
+      "state": "Subject of Pyotr Alexandrovitch's endless lawsuit"
+     }
+    ],
+    "relationships": [
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "father of (abandons and defrauds)"
+     },
+     {
+      "src": "Adelaïda Ivanovna Miüsov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "mother of"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "took the abandoned child into his care"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "Adelaïda Ivanovna Miüsov",
+      "rel_type": "family",
+      "label": "cousin of"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "guardian and cousin's relative who took over his education"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "rivalry",
+      "label": "joint guardian; held contempt for him"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "the monastery",
+      "rel_type": "rivalry",
+      "label": "began an endless lawsuit against the 'clericals'"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "the Miüsovs",
+      "rel_type": "family",
+      "label": "distinguished member of"
+     },
+     {
+      "src": "the Moscow lady",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "took charge of him in Moscow"
+     }
+    ],
+    "events": [
+     {
+      "summary": "Fyodor Pavlovitch completely abandons his three-year-old son out of forgetfulness, and the servant Grigory takes Mitya into his care in the servant's cottage.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Dmitri Fyodorovitch Karamazov",
+       "Grigory"
+      ]
+     },
+     {
+      "summary": "Pyotr Alexandrovitch Miüsov returns from Paris, learns of Mitya's existence, and intervenes to undertake the child's education, becoming joint guardian with Fyodor Pavlovitch.",
+      "participants": [
+       "Pyotr Alexandrovitch Miüsov",
+       "Fyodor Pavlovitch Karamazov",
+       "Dmitri Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Miüsov leaves Mitya with a lady in Moscow and returns to Paris, forgetting the boy; Mitya is then passed through several households after the Moscow lady dies.",
+      "participants": [
+       "Pyotr Alexandrovitch Miüsov",
+       "Dmitri Fyodorovitch Karamazov",
+       "the Moscow lady"
+      ]
+     },
+     {
+      "summary": "Dmitri grows up wild, fails out of the gymnasium, enters military school, fights a duel and is degraded to the ranks, and runs into debt expecting his inheritance.",
+      "participants": [
+       "Dmitri Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "On coming of age Dmitri meets his father for the first time to settle his property, takes a sum of money and signs agreements without obtaining any real account of the estate.",
+      "participants": [
+       "Dmitri Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Four years later Dmitri returns to settle for good and discovers he has nothing left, has signed away his rights, and may even be in debt to his father, leaving him overwhelmed and suspecting deceit.",
+      "participants": [
+       "Dmitri Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Parental neglect and abandonment",
+      "description": "Fyodor Pavlovitch abandons Mitya through sheer forgetfulness, and even the boy's intervening guardian Miüsov forgets him in turn."
+     },
+     {
+      "name": "Inheritance and financial exploitation",
+      "description": "Fyodor Pavlovitch exploits Dmitri's vague idea of his property to whittle the inheritance away through doles and crafty agreements."
+     },
+     {
+      "name": "Surrogate caregiving",
+      "description": "The servant Grigory and a chain of relatives stand in for absent parents in raising Mitya."
+     },
+     {
+      "name": "Buffoonery and theatricality",
+      "description": "Fyodor Pavlovitch's habit of suddenly playing an unexpected part, even to his own disadvantage."
+     },
+     {
+      "name": "Seeds of catastrophe",
+      "description": "The financial dispute between father and son is explicitly named as the cause of the coming catastrophe."
+     }
+    ]
+   }
+  },
+  {
+   "ordinal": 3,
+   "key": "karamazov:OEBPS/8647304830250799261_28054-h-4.htm.html",
+   "title": "Chapter III. The Second Marriage And The Second Family",
+   "extraction": {
+    "chapter_summary": "Fyodor Pavlovitch marries his second wife, Sofya Ivanovna, a meek orphan girl, and torments her with debauchery until she dies after bearing him two sons, Ivan and Alexey. After her death the boys are abandoned like Mitya, then taken by the general's widow who raised Sofya; on her death she leaves them a legacy that the honest Yefim Petrovitch Polenov stewards and grows while educating them. The chapter traces Ivan's rise as a clever, proud student and writer, and the family's first-ever reunion in the town, with Ivan acting as a mysterious mediator between his father and Dmitri, while Alexey has already entered the monastery as a novice.",
+    "entities": [
+     {
+      "canonical_name": "Fyodor Pavlovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Fyodor Pavlovitch",
+       "the father"
+      ],
+      "matched_roster": true,
+      "state": "a drunken, vicious debauchee who tormented his second wife and abandoned his sons; now behaving more decently under Ivan's influence"
+     },
+     {
+      "canonical_name": "Sofya Ivanovna",
+      "type": "character",
+      "aliases": [
+       "Sofya",
+       "his second wife",
+       "the orphan girl",
+       "this unhappy young woman",
+       "Mother of Ivan and Alexey"
+      ],
+      "matched_roster": false,
+      "state": "deceased; died of nervous illness when Alexey was in his fourth year"
+     },
+     {
+      "canonical_name": "Ivan Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Ivan",
+       "the elder",
+       "the young man",
+       "Eye-Witness",
+       "the author"
+      ],
+      "matched_roster": true,
+      "state": "grown into a proud, learned writer; staying with his father for two months as mediator with Dmitri"
+     },
+     {
+      "canonical_name": "Alexey Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Alexey",
+       "little Alexey",
+       "the younger",
+       "my hero"
+      ],
+      "matched_roster": true,
+      "state": "a novice in the monastery, the first of the three brothers to arrive in town"
+     },
+     {
+      "canonical_name": "Dmitri Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Dmitri",
+       "Mitya",
+       "their elder brother",
+       "the eldest son"
+      ],
+      "matched_roster": true,
+      "state": "in open quarrel with his father, planning legal action; met Ivan for the first time on this visit"
+     },
+     {
+      "canonical_name": "the general's widow",
+      "type": "character",
+      "aliases": [
+       "a general's widow",
+       "the tyrannical old lady",
+       "this old woman",
+       "the old lady",
+       "Sofya's benefactress and tormentor"
+      ],
+      "matched_roster": false,
+      "state": "deceased soon after taking the boys; left them a legacy in her will"
+     },
+     {
+      "canonical_name": "Grigory",
+      "type": "character",
+      "aliases": [
+       "old Grigory",
+       "the servant"
+      ],
+      "matched_roster": true,
+      "state": "championed Sofya, then cared for the abandoned boys in his cottage"
+     },
+     {
+      "canonical_name": "Yefim Petrovitch Polenov",
+      "type": "character",
+      "aliases": [
+       "Yefim Petrovitch",
+       "the principal heir",
+       "the Marshal of Nobility"
+      ],
+      "matched_roster": false,
+      "state": "deceased before Ivan finished the gymnasium; had honestly stewarded and grown the boys' legacy and funded their education"
+     },
+     {
+      "canonical_name": "Adelaïda Ivanovna Miüsov",
+      "type": "character",
+      "aliases": [
+       "Adelaïda Ivanovna",
+       "his first mistress",
+       "Fyodor Pavlovitch's first wife"
+      ],
+      "matched_roster": true,
+      "state": "deceased; referenced as Grigory's former mistress whom he hated"
+     },
+     {
+      "canonical_name": "Pyotr Alexandrovitch Miüsov",
+      "type": "character",
+      "aliases": [
+       "Pyotr Alexandrovitch Miüsov",
+       "the cousin of Fyodor Pavlovitch's first wife"
+      ],
+      "matched_roster": true,
+      "state": "back in the neighborhood visiting his estate, having come from Paris; intrigued by Ivan"
+     },
+     {
+      "canonical_name": "the narrator",
+      "type": "character",
+      "aliases": [
+       "I",
+       "we",
+       "us"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "our district",
+      "type": "place",
+      "aliases": [
+       "our town",
+       "our neighborhood",
+       "the town",
+       "our little town",
+       "the province"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "the monastery",
+      "type": "place",
+      "aliases": [
+       "the famous monastery",
+       "our monastery"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "Moscow",
+      "type": "place",
+      "aliases": [
+       "a Moscow gymnasium"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "Paris",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "the Karamazov family",
+      "type": "faction",
+      "aliases": [
+       "the family",
+       "the second family",
+       "its members"
+      ],
+      "matched_roster": false,
+      "state": "united for the first time in the town, some members meeting for the first time"
+     }
+    ],
+    "relationships": [
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "family",
+      "label": "second husband of"
+     },
+     {
+      "src": "Sofya Ivanovna",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "mother of"
+     },
+     {
+      "src": "Sofya Ivanovna",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "mother of"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "father of"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "father of"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "younger brother of"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "mediator between Dmitri and their father"
+     },
+     {
+      "src": "the general's widow",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "social",
+      "label": "benefactress and tormentor who raised her"
+     },
+     {
+      "src": "the general's widow",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "took in and left a legacy to"
+     },
+     {
+      "src": "the general's widow",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "took in and left a legacy to"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "allegiance",
+      "label": "championed and defended her"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "cared for as a child"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "cared for as a child"
+     },
+     {
+      "src": "Yefim Petrovitch Polenov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "guardian who grew especially fond of him"
+     },
+     {
+      "src": "Yefim Petrovitch Polenov",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "benefactor who funded his education"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "intrigued by and compared himself to"
+     },
+     {
+      "src": "Dmitri Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "rivalry",
+      "label": "in open quarrel, planning legal action against"
+     }
+    ],
+    "events": [
+     {
+      "summary": "Fyodor Pavlovitch marries Sofya Ivanovna, a meek orphan, by persuading her to elope; the general's widow gives no dowry and curses them both.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Sofya Ivanovna",
+       "the general's widow"
+      ]
+     },
+     {
+      "summary": "Fyodor Pavlovitch torments Sofya with orgies in her presence; Grigory takes her side, abuses his master, and drives the disorderly women out of the house.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Sofya Ivanovna",
+       "Grigory"
+      ]
+     },
+     {
+      "summary": "Sofya bears two sons, Ivan and Alexey, falls into nervous illness, and dies when Alexey is in his fourth year, leaving the boys abandoned by their father and cared for by Grigory.",
+      "participants": [
+       "Sofya Ivanovna",
+       "Ivan Fyodorovitch Karamazov",
+       "Alexey Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov",
+       "Grigory"
+      ]
+     },
+     {
+      "summary": "Three months after Sofya's death the general's widow arrives, slaps Fyodor Pavlovitch and shakes him by the hair, boxes Grigory's ear, and carries off both boys to raise them.",
+      "participants": [
+       "the general's widow",
+       "Fyodor Pavlovitch Karamazov",
+       "Grigory",
+       "Ivan Fyodorovitch Karamazov",
+       "Alexey Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "The old lady dies and wills the boys a thousand roubles each; Yefim Petrovitch Polenov honestly stewards the legacy, doubles it with interest, and educates both boys.",
+      "participants": [
+       "the general's widow",
+       "Yefim Petrovitch Polenov",
+       "Ivan Fyodorovitch Karamazov",
+       "Alexey Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Ivan grows up clever and self-reliant, supporting himself at university through newspaper work and publishing a notorious article on ecclesiastical courts that reaches the monastery.",
+      "participants": [
+       "Ivan Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Ivan arrives in the town and lives amicably with his father for two months, acting as mediator between Fyodor Pavlovitch and Dmitri, whom he meets for the first time; the family is united for the first time.",
+      "participants": [
+       "Ivan Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov",
+       "Dmitri Fyodorovitch Karamazov",
+       "Pyotr Alexandrovitch Miüsov"
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Innocence destroyed by depravity",
+      "description": "Sofya's meekness and innocence attract Fyodor Pavlovitch's vicious nature and are crushed by his cruelty."
+     },
+     {
+      "name": "Parental abandonment",
+      "description": "Fyodor Pavlovitch repeatedly forgets and abandons his children, who are raised by servants and strangers."
+     },
+     {
+      "name": "Charity and stewardship",
+      "description": "The kindness of Grigory, the general's widow, and especially the honest Yefim Petrovitch contrasts with the father's neglect."
+     },
+     {
+      "name": "The fractured family reunited",
+      "description": "The Karamazovs come together for the first time, with brothers meeting and old quarrels surfacing."
+     },
+     {
+      "name": "Faith versus intellect",
+      "description": "Ivan's enigmatic article and proud rationalism set against Alexey's monastic vocation foreshadow a central tension."
+     }
+    ]
+   }
+  },
+  {
+   "ordinal": 4,
+   "key": "karamazov:OEBPS/8647304830250799261_28054-h-5.htm.html",
+   "title": "Chapter IV. The Third Son, Alyosha",
+   "extraction": {
+    "chapter_summary": "This chapter introduces twenty-year-old Alyosha, the third son, characterizing him as an early lover of humanity who entered the monastery drawn by his attachment to the elder Zossima. It recounts his vivid childhood memory of his mother praying for him before an icon, his universally beloved yet dreamy and chaste nature, his upbringing under Yefim Petrovitch and later with distant relations, and his indifference to money (contrasted with Ivan). Returning home, he seeks his mother's grave (which Grigory, not Fyodor Pavlovitch, had marked), and the aged, increasingly debauched Fyodor Pavlovitch grows genuinely fond of him. The chapter closes with Fyodor Pavlovitch consenting to Alyosha becoming a novice, in a long drunken monologue about hell, hooks, and his own wickedness, moved that Alyosha is the only creature who has never condemned him.",
+    "entities": [
+     {
+      "canonical_name": "Alexey Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Alyosha",
+       "Alyosha Karamazov",
+       "this young man",
+       "my gentle boy",
+       "my angel",
+       "the third son",
+       "gentle boy"
+      ],
+      "matched_roster": true,
+      "state": "Twenty years old; returned to his father's town, found his mother's grave, and announced his desire to enter the monastery as a novice"
+     },
+     {
+      "canonical_name": "Fyodor Pavlovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Fyodor Pavlovitch",
+       "his father",
+       "the old man",
+       "the former buffoon",
+       "this prematurely old man",
+       "drunken old man"
+      ],
+      "matched_roster": true,
+      "state": "Aged, bloated, and more debauched; rich (~hundred thousand roubles); grown genuinely fond of Alyosha; consents to Alyosha entering the monastery"
+     },
+     {
+      "canonical_name": "Ivan Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Ivan",
+       "his brother Ivan",
+       "his elder brother Ivan"
+      ],
+      "matched_roster": true,
+      "state": "In his twenty-fourth year; struggled with poverty his first two years at university, maintaining himself by his own efforts"
+     },
+     {
+      "canonical_name": "Dmitri Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Dmitri",
+       "their elder brother Dmitri"
+      ],
+      "matched_roster": true,
+      "state": "Twenty-seven years old (mentioned only by age)"
+     },
+     {
+      "canonical_name": "the elder Zossima",
+      "type": "character",
+      "aliases": [
+       "Zossima",
+       "our celebrated elder",
+       "the elder",
+       "our famous elder",
+       "that is the most honest monk among them"
+      ],
+      "matched_roster": false,
+      "state": "Celebrated elder living in the monastery hermitage; the object of Alyosha's warm first love and the reason he is drawn to monastic life"
+     },
+     {
+      "canonical_name": "Sofya Ivanovna",
+      "type": "character",
+      "aliases": [
+       "his mother",
+       "Alyosha's mother",
+       "the crazy woman",
+       "his dead wife",
+       "his second wife",
+       "the deceased"
+      ],
+      "matched_roster": true,
+      "state": "Long dead; remembered by Alyosha praying before the icon; her neglected grave was marked by Grigory; called 'the crazy woman' by Fyodor Pavlovitch"
+     },
+     {
+      "canonical_name": "Grigory",
+      "type": "character",
+      "aliases": [
+       "the same servant Grigory",
+       "the servant"
+      ],
+      "matched_roster": true,
+      "state": "Aged considerably; looks after Fyodor Pavlovitch almost like a tutor; erected the tombstone on Alyosha's mother's grave at his own expense and showed it to Alyosha"
+     },
+     {
+      "canonical_name": "Yefim Petrovitch Polenov",
+      "type": "character",
+      "aliases": [
+       "Yefim Petrovitch",
+       "his patron and benefactor",
+       "his benefactor"
+      ],
+      "matched_roster": true,
+      "state": "Alyosha's patron and benefactor; now dead, his death leaving Alyosha two years short of finishing the gymnasium"
+     },
+     {
+      "canonical_name": "Pyotr Alexandrovitch Miüsov",
+      "type": "character",
+      "aliases": [
+       "Pyotr Alexandrovitch Miüsov"
+      ],
+      "matched_roster": true,
+      "state": "Sensitive about money and bourgeois honesty; pronounced an admiring judgment on Alyosha after getting to know him"
+     },
+     {
+      "canonical_name": "Adelaïda Ivanovna Miüsov",
+      "type": "character",
+      "aliases": [
+       "Adelaïda Ivanovna",
+       "the first"
+      ],
+      "matched_roster": true,
+      "state": "Fyodor Pavlovitch's first wife, who used to thrash him; he paid for requiems for her soul"
+     },
+     {
+      "canonical_name": "Yefim Petrovitch's widow",
+      "type": "character",
+      "aliases": [
+       "the inconsolable widow",
+       "his whole family"
+      ],
+      "matched_roster": false,
+      "state": "Went to Italy with her family of women and girls shortly after Yefim Petrovitch's death"
+     },
+     {
+      "canonical_name": "the two distant relations",
+      "type": "character",
+      "aliases": [
+       "two distant relations of Yefim Petrovitch",
+       "the ladies",
+       "ladies whom he had never seen before"
+      ],
+      "matched_roster": false,
+      "state": "Ladies who took Alyosha into their house; provided him money and clothes; reluctant to let him leave for his father's town"
+     },
+     {
+      "canonical_name": "the narrator",
+      "type": "character",
+      "aliases": [
+       "I",
+       "us",
+       "we",
+       "in my opinion"
+      ],
+      "matched_roster": true,
+      "state": "Recounting and giving his opinion of Alyosha's character"
+     },
+     {
+      "canonical_name": "our district",
+      "type": "place",
+      "aliases": [
+       "our town",
+       "the town",
+       "the district",
+       "our town cemetery"
+      ],
+      "matched_roster": true,
+      "state": null
+     },
+     {
+      "canonical_name": "the monastery",
+      "type": "place",
+      "aliases": [
+       "our monastery",
+       "the monastery",
+       "the monastery hermitage"
+      ],
+      "matched_roster": true,
+      "state": "Has about two hundred monks; Alyosha is to be received as a novice"
+     },
+     {
+      "canonical_name": "Odessa",
+      "type": "place",
+      "aliases": [
+       "the south of Russia"
+      ],
+      "matched_roster": false,
+      "state": "Where Fyodor Pavlovitch spent several years and developed a faculty for hoarding money"
+     },
+     {
+      "canonical_name": "the provincial gymnasium",
+      "type": "place",
+      "aliases": [
+       "the gymnasium",
+       "the provincial gymnasium",
+       "school"
+      ],
+      "matched_roster": false,
+      "state": "Where Alyosha studied but did not complete his course"
+     },
+     {
+      "canonical_name": "Italy",
+      "type": "place",
+      "aliases": [],
+      "matched_roster": false,
+      "state": null
+     },
+     {
+      "canonical_name": "the Karamazov family",
+      "type": "faction",
+      "aliases": [
+       "the family"
+      ],
+      "matched_roster": true,
+      "state": null
+     }
+    ],
+    "relationships": [
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "the elder Zossima",
+      "rel_type": "love",
+      "label": "became attached to him with the warm first love of his ardent heart; drawn to monastic life by him"
+     },
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "family",
+      "label": "son who vividly remembers his dead mother and seeks her grave"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "father who grows a genuine deep affection for his son and consents to his entering the monastery"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "family",
+      "label": "widower who abandoned and forgot his second wife's grave and called her 'the crazy woman'"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "other",
+      "label": "erected a tombstone on her neglected grave at his own expense"
+     },
+     {
+      "src": "Grigory",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "social",
+      "label": "aged servant who looks after him almost like a tutor"
+     },
+     {
+      "src": "Yefim Petrovitch Polenov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "patron and benefactor who raised him as one of the family"
+     },
+     {
+      "src": "Fyodor Pavlovitch Karamazov",
+      "dst": "Adelaïda Ivanovna Miüsov",
+      "rel_type": "family",
+      "label": "first wife who used to thrash him; he paid for requiems for her soul"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "elder brother, contrasted as proudly self-supporting against Alyosha's indifference to money"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "pronounced an admiring judgment on Alyosha's nature after knowing him"
+     }
+    ],
+    "events": [
+     {
+      "summary": "Alyosha retains a lifelong vivid memory of his mother on her knees before the icon, sobbing and holding him out to the Mother of God before a nurse snatches him away in terror.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "Sofya Ivanovna"
+      ]
+     },
+     {
+      "summary": "At school Alyosha is mocked for his fanatical chastity (putting his fingers in his ears), enduring taunts in silence until the boys leave him alone, while remaining a general favorite.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "After Yefim Petrovitch's death and his widow's departure to Italy, Alyosha goes to live with two distant relations he had never met.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "Yefim Petrovitch Polenov",
+       "the two distant relations",
+       "Yefim Petrovitch's widow"
+      ]
+     },
+     {
+      "summary": "Alyosha leaves the gymnasium a year early and travels third class to his father's town, where it emerges he came to find his mother's grave.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "the two distant relations",
+       "Fyodor Pavlovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "Fyodor Pavlovitch cannot show the grave because he abandoned and forgot it; Grigory takes Alyosha to the cemetery and reveals the tombstone he himself erected at his own expense.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "Grigory",
+       "Fyodor Pavlovitch Karamazov",
+       "Sofya Ivanovna"
+      ]
+     },
+     {
+      "summary": "Moved by the episode, Fyodor Pavlovitch takes a thousand roubles to the monastery for requiems, but for his first wife Adelaïda Ivanovna rather than Alyosha's mother, then gets drunk and abuses the monks.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Adelaïda Ivanovna Miüsov",
+       "the monastery"
+      ]
+     },
+     {
+      "summary": "Alyosha announces he wishes to enter the monastery as a novice and asks his father's consent; the half-drunken Fyodor Pavlovitch agrees, delivering a long monologue on hell, hooks, and his own wickedness, declaring Alyosha the only creature who has never condemned him.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "Fyodor Pavlovitch Karamazov",
+       "the elder Zossima"
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Universal love and non-judgment",
+      "description": "Alyosha accepts everyone without condemnation or criticism, which makes him universally beloved and conquers even his father, who treasures being unjudged by him."
+     },
+     {
+      "name": "Faith and the monastic vocation",
+      "description": "Alyosha's pull toward the monastery and the elder Zossima as an escape from worldly wickedness toward the light of love."
+     },
+     {
+      "name": "Indifference to money",
+      "description": "Alyosha's near-total unconcern with the value of money, contrasted sharply with Ivan's proud self-reliance and Pyotr Miüsov's bourgeois sensibility."
+     },
+     {
+      "name": "Memory of the mother",
+      "description": "The luminous, frenzied-yet-beautiful memory of the mother praying that survives like a fragment of light, drawing Alyosha back to seek her grave."
+     },
+     {
+      "name": "Debauchery and redemption",
+      "description": "Fyodor Pavlovitch's deepening depravity and sentimentality set against the awakening of something long dead in his soul through Alyosha's presence."
+     }
+    ]
+   }
+  },
+  {
+   "ordinal": 5,
+   "key": "karamazov:OEBPS/8647304830250799261_28054-h-6.htm.html",
+   "title": "Chapter V. Elders",
+   "extraction": {
+    "chapter_summary": "This chapter digresses from the narrative to characterize Alyosha as a robust, clear-eyed realist of nineteen rather than a sickly mystic, explaining why he chose the monastic path and his all-or-nothing faith in immortality. The narrator then explains the institution of \"elders\" in Russian monasteries—a voluntary, absolute submission of will undergone for self-conquest—and describes the elder Zossima, the celebrated, gentle elder to whom Alyosha is devoted and in whose cell Alyosha lives. The chapter recounts the people's adoration of Zossima and Alyosha's unquestioning faith in his holiness and miraculous power. Finally it sets up the impending family gathering in Zossima's cell, arranged on Fyodor Pavlovitch's joking suggestion amid the bitter discord between Dmitri and his father, which Alyosha awaits with dread for the elder's sake.",
+    "entities": [
+     {
+      "canonical_name": "Alexey Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Alyosha",
+       "my young man",
+       "the boy",
+       "a foolish novice"
+      ],
+      "matched_roster": true,
+      "state": "A red-cheeked, healthy realist of nineteen living in Zossima's cell as a novice; devoted to the elder and dreading the family gathering."
+     },
+     {
+      "canonical_name": "the elder Zossima",
+      "type": "character",
+      "aliases": [
+       "Zossima",
+       "Father Zossima",
+       "the elder",
+       "this elder",
+       "the sainted man",
+       "the holy man",
+       "his teacher",
+       "his elder"
+      ],
+      "matched_roster": true,
+      "state": "Sixty-five, formerly an army officer of landowner family; the last of the monastery's elders, dying of weakness and disease, revered by pilgrims; reluctantly consents to host the family meeting."
+     },
+     {
+      "canonical_name": "Fyodor Pavlovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Fyodor Pavlovitch",
+       "his father",
+       "their father"
+      ],
+      "matched_roster": true,
+      "state": "Suggested the family gathering in jest; estranged from Dmitri; Alyosha fears he plans some buffoonery."
+     },
+     {
+      "canonical_name": "Dmitri Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Dmitri",
+       "his half-brother Dmitri",
+       "the two elder brothers"
+      ],
+      "matched_roster": true,
+      "state": "Living apart at the other end of town; in acute discord with his father; accepts the meeting as a challenge though he suspects a trap; pledges respect to the elder."
+     },
+     {
+      "canonical_name": "Ivan Fyodorovitch Karamazov",
+      "type": "character",
+      "aliases": [
+       "Ivan",
+       "his brother Ivan",
+       "the learned atheist",
+       "the highly educated Ivan",
+       "the two elder brothers"
+      ],
+      "matched_roster": true,
+      "state": "Staying with his father; a learned atheist, two months in town; distant toward Alyosha; expected to attend the meeting from curiosity."
+     },
+     {
+      "canonical_name": "Pyotr Alexandrovitch Miüsov",
+      "type": "character",
+      "aliases": [
+       "Pyotr Alexandrovitch Miüsov",
+       "Miüsov"
+      ],
+      "matched_roster": true,
+      "state": "A Liberal of the forties and fifties, freethinker and atheist staying in the district; eager to attend, using his lawsuit with the monastery as a pretext to see the Superior."
+     },
+     {
+      "canonical_name": "Sofya Ivanovna",
+      "type": "character",
+      "aliases": [
+       "his mother",
+       "his poor crazy mother"
+      ],
+      "matched_roster": true,
+      "state": "Recalled in Alyosha's childhood memory of being taken to mass at the monastery; described as crazy."
+     },
+     {
+      "canonical_name": "the narrator",
+      "type": "character",
+      "aliases": [
+       "I",
+       "my",
+       "us",
+       "we",
+       "to my thinking"
+      ],
+      "matched_roster": true,
+      "state": "Directly addresses readers, defending Alyosha and explaining the institution of elders."
+     },
+     {
+      "canonical_name": "Païssy Velitchkovsky",
+      "type": "character",
+      "aliases": [
+       "one of the great ascetics"
+      ],
+      "matched_roster": false,
+      "state": "The ascetic credited with reviving the institution of elders in Russia toward the end of the last century."
+     },
+     {
+      "canonical_name": "the Karamazov family",
+      "type": "faction",
+      "aliases": [
+       "this inharmonious family",
+       "this family",
+       "the wrangling, quarrelsome party",
+       "the members of this family"
+      ],
+      "matched_roster": true,
+      "state": "Gathering in Zossima's cell amid discord between Dmitri and his father."
+     },
+     {
+      "canonical_name": "the monastery",
+      "type": "place",
+      "aliases": [
+       "our monastery",
+       "the monastery",
+       "the hermitage",
+       "the monastery hermitage"
+      ],
+      "matched_roster": true,
+      "state": "Famous through its elders; site of the impending family gathering; Miüsov has a lingering lawsuit with it."
+     },
+     {
+      "canonical_name": "the Superior",
+      "type": "character",
+      "aliases": [
+       "the Superior"
+      ],
+      "matched_roster": false,
+      "state": "Head of the monastery whom Miüsov uses his lawsuit as a pretext to see."
+     },
+     {
+      "canonical_name": "the older monk who hated Zossima",
+      "type": "character",
+      "aliases": [
+       "one of the older monks",
+       "distinguished for his strict keeping of fasts and vows of silence"
+      ],
+      "matched_roster": false,
+      "state": "One of the few dignified monks who envied and resented Zossima."
+     },
+     {
+      "canonical_name": "Optin Monastery",
+      "type": "place",
+      "aliases": [
+       "the celebrated Kozelski Optin Monastery"
+      ],
+      "matched_roster": false,
+      "state": "Monastery where the institution of elders especially flourished."
+     },
+     {
+      "canonical_name": "Athos",
+      "type": "place",
+      "aliases": [
+       "Athos"
+      ],
+      "matched_roster": false,
+      "state": "Holy place in the orthodox East where elders existed over a thousand years."
+     },
+     {
+      "canonical_name": "Constantinople",
+      "type": "place",
+      "aliases": [
+       "Constantinople"
+      ],
+      "matched_roster": false,
+      "state": "Site of the Œcumenical Patriarch; its destruction interrupted relations with the East."
+     },
+     {
+      "canonical_name": "Russia",
+      "type": "place",
+      "aliases": [
+       "Russia",
+       "the north",
+       "Siberia"
+      ],
+      "matched_roster": false,
+      "state": "Setting where the institution of elders was revived and sometimes persecuted."
+     }
+    ],
+    "relationships": [
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "the elder Zossima",
+      "rel_type": "allegiance",
+      "label": "devoted novice who lives in the elder's cell and has unquestioning faith in him"
+     },
+     {
+      "src": "the elder Zossima",
+      "dst": "Alexey Fyodorovitch Karamazov",
+      "rel_type": "social",
+      "label": "very fond of Alyosha, lets him wait upon him"
+     },
+     {
+      "src": "Dmitri Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "rivalry",
+      "label": "acute discord and insufferably strained relations between son and father"
+     },
+     {
+      "src": "Dmitri Fyodorovitch Karamazov",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "speaks of Ivan with deepest respect; bonded over a recent important affair"
+     },
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "Ivan Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "interested in Ivan but not intimate; senses Ivan's indifference and possible contempt"
+     },
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "Dmitri Fyodorovitch Karamazov",
+      "rel_type": "family",
+      "label": "quickly made friends with half-brother Dmitri; sent word that he loved him"
+     },
+     {
+      "src": "Ivan Fyodorovitch Karamazov",
+      "dst": "Fyodor Pavlovitch Karamazov",
+      "rel_type": "family",
+      "label": "staying with his father"
+     },
+     {
+      "src": "Pyotr Alexandrovitch Miüsov",
+      "dst": "the monastery",
+      "rel_type": "rivalry",
+      "label": "has a dragging lawsuit with the monastery"
+     },
+     {
+      "src": "Alexey Fyodorovitch Karamazov",
+      "dst": "Sofya Ivanovna",
+      "rel_type": "family",
+      "label": "son recalling his crazy mother taking him to mass as a child"
+     }
+    ],
+    "events": [
+     {
+      "summary": "The narrator defends Alyosha as a healthy, clear-eyed realist rather than a sickly mystic, and explains his all-or-nothing faith and choice of the monastic path.",
+      "participants": [
+       "the narrator",
+       "Alexey Fyodorovitch Karamazov"
+      ]
+     },
+     {
+      "summary": "The narrator digresses to explain the institution of 'elders' in Russian monasteries: voluntary, absolute submission of will, revived by Païssy Velitchkovsky and flourishing at Optin Monastery.",
+      "participants": [
+       "the narrator",
+       "Païssy Velitchkovsky",
+       "Optin Monastery"
+      ]
+     },
+     {
+      "summary": "The narrator recounts legends illustrating an elder's unbounded authority, including the martyr's coffin cast from the church and a monk denied release even by the Patriarch at Constantinople.",
+      "participants": [
+       "the narrator",
+       "Constantinople"
+      ]
+     },
+     {
+      "summary": "Zossima, last of the monastery's elders and dying of illness, is described as gentle and beloved, drawing pilgrims who kiss his feet and seek healing.",
+      "participants": [
+       "the elder Zossima"
+      ]
+     },
+     {
+      "summary": "Alyosha lives in Zossima's cell, holds unquestioning faith in his miraculous power and holiness, and dreams of the elder ushering in the Kingdom of Christ.",
+      "participants": [
+       "Alexey Fyodorovitch Karamazov",
+       "the elder Zossima"
+      ]
+     },
+     {
+      "summary": "Fyodor Pavlovitch suggests, half in jest, that the discordant family gather in Zossima's cell to reconcile; Dmitri, Ivan, and Miüsov agree to attend and the day is fixed.",
+      "participants": [
+       "Fyodor Pavlovitch Karamazov",
+       "Dmitri Fyodorovitch Karamazov",
+       "Ivan Fyodorovitch Karamazov",
+       "Pyotr Alexandrovitch Miüsov",
+       "the elder Zossima"
+      ]
+     },
+     {
+      "summary": "Zossima reluctantly consents to see the family, remarking 'Who has made me a judge over them?'; Alyosha dreads the visit and any affront to the elder, and sends Dmitri word to keep his promise.",
+      "participants": [
+       "the elder Zossima",
+       "Alexey Fyodorovitch Karamazov",
+       "Dmitri Fyodorovitch Karamazov"
+      ]
+     }
+    ],
+    "themes": [
+     {
+      "name": "Faith versus realism",
+      "description": "Alyosha is presented as a realist whose faith springs not from miracles but from desire to believe, recasting belief as an act of will."
+     },
+     {
+      "name": "Submission and spiritual authority",
+      "description": "The institution of elders demands total renunciation of one's will, a path to freedom that can also become Satanic pride."
+     },
+     {
+      "name": "Holiness and the people's longing",
+      "description": "The Russian peasants' need to worship something holy and exalted is fulfilled in their adoration of the elder."
+     },
+     {
+      "name": "Family discord",
+      "description": "The bitter strife between Dmitri and his father, and the disunity of the inharmonious Karamazov family, frames the impending gathering."
+     },
+     {
+      "name": "All-or-nothing idealism",
+      "description": "Alyosha's refusal of compromise—living wholly for immortality or becoming an atheist—mirrors the seething youth's thirst for swift, total achievement."
+     }
+    ]
+   }
+  }
+ ],
+ "roster_final": [
+  {
+   "canonical_name": "Fyodor Pavlovitch Karamazov",
+   "type": "character",
+   "aliases": [
+    "Fyodor Pavlovitch",
+    "the landowner",
+    "the buffoon",
+    "the father",
+    "his father",
+    "the old man",
+    "the former buffoon",
+    "this prematurely old man",
+    "drunken old man",
+    "their father"
+   ]
+  },
+  {
+   "canonical_name": "Alexey Fyodorovitch Karamazov",
+   "type": "character",
+   "aliases": [
+    "Alexey",
+    "little Alexey",
+    "the younger",
+    "my hero",
+    "Alyosha",
+    "Alyosha Karamazov",
+    "this young man",
+    "my gentle boy",
+    "my angel",
+    "the third son",
+    "gentle boy",
+    "my young man",
+    "the boy",
+    "a foolish novice"
+   ]
+  },
+  {
+   "canonical_name": "Dmitri Fyodorovitch Karamazov",
+   "type": "character",
+   "aliases": [
+    "Dmitri",
+    "Mitya",
+    "the eldest son",
+    "the firstborn",
+    "the child",
+    "their elder brother",
+    "their elder brother Dmitri",
+    "his half-brother Dmitri",
+    "the two elder brothers"
+   ]
+  },
+  {
+   "canonical_name": "Ivan Fyodorovitch Karamazov",
+   "type": "character",
+   "aliases": [
+    "Ivan",
+    "the elder",
+    "the young man",
+    "Eye-Witness",
+    "the author",
+    "his brother Ivan",
+    "his elder brother Ivan",
+    "the learned atheist",
+    "the highly educated Ivan",
+    "the two elder brothers"
+   ]
+  },
+  {
+   "canonical_name": "Adelaïda Ivanovna Miüsov",
+   "type": "character",
+   "aliases": [
+    "Adelaïda Ivanovna",
+    "Fyodor Pavlovitch's first wife",
+    "the runaway bride",
+    "Mitya's mother",
+    "his first mistress",
+    "the first"
+   ]
+  },
+  {
+   "canonical_name": "the divinity student",
+   "type": "character",
+   "aliases": [
+    "a destitute divinity student"
+   ]
+  },
+  {
+   "canonical_name": "the Miüsovs",
+   "type": "faction",
+   "aliases": [
+    "Adelaïda Ivanovna's family",
+    "the Miüsov family"
+   ]
+  },
+  {
+   "canonical_name": "the narrator",
+   "type": "character",
+   "aliases": [
+    "I",
+    "us",
+    "we",
+    "in my opinion",
+    "my",
+    "to my thinking"
+   ]
+  },
+  {
+   "canonical_name": "Petersburg",
+   "type": "place",
+   "aliases": []
+  },
+  {
+   "canonical_name": "our district",
+   "type": "place",
+   "aliases": [
+    "the province",
+    "our town",
+    "our little town",
+    "our neighborhood",
+    "the town",
+    "the district",
+    "our town cemetery"
+   ]
+  },
+  {
+   "canonical_name": "Grigory",
+   "type": "character",
+   "aliases": [
+    "old Grigory",
+    "a faithful servant of the family",
+    "the servant",
+    "the same servant Grigory"
+   ]
+  },
+  {
+   "canonical_name": "Pyotr Alexandrovitch Miüsov",
+   "type": "character",
+   "aliases": [
+    "Pyotr Alexandrovitch",
+    "a cousin of Mitya's mother",
+    "this cousin",
+    "Pyotr Alexandrovitch Miüsov",
+    "the cousin of Fyodor Pavlovitch's first wife",
+    "Miüsov"
+   ]
+  },
+  {
+   "canonical_name": "Mitya's grandmother",
+   "type": "character",
+   "aliases": [
+    "his widow",
+    "the grandmother"
+   ]
+  },
+  {
+   "canonical_name": "the Moscow lady",
+   "type": "character",
+   "aliases": [
+    "a lady living in Moscow",
+    "one of his cousins"
+   ]
+  },
+  {
+   "canonical_name": "Paris",
+   "type": "place",
+   "aliases": []
+  },
+  {
+   "canonical_name": "Moscow",
+   "type": "place",
+   "aliases": [
+    "a Moscow gymnasium"
+   ]
+  },
+  {
+   "canonical_name": "the monastery",
+   "type": "place",
+   "aliases": [
+    "our famous monastery",
+    "the famous monastery",
+    "our monastery",
+    "the monastery",
+    "the monastery hermitage",
+    "the hermitage"
+   ]
+  },
+  {
+   "canonical_name": "Sofya Ivanovna",
+   "type": "character",
+   "aliases": [
+    "Sofya",
+    "his second wife",
+    "the orphan girl",
+    "this unhappy young woman",
+    "Mother of Ivan and Alexey",
+    "his mother",
+    "Alyosha's mother",
+    "the crazy woman",
+    "his dead wife",
+    "the deceased",
+    "his poor crazy mother"
+   ]
+  },
+  {
+   "canonical_name": "the general's widow",
+   "type": "character",
+   "aliases": [
+    "a general's widow",
+    "the tyrannical old lady",
+    "this old woman",
+    "the old lady",
+    "Sofya's benefactress and tormentor"
+   ]
+  },
+  {
+   "canonical_name": "Yefim Petrovitch Polenov",
+   "type": "character",
+   "aliases": [
+    "Yefim Petrovitch",
+    "the principal heir",
+    "the Marshal of Nobility",
+    "his patron and benefactor",
+    "his benefactor"
+   ]
+  },
+  {
+   "canonical_name": "the Karamazov family",
+   "type": "faction",
+   "aliases": [
+    "the family",
+    "the second family",
+    "its members",
+    "this inharmonious family",
+    "this family",
+    "the wrangling, quarrelsome party",
+    "the members of this family"
+   ]
+  },
+  {
+   "canonical_name": "the elder Zossima",
+   "type": "character",
+   "aliases": [
+    "Zossima",
+    "our celebrated elder",
+    "the elder",
+    "our famous elder",
+    "that is the most honest monk among them",
+    "Father Zossima",
+    "this elder",
+    "the sainted man",
+    "the holy man",
+    "his teacher",
+    "his elder"
+   ]
+  },
+  {
+   "canonical_name": "Yefim Petrovitch's widow",
+   "type": "character",
+   "aliases": [
+    "the inconsolable widow",
+    "his whole family"
+   ]
+  },
+  {
+   "canonical_name": "the two distant relations",
+   "type": "character",
+   "aliases": [
+    "two distant relations of Yefim Petrovitch",
+    "the ladies",
+    "ladies whom he had never seen before"
+   ]
+  },
+  {
+   "canonical_name": "Odessa",
+   "type": "place",
+   "aliases": [
+    "the south of Russia"
+   ]
+  },
+  {
+   "canonical_name": "the provincial gymnasium",
+   "type": "place",
+   "aliases": [
+    "the gymnasium",
+    "the provincial gymnasium",
+    "school"
+   ]
+  },
+  {
+   "canonical_name": "Italy",
+   "type": "place",
+   "aliases": []
+  },
+  {
+   "canonical_name": "Païssy Velitchkovsky",
+   "type": "character",
+   "aliases": [
+    "one of the great ascetics"
+   ]
+  },
+  {
+   "canonical_name": "the Superior",
+   "type": "character",
+   "aliases": [
+    "the Superior"
+   ]
+  },
+  {
+   "canonical_name": "the older monk who hated Zossima",
+   "type": "character",
+   "aliases": [
+    "one of the older monks",
+    "distinguished for his strict keeping of fasts and vows of silence"
+   ]
+  },
+  {
+   "canonical_name": "Optin Monastery",
+   "type": "place",
+   "aliases": [
+    "the celebrated Kozelski Optin Monastery"
+   ]
+  },
+  {
+   "canonical_name": "Athos",
+   "type": "place",
+   "aliases": [
+    "Athos"
+   ]
+  },
+  {
+   "canonical_name": "Constantinople",
+   "type": "place",
+   "aliases": [
+    "Constantinople"
+   ]
+  },
+  {
+   "canonical_name": "Russia",
+   "type": "place",
+   "aliases": [
+    "Russia",
+    "the north",
+    "Siberia"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+*.local
+.state/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+auth.json
+credentials.json
+config.local.toml
+.op.env
+
+# Data / DB (local story-memory stores, imported books)
+*.sqlite
+*.sqlite3
+*.db
+data/
+books/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

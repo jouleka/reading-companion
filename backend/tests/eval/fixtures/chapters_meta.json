@@ -1,0 +1,37 @@
+[
+  {
+    "ordinal": 1,
+    "key": "karamazov:OEBPS/8647304830250799261_28054-h-2.htm.html",
+    "title": "Chapter I. Fyodor Pavlovitch Karamazov",
+    "words": 1334,
+    "path": "spikes/lit-6-extraction/chapters/ch01.txt"
+  },
+  {
+    "ordinal": 2,
+    "key": "karamazov:OEBPS/8647304830250799261_28054-h-3.htm.html",
+    "title": "Chapter II. He Gets Rid Of His Eldest Son",
+    "words": 1306,
+    "path": "spikes/lit-6-extraction/chapters/ch02.txt"
+  },
+  {
+    "ordinal": 3,
+    "key": "karamazov:OEBPS/8647304830250799261_28054-h-4.htm.html",
+    "title": "Chapter III. The Second Marriage And The Second Family",
+    "words": 2595,
+    "path": "spikes/lit-6-extraction/chapters/ch03.txt"
+  },
+  {
+    "ordinal": 4,
+    "key": "karamazov:OEBPS/8647304830250799261_28054-h-5.htm.html",
+    "title": "Chapter IV. The Third Son, Alyosha",
+    "words": 3516,
+    "path": "spikes/lit-6-extraction/chapters/ch04.txt"
+  },
+  {
+    "ordinal": 5,
+    "key": "karamazov:OEBPS/8647304830250799261_28054-h-6.htm.html",
+    "title": "Chapter V. Elders",
+    "words": 3634,
+    "path": "spikes/lit-6-extraction/chapters/ch05.txt"
+  }
+]
