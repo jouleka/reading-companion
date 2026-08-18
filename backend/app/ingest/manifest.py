@@ -16,12 +16,23 @@ Lives beside ``source.epub`` under ``data/books/<book_id>/atoms.json``.
 import hashlib
 import json
 import os
+import re
 
 from app.language import normalize_content_language
 
 
 class AtomSetMismatch(RuntimeError):
     """The manifest fails self-verification or disagrees with the store — reads must FAIL CLOSED."""
+
+
+_BOOK_ID = re.compile(r"bk[a-z0-9]{1,64}\Z")
+
+
+def validated_book_id(book_id: object) -> str:
+    """Return the storage-safe local ID or fail before it reaches a path expression."""
+    if not isinstance(book_id, str) or _BOOK_ID.fullmatch(book_id) is None:
+        raise AtomSetMismatch("malformed book id")
+    return book_id
 
 
 def _version(atom_rows):
@@ -46,7 +57,11 @@ def build_manifest(book_id, result, chapters):
 
 
 def manifest_path(data_dir, book_id):
-    return os.path.join(data_dir, "books", book_id, "atoms.json")
+    return os.path.join(data_dir, "books", validated_book_id(book_id), "atoms.json")
+
+
+def source_epub_path(data_dir, book_id):
+    return os.path.join(data_dir, "books", validated_book_id(book_id), "source.epub")
 
 
 def write_manifest(data_dir, manifest):

@@ -20,6 +20,7 @@ from app.ingest.manifest import (
     assert_matches_store,
     build_manifest,
     load_manifest,
+    source_epub_path,
     write_manifest,
 )
 from app.ingest.segmentation.epub_segmenter import EpubDrmError
@@ -60,9 +61,10 @@ def import_book(file: UploadFile, catalog=Depends(get_catalog), store=Depends(ge
 
     title = result.title or (file.filename or book_id).rsplit(".", 1)[0]
     author = result.author
-    book_dir = os.path.join(settings.data_dir, "books", book_id)
+    source_path = source_epub_path(settings.data_dir, book_id)
+    book_dir = os.path.dirname(source_path)
     os.makedirs(book_dir, exist_ok=True)
-    with open(os.path.join(book_dir, "source.epub"), "wb") as f:
+    with open(source_path, "wb") as f:
         f.write(blob)
     manifest = build_manifest(book_id, result, chapters)
     write_manifest(settings.data_dir, manifest)
@@ -126,7 +128,10 @@ def epub_bytes(book_id: str, catalog=Depends(get_catalog), settings=Depends(get_
     book from its reader."""
     if catalog.get_book(book_id) is None:
         raise HTTPException(404, "unknown book")
-    path = os.path.join(settings.data_dir, "books", book_id, "source.epub")
+    try:
+        path = source_epub_path(settings.data_dir, book_id)
+    except AtomSetMismatch as e:
+        raise HTTPException(404, "unknown book") from e
     if not os.path.exists(path):
         raise HTTPException(404, "source EPUB not on disk")
     return FileResponse(path, media_type="application/epub+zip")

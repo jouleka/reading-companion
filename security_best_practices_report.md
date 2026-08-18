@@ -19,7 +19,7 @@ renderer. EPUB markup is an active-content container rendered from same-origin b
 CSP, a malicious book could run script in the application boundary. The integrated server, Vite dev
 server, and preview server now block inline/blob scripts and send complementary browser headers.
 
-Automated verification completed with backend lint, 674 local tests, 218 frontend tests, a production
+Automated verification completed with backend lint, 681 local tests, 218 frontend tests, a production
 frontend build, Python and npm dependency audits, a high-severity Bandit scan, and the real
 PostgreSQL/pgvector hosted plus parity suites.
 
@@ -93,6 +93,26 @@ PostgreSQL/pgvector hosted plus parity suites.
   integrity.
 - Remediation: marked the call `usedforsecurity=False` and documented the purpose. The high-severity
   Bandit gate now passes.
+
+### RC-SEC-008 — High — Local book IDs reached filesystem paths without local validation — fixed
+
+- Location: `backend/app/ingest/manifest.py` and `backend/app/api/books.py`.
+- Impact: normal imports create content-derived IDs and reads first require a matching catalog row,
+  so an HTTP client could not normally choose an arbitrary stored path. However, the filesystem
+  boundary relied on that upstream invariant and CodeQL correctly identified the missing local
+  validation.
+- Remediation: every manifest and source-EPUB path now requires a bounded lowercase alphanumeric
+  book ID before constructing a path. Traversal, separators, uppercase IDs, empty IDs, and malformed
+  prefixes have regression coverage.
+
+### RC-SEC-009 — Informational — Vendored PDF.js filename normalization alert — false positive
+
+- Location: `frontend/src/vendor/foliate-js/vendor/pdfjs/pdf.worker.mjs`.
+- Triage: the flagged replacement order deliberately normalizes PDF escape sequences, after which
+  PDF.js applies `stripPath` before returning the serializable attachment filename. Current upstream
+  [documents that the order is intentional](https://github.com/mozilla/pdf.js/blob/master/src/core/file_spec.js).
+- Disposition: dismissed as a CodeQL false positive rather than modifying generated third-party
+  code. Continue updating the vendored Foliate/PDF.js bundle as an atomic upstream dependency.
 
 ## Additional controls reviewed
 
