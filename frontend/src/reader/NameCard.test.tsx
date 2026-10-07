@@ -26,7 +26,7 @@ const card = {
   ],
 };
 
-beforeEach(() => mocks.character.mockReset());
+beforeEach(() => { mocks.character.mockReset(); });
 afterEach(() => {
   vi.restoreAllMocks();
 });

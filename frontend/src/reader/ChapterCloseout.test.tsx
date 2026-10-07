@@ -33,7 +33,7 @@ const answer = {
   },
 };
 
-beforeEach(() => mocks.chapterCloseout.mockReset());
+beforeEach(() => { mocks.chapterCloseout.mockReset(); });
 
 describe("ChapterCloseout", () => {
   test("renders cited takeaways, navigates to evidence, exposes cost, and passes axe", async () => {

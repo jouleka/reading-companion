@@ -30,7 +30,7 @@ const answer = {
   },
 };
 
-beforeEach(() => mocks.askBook.mockReset());
+beforeEach(() => { mocks.askBook.mockReset(); });
 
 describe("AskTheBook", () => {
   test("renders cited claims, measured provider cost, and navigates a citation", async () => {

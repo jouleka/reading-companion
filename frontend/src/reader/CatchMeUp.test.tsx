@@ -18,7 +18,7 @@ const recap = {
   cached: false,
 };
 
-beforeEach(() => mocks.catchMeUp.mockReset());
+beforeEach(() => { mocks.catchMeUp.mockReset(); });
 afterEach(() => {
   vi.restoreAllMocks();
 });

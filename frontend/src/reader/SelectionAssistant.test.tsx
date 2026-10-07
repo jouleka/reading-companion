@@ -22,7 +22,7 @@ const selection = {
   text: "The lantern guttered in the rain.",
 };
 
-beforeEach(() => mocks.selectionAction.mockReset());
+beforeEach(() => { mocks.selectionAction.mockReset(); });
 
 describe("SelectionAssistant", () => {
   test("explains only the selection, returns to its exact anchor, exposes cost, and passes axe", async () => {
