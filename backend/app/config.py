@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     jev_min_probability: float = Field(default=0.95, ge=0.9, le=1)
     jev_min_confidence: float = Field(default=0.85, ge=0.8, le=1)
     recap_prewarm: bool = False
+    recap_disk_cache: bool = False
+    reader_answer_cache: bool = False
+    reader_fast_mode: bool = False
 
     # service
     deployment_mode: Literal["local", "hosted"] = "local"

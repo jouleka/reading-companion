@@ -13,6 +13,9 @@ JEV_SELECTION_ENABLED=true
 JEV_EVIDENCE_ENABLED=true
 JEV_RECAP_ENABLED=false
 RECAP_PREWARM=true
+RECAP_DISK_CACHE=true
+READER_ANSWER_CACHE=true
+READER_FAST_MODE=false
 ```
 
 Supply `TYPESAFE_API_KEY` through the server environment. On the Windows account that already saved
@@ -40,11 +43,26 @@ paid attempts retain conservative charges. The tested price is $0.042/M input to
 free, while output-token limits remain enforced. Probabilities are routing signals, not a promise
 of correctness.
 
+`READER_FAST_MODE` uses native OpenAI Fast processing for Ask and Catch Me Up only, with the same
+GPT-6 Luna medium / GPT-6.1 Sol low reasoning settings and independent own-citation review. It disables
+SDK retries. Extraction, embeddings and their version pins keep
+their existing clients. Fast tokens cost twice Standard; reservations and displayed costs include
+that premium. The flag requires native GPT-6 Luna or GPT-6.1 Sol for both generative roles.
+It remains off in the local profile: the higher-priced tier did not meet the complete-answer target.
+
+`READER_ANSWER_CACHE` reuses complete cleared answers in a bounded 128-entry process cache. Keys
+include the question, effective frontier, reset epoch, incarnation, validity snapshot, model/endpoint
+and review configuration. A hit has zero new provider cost. Refusals and rejected drafts are not
+cached. Cold explanations still require sequential generation and independent review: **there is
+no verified 1.5-second guarantee for complete fresh answers**. Jev selects/checks; it does not write
+explanations. No quote-only response or first-token timing substitutes for a complete answer.
+
 ## Recaps
 
 `RECAP_PREWARM` prepares the normal guarded recap after successful durable ingestion. One background
-consumer and an eight-book queue bound work. Preparation acquires the same request gate as reset,
-position updates and deletion, rechecks the catalog incarnation, and recomputes the authoritative
+consumer and an eight-book queue bound work. Startup also schedules up to eight existing books.
+Preparation shares read access with answers; reset, position updates and deletion wait exclusively.
+It rechecks the catalog incarnation and recomputes the authoritative
 frontier. It never trusts a queued bookmark, reads ahead, changes the reading position, or bypasses
 review. Existing snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs
 still apply. Queued work is discarded at shutdown; active work finishes before stores close.
@@ -56,7 +74,10 @@ of earlier approvals. This does not certify that old extracted memory is factual
 The experimental `JEV_RECAP_ENABLED` flag is **off by default**. In live calibration it escalated
 most supported summaries to GPT and added cold-request overhead. Background preparation supplies
 the useful recap speedup while retaining generative review. A cold request can still take seconds
-if preparation has not finished. Caches remain process-local and bounded.
+if preparation has not finished. `RECAP_DISK_CACHE` checkpoints only cleared positive recaps in one
+atomic file capped at 2 MiB. Shape, checksum and full cache identity must match after restart;
+corruption is a miss. Cached and prior-recap frontiers are checked again before use. Failures and
+active calls are never persisted. A reset cannot reuse an advanced recap.
 
 ## Reproducing validation
 
@@ -66,15 +87,18 @@ Run the usual Ruff and pytest suites, then opt into paid synthetic checks:
 python scripts/jev_quality_audit.py --run --output quality.json
 python scripts/jev_quality_audit.py --run --heldout --output heldout.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
+python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
 ```
 
 The direct challenge script requires the existing Windows credential; its combined admission cap
 is $0.02 per run. The paired API sample uses a fresh disposable synthetic book, the current configured
 GPT models, actual embeddings and a $1 durable per-book ceiling. It alternates provider order, records
 complete claims/citations and call timings, and verifies that a reading reset cannot serve an advanced
-cached recap. Inspect semantic results manually: term matches and a small sample are not accuracy
+cached recap. It includes a complete multi-fact explanation and separately measures identical cached
+answers. Inspect semantic results manually: term matches and a small sample are not accuracy
 certification. Both scripts delete temporary databases and imported EPUBs when finished.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [models and pricing](https://docs.typesafe.ai/models),
-[confidence](https://docs.typesafe.ai/confidence).
+[confidence](https://docs.typesafe.ai/confidence),
+[OpenAI Fast mode](https://developers.openai.com/api/docs/guides/fast-mode).

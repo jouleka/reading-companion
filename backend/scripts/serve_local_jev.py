@@ -24,7 +24,8 @@ def main():
         data_dir=str(args.data_dir.resolve()), frontend_dist_dir=str(args.frontend_dist.resolve()),
         jev_enabled=True, jev_windows_credential=args.windows_credential,
         jev_selection_enabled=True, jev_evidence_enabled=True, jev_recap_enabled=False,
-        recap_prewarm=True, cost_max_usd_per_book=1.0,
+        recap_prewarm=True, recap_disk_cache=True, reader_answer_cache=True,
+        cost_max_usd_per_book=1.0,
     )
     uvicorn.run(create_app(settings), host="127.0.0.1", port=args.port, access_log=False,
                 log_level="warning")

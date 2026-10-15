@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reader-fast-mode", action="store_true")
+    parser.add_argument("--repeat", type=int, choices=range(1, 4), default=1)
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required for the capped paid comparison")
@@ -37,6 +39,7 @@ def main():
         settings = Settings(_env_file=str(args.env_file), data_dir=str(Path(scratch)/"data"),
                             frontend_dist_dir=None, trusted_hosts="testserver", deployment_mode="local",
                             jev_enabled=False, recap_prewarm=False, cost_max_usd_per_book=1.0,
+                            reader_fast_mode=args.reader_fast_mode, reader_answer_cache=True,
                             openai_base_url="https://api.openai.com/v1",
                             embed_provider="openai-compatible", embed_base_url="https://api.openai.com/v1",
                             embed_api_key=None, embed_model="text-embedding-3-small")
@@ -44,7 +47,7 @@ def main():
                              "jev": settings.jev_model}
         app = create_app(settings, ingest_executor=InlineExecutor())
         with TestClient(app, raise_server_exceptions=False) as api:
-            provider = app.state.client
+            provider = app.state.reader_client
             provider.max_retries = 0
             provider._oai = provider._oai.with_options(max_retries=0)
             provider._embed_oai = provider._embed_oai.with_options(max_retries=0)
@@ -79,9 +82,14 @@ def main():
                     report["status"] = "ingestion-not-cleared"
                     return 1
                 # Alternate order by case to reduce time-of-run/order bias; no request retries.
-                for i, case in enumerate(CASES):
+                cases = [*CASES, {"id": "multi-fact-explanation", "bookmark": 2,
+                    "question": "Explain the brass key's journey: who lent it, where Mara kept it, "
+                                "and how it was returned.", "expected": "answer",
+                    "required": ["jonas", "mara", "red tin", "sink", "return"]}]
+                for i, case in enumerate(cases * args.repeat):
                     for mode in (["gpt", "jev"] if i % 2 == 0 else ["jev", "gpt"]):
                         provider.jev = jev if mode == "jev" else None
+                        provider.answers.invalidate_book(bid)
                         before = len(report.get("model_calls", [])), len(report["jev_calls"])
                         started = time.perf_counter()
                         response = api.post(f"/api/books/{bid}/ask", json={
@@ -103,6 +111,16 @@ def main():
                             "basic_check": passed, "response": value,
                             "model_calls": len(report.get("model_calls", []))-before[0],
                             "jev_calls": len(report["jev_calls"])-before[1]})
+                        if value.get("claims") and response.status_code == 200:
+                            started = time.perf_counter()
+                            repeat = api.post(f"/api/books/{bid}/ask", json={
+                                "question": case["question"], "bookmark": case["bookmark"]})
+                            report["cases"][-1]["cached_seconds"] = round(time.perf_counter()-started, 4)
+                            report["cases"][-1]["cache_exact"] = (
+                                repeat.json().get("cached") is True
+                                and repeat.json().get("claims") == claims
+                                and repeat.json().get("citations") == citations
+                                and repeat.json().get("cost", {}).get("calls") == [])
                         save()
                 for mode in ("gpt", "jev"):
                     provider.jev = jev if mode == "jev" else None

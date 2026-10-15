@@ -80,7 +80,7 @@ def install_call_recording(provider, report, output_cap):
         ).encode("utf-8")).hexdigest()
         if getattr(provider, "_is_native_openai", False) and record["model"] in _NATIVE_REASONING_EFFORT:
             record["configured_reasoning_effort"] = _NATIVE_REASONING_EFFORT[record["model"]]
-            record["configured_service_tier"] = "default"
+            record["configured_service_tier"] = getattr(provider, "service_tier", "default")
         report.setdefault("model_calls", []).append(record)
         try:
             value, usage = complete(system, user, tier, schema, cap)

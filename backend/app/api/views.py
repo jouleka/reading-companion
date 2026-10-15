@@ -14,6 +14,8 @@ never carry the rejected recap or a future name). Cached in-process by the full 
 (book, catalog incarnation, bookmark, validity_snapshot, current synth model, prompt version,
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
+from copy import deepcopy
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
@@ -54,6 +56,7 @@ from app.deps import (
     book_lifecycle,
     get_catalog,
     get_client,
+    get_reader_client,
     get_settings,
     get_store,
     get_worker,
@@ -436,7 +439,7 @@ def ask_the_book(
     catalog=Depends(get_catalog),
     store=Depends(get_store),
     settings=Depends(get_settings),
-    client=Depends(get_client),
+    client=Depends(get_reader_client),
     worker=Depends(get_worker),
 ):
     """Answer only from completed, retrieved passages and return chapter-navigable citations."""
@@ -462,6 +465,28 @@ def ask_the_book(
             "citations": [],
             "cost": _ask_cost_payload(calls),
         }
+    answer_cache = getattr(client, "answers", None) if settings.reader_answer_cache else None
+    answer_key = None
+    if answer_cache is not None:
+        with store.book(book_id) as mem:
+            snapshot = validity_snapshot(mem, eff)
+        answer_key = (book_id, catalog.get_book(book_id)["incarnation"], str((
+            eff, state["position_epoch"], snapshot, manifest["atom_set_version"], body.question,
+            client.extractor_version("large"), client.extractor_version("cheap"),
+            getattr(client, "base_url", ""), settings.jev_selection_enabled, settings.jev_evidence_enabled,
+            getattr(getattr(client, "jev", None), "model", None),
+            settings.jev_min_probability, settings.jev_min_confidence,
+            "reviewed-answer-v1",
+        )))
+        cached = answer_cache.get(answer_key)
+        if cached is not None:
+            return {**deepcopy(cached), "cached": True, "cost": _ask_cost_payload([])}
+
+    def finish(payload):
+        if answer_cache is not None and not payload["insufficient_evidence"]:
+            answer_cache.set(answer_key, deepcopy(payload))
+        return payload
+
     with store.book(book_id) as mem:
         pinned = mem.pinned_identity()
     try:
@@ -523,7 +548,7 @@ def ask_the_book(
                     user=source_selection_prompt(body.question, sources),
                     tier="cheap", schema=SourceSelection,
                 )
-                remember(selection, provider=client.provider, model=client._model_for("cheap"))
+                remember(selection, provider=client.provider, model=client.billing_model("cheap"))
                 selected = validate_selection(selection.value, sources)
             sources = selected
             sources = complete_ask_context(body.question, sources, candidates, known_names=known_names,
@@ -558,14 +583,14 @@ def ask_the_book(
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
-        remember(generated, provider=client.provider, model=client._model_for("large"))
+        remember(generated, provider=client.provider, model=client.billing_model("large"))
         try:
             completed = _complete_citation_evidence(
                 generated.value, sources, catalog=catalog, settings=settings, client=client,
                 book_id=book_id, known_names=known_names,
                 question=body.question,
                 remember=lambda result: remember(result, provider=client.provider,
-                                                  model=client._model_for("cheap")),
+                                                  model=client.billing_model("cheap")),
                 remember_jev=lambda result: remember(result, provider="typesafe",
                                                       model=client.jev.model),
             )
@@ -626,7 +651,7 @@ def ask_the_book(
                 tier=tier,
                 schema=schema,
             )
-            remember(result, provider=client.provider, model=client._model_for(tier))
+            remember(result, provider=client.provider, model=client.billing_model(tier))
             return result.value, result.usage
 
         try:
@@ -647,13 +672,13 @@ def ask_the_book(
                 "The draft asserted a development not established by its cited passages."
             ]
             continue
-        return {
+        return finish({
             "as_of_chapter": eff,
             "insufficient_evidence": False,
             "claims": [claim.model_dump(mode="json") for claim in draft.claims],
             "citations": [_public_ask_source(source) for source in used],
             "cost": _ask_cost_payload(calls),
-        }
+        })
     raise HTTPException(502, "answer could not be cleared against the pages you have read")
 
 
@@ -1048,7 +1073,7 @@ def _cumulative_recap_facts(facts):
 @router.get("/catch-me-up")
 def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 catalog=Depends(get_catalog), store=Depends(get_store),
-                settings=Depends(get_settings), client=Depends(get_client), worker=Depends(get_worker)):
+                settings=Depends(get_settings), client=Depends(get_reader_client), worker=Depends(get_worker)):
     eff, st, manifest = _effective(book_id, bookmark, catalog, store, settings, worker)
     # the recap can only describe INGESTED chapters: min with the ingest high-water (LIT-12's honest
     # lag — the pending/uningested tail is not recapped), reported as the true as_of.
@@ -1078,7 +1103,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         atom_set_version=manifest["atom_set_version"],
     ))
     cached = recaps.get(key)
-    if cached is not None:
+    if cached is not None and cached.get("as_of_chapter") == eff:
         return {**cached, "cached": True}
 
     # SINGLE-FLIGHT per cache key (review pass-1): N concurrent cold requests must pay for ONE
@@ -1092,7 +1117,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         raise HTTPException(502, "recap generation recently failed the spoiler gate; retry shortly")
     with recaps.flight(key):
         cached = recaps.get(key)
-        if cached is not None:
+        if cached is not None and cached.get("as_of_chapter") == eff:
             return {**cached, "cached": True}
         if _recently_failed():                    # the flight ahead of us just failed — don't re-pay
             raise HTTPException(502, "recap generation recently failed the spoiler gate; retry shortly")
@@ -1116,7 +1141,9 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 recap_prompt_version=_recap_prompt_version(book_type, content_language),
                 atom_set_version=manifest["atom_set_version"],
             ))
-            prior_recap = (recaps.get(prior_key) or {}).get("recap")
+            prior_payload = recaps.get(prior_key) or {}
+            prior_recap = (prior_payload.get("recap")
+                           if prior_payload.get("as_of_chapter") == eff - 1 else None)
 
         system = flowing_system_for(book_type, content_language)
         if getattr(client, "jev", None) is not None:

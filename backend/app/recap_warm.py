@@ -32,7 +32,7 @@ class RecapPrewarmer:
                 self.queue.task_done()
                 return
             try:
-                request = SimpleNamespace(app=self.app)
+                request = SimpleNamespace(app=self.app, recap_preparation=True)
                 async with asynccontextmanager(book_lifecycle)(key[0], request):
                     state = self.app.state
                     book = state.catalog.get_book(key[0])
@@ -43,7 +43,7 @@ class RecapPrewarmer:
                     from app.api.views import catch_me_up
                     await asyncio.to_thread(
                         catch_me_up, key[0], request, None, state.catalog, state.store,
-                        state.settings, state.client, state.worker,
+                        state.settings, state.reader_client, state.worker,
                     )
             except Exception:
                 pass  # Normal cache/failure TTL/cost accounting still apply; no automatic retry.
