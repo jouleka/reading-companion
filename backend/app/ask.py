@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.ask_evidence import narrative_continuations, source_name_text, source_order
+from app.ask_evidence import BODY_REFERENCE_RULES, narrative_continuations, source_name_text, source_order
 from app.ask_grounding import preserves_modal_qualification, semantic_review_eligible
 from app.cost.limits import CostCeilingExceeded
 from app.eval.spoiler_gate.grounding import STOPWORDS, content_words, ground_recap
@@ -164,6 +164,8 @@ ASK_JUDGE_SYSTEM = (
     "spent with an explicitly stated amount retained, or conflate different times. Reject malformed "
     "explanations and role/identity links even when the intended conclusion seems likely."
 )
+
+ASK_JUDGE_SYSTEM += "\n\n" + BODY_REFERENCE_RULES
 
 
 def ask_judge_prompt(draft: AskDraft, sources: list[dict[str, Any]], *, question=None) -> str:

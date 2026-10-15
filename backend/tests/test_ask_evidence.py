@@ -6,6 +6,7 @@ import pytest
 
 from app.ask_evidence import (
     ASK_EVIDENCE_SYSTEM,
+    BODY_REFERENCE_RULES,
     AskEvidenceError,
     AskEvidenceReview,
     complete_evidence_citations,
@@ -13,6 +14,16 @@ from app.ask_evidence import (
     source_name_text,
 )
 from app.evidence_text import field_segments, source_passages
+
+
+def test_both_independent_reviews_share_balanced_body_coreference_rules_without_title_clearance():
+    from app.ask import ASK_JUDGE_SYSTEM
+
+    assert ASK_EVIDENCE_SYSTEM.endswith(BODY_REFERENCE_RULES)
+    assert ASK_JUDGE_SYSTEM.endswith(BODY_REFERENCE_RULES)
+    assert "no competing plausible referent" in BODY_REFERENCE_RULES
+    assert "uncited bridge is unavailable" in BODY_REFERENCE_RULES
+    assert "cannot fill omitted narrative or prove identity" in BODY_REFERENCE_RULES
 
 
 def _source(source_id, text, ordinal=1):
