@@ -21,11 +21,13 @@ def main():
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--extraction", action="store_true", help="Include Jev's negative-only extraction screen")
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required for this capped paid audit")
     report = {"scope": "Synthetic three-chapter book; only first two chapters completed.",
-              "calls": [], "answers": [], "book_cap_usd": 1, "preparation_cap_usd": .25}
+              "calls": [], "answers": [], "jev_calls": [], "extraction_screen_enabled": args.extraction,
+              "book_cap_usd": 1, "preparation_cap_usd": .25}
     def save():
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     with tempfile.TemporaryDirectory(prefix="reader-preparation-") as scratch:
@@ -33,18 +35,30 @@ def main():
             frontend_dist_dir=None, trusted_hosts="testserver", deployment_mode="local",
             openai_base_url="https://api.openai.com/v1", jev_enabled=True,
             jev_windows_credential=True, reader_fast_mode=False, reader_answer_cache=True,
+            jev_extraction_enabled=args.extraction,
             reader_prepare_enabled=True, reader_reuse_enabled=True, recap_prewarm=True,
             recap_disk_cache=True, reader_prepare_delay_seconds=.05,
             reader_prepare_max_usd_per_book=.25, cost_max_usd_per_book=1)
         app = create_app(settings)
         with TestClient(app) as api:
             client = app.state.reader_client
+            jev_evaluate = client.jev.evaluate
+            def evaluate(state, questions, **kwargs):
+                started = time.perf_counter()
+                result = jev_evaluate(state, questions, **kwargs)
+                report["jev_calls"].append({"seconds": time.perf_counter()-started,
+                    "kind": "extraction" if "source_passages" in state and "fields" in state else "reader",
+                    "unread_fact_in_input": "Velora" in json.dumps(state) or "silver compass" in json.dumps(state),
+                    "questions": len(questions)})
+                return result
+            client.jev.evaluate = evaluate
             original = client.complete
-            def observed(system, user, *a, **kw):
+            def observed(system, user, tier="cheap", schema=None, max_output_tokens=None):
                 started = time.perf_counter()
                 try:
-                    value, usage = original(system, user, *a, **kw)
-                    report["calls"].append({"schema": getattr(kw.get("schema"), "__name__", None),
+                    value, usage = original(system, user, tier=tier, schema=schema,
+                                            max_output_tokens=max_output_tokens)
+                    report["calls"].append({"schema": getattr(schema, "__name__", None),
                         "seconds": time.perf_counter()-started,
                         "unread_fact_in_input": "Velora" in user or "silver compass" in user,
                         "usage": usage})
@@ -97,10 +111,16 @@ def main():
             report["recap"] = recap
             ledger = app.state.catalog.get_costs(bid)
             report["total_usd"] = sum(r["usd"] for r in ledger)
+            report["extraction_screen_calls"] = sum(r["phase"].startswith("jev-extraction-screen") for r in ledger)
+            report["full_extraction_review_calls"] = sum(r["phase"] == "extraction-review" for r in ledger)
+            if args.extraction:
+                assert report["extraction_screen_calls"] >= 1
+                assert report["full_extraction_review_calls"] >= 2
             report["preparation_usd"] = sum(r["usd"] for r in ledger
                 if r["phase"].startswith("reader-prepare:"))
             report["preparation_calls"] = sum(r["phase"].startswith("reader-prepare:") for r in ledger)
             assert not any(r["unread_fact_in_input"] for r in report["calls"])
+            assert not any(r["unread_fact_in_input"] for r in report["jev_calls"])
             save()
         # No provider call should be needed for a reviewed answer after restart.
         restarted = create_app(settings)

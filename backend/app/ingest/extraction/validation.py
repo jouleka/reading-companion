@@ -288,12 +288,18 @@ def extraction_review_prompt(text: str, extraction: dict, roster: list[dict]) ->
     }, ensure_ascii=False)
 
 
-def review_extraction(text: str, extraction: dict, roster: list[dict], *, complete) -> ExtractionClearance:
+def review_extraction(text: str, extraction: dict, roster: list[dict], *, complete,
+                      screen=None) -> ExtractionClearance:
     value = Extraction.model_validate(extraction).model_dump(mode="json")
     assert_observed_entity_names(text, value, roster)
+    prompt = extraction_review_prompt(text, value, roster)
+    if screen is not None:
+        # A screen may request a bounded repair, but cannot issue an ExtractionClearance.
+        # Keep the full independent reviewer and exact source/payload binding for every acceptance.
+        screen(json.loads(prompt.split("(untrusted JSON data):\n", 1)[1]))
     try:
         verdict, _usage = complete(
-            EXTRACTION_REVIEW_SYSTEM, extraction_review_prompt(text, value, roster),
+            EXTRACTION_REVIEW_SYSTEM, prompt,
             tier="large", schema=ExtractionVerdict,
         )
         checked = ExtractionVerdict.model_validate(verdict, strict=True)

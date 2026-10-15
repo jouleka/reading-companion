@@ -127,17 +127,87 @@ def partial_audit(args, settings, rows):
     return int(report["summary"]["false_approvals"] > 0)
 
 
+def extraction_audit(args, settings, rows):
+    from app.ingest.extraction.validation import extraction_review_prompt
+
+    report = {"scope": "Frozen extraction screen labels; a positive screen is never a clearance.",
+              "heldout": args.heldout, "model": settings.jev_model, "usd": 0.0, "cases": []}
+    fixtures = []
+    for i, (text, supported, unsupported) in enumerate(rows):
+        for correct, claim in ((True, supported), (False, unsupported)):
+            value = {"chapter_summary": "", "entities": [], "relationships": [], "events": [], "themes": []}
+            kind = i % 4
+            if kind == 0:
+                value["chapter_summary"] = claim
+            elif kind == 1:
+                value["events"] = [{"summary": claim, "participants": []}]
+            elif kind == 2:
+                value["themes"] = [{"name": "Chapter events", "description": claim}]
+            else:
+                name = next(n for n in ("Nell", "Orin", "Hamlet", "Dena", "Ivo", "Tavi") if n in text)
+                value["entities"] = [{"canonical_name": name, "type": "character", "aliases": [],
+                                      "matched_roster": False, "state": claim}]
+            fixtures.append((f"{i}-{kind}-{correct}", text, value, [], not correct))
+    # Separate alias and participant contracts; summary-only challenges cannot test these bindings.
+    name, other, alias, absent = (("Dena", "Ivo", "Lark", "Tavi") if args.heldout
+                                else ("Nell", "Orin", "Rook", "Pavo"))
+    for correct in (True, False):
+        value = {"chapter_summary": "", "entities": [{"canonical_name": name, "type": "character",
+            "aliases": [alias if correct else other], "matched_roster": False, "state": None}],
+            "relationships": [], "events": [], "themes": []}
+        fixtures.append((f"alias-{correct}", f"{name}, also called {alias}, repaired the boat. {other} watched.",
+                         value, [], not correct))
+        value = {"chapter_summary": "", "entities": [], "relationships": [], "themes": [],
+            "events": [{"summary": f"{other} opened the box.", "participants": [other if correct else absent]}]}
+        fixtures.append((f"participant-{correct}", f"{other} opened the box. {absent} waited in another town.",
+                         value, [], not correct))
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    client = JevClient(api_key=windows_credential(), model=settings.jev_model)
+    try:
+        for label, text, value, roster, should_reject in fixtures:
+            decisions = {}
+            def run(state, questions):
+                estimate = len(json.dumps({"state": state, "questions": questions}).encode())+256
+                if report["usd"]+estimate*.042e-6 > .02:
+                    raise RuntimeError("Extraction screen audit spending cap reached")
+                answers, usage = client.evaluate(state, questions)
+                decisions.update(answers)
+                report["usd"] += usage["in"]*.042e-6
+                return answers
+            payload = json.loads(extraction_review_prompt(text, value, roster).split(
+                "(untrusted JSON data):\n", 1)[1])
+            start = time.perf_counter()
+            issues = jev_tasks.extraction_issues(payload, run=run)
+            report["cases"].append({"id": label, "source": text, "extraction": value,
+                "should_reject": should_reject, "rejected": bool(issues),
+                "issue_paths": [f["path"] for f in issues], "decisions": decisions,
+                "seconds": time.perf_counter()-start})
+            args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    finally:
+        client.close()
+    report["summary"] = {"cases": len(report["cases"]),
+        "false_rejections": sum(c["rejected"] and not c["should_reject"] for c in report["cases"]),
+        "bad_candidates_caught": sum(c["rejected"] and c["should_reject"] for c in report["cases"]),
+        "bad_candidates": sum(c["should_reject"] for c in report["cases"])}
+    args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps(report["summary"]))
+    return int(report["summary"]["false_rejections"] > 0)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--heldout", action="store_true")
     parser.add_argument("--partial", action="store_true")
+    parser.add_argument("--extraction", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required for the small paid synthetic evaluation")
     settings = Settings(_env_file=None)
     rows = HELDOUT if args.heldout else PAIRS
+    if args.extraction:
+        return extraction_audit(args, settings, rows)
     if args.partial:
         return partial_audit(args, settings, rows)
     report = {"scope": "Synthetic frozen-label challenges; not a production accuracy estimate.",

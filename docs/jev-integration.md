@@ -12,6 +12,7 @@ JEV_MODEL=jev-1.13.0
 JEV_SELECTION_ENABLED=true
 JEV_EVIDENCE_ENABLED=true
 JEV_PARTIAL_EVIDENCE_ENABLED=true
+JEV_EXTRACTION_ENABLED=true
 JEV_RECAP_ENABLED=false
 RECAP_PREWARM=true
 RECAP_DISK_CACHE=true
@@ -89,6 +90,27 @@ in addition to the ordinary book cap. Scope attempts are persisted to avoid repe
 unchanged chapters after scrolling or restarting. These three optional reader flags remain off
 by default; the local Jev profile enables them together.
 
+## Chapter extraction screening
+
+`JEV_EXTRACTION_ENABLED` adds a negative-only screen before the full extraction review. It can
+request the existing single whole-chapter repair when both the whole field and at least one
+contextual segment are confidently unsupported (probability >=0.99 and confidence >=0.90).
+It cannot approve memory: every accepted extraction still needs the complete independent GPT
+field/segment evidence audit and an exact source/payload clearance before atomic commit.
+
+The screen prioritizes summaries, themes, relationship bindings, aliases and states. It packs whole
+fields under the 24-question and conservative 30,000-byte admission limits, preserving the complete
+current source and prior identity labels. No future chapter or prior actions are supplied. Fields
+that do not fit remain for GPT; no truncation or omitted-field approval is allowed. Ambiguity,
+outages, invalid replies and oversized input fall back to full review. Charges, including failures,
+are recorded separately by chapter under `jev-extraction-screen`; extraction receipt costs and
+the ordinary book ceiling remain intact. Shutdown and budget failures cannot publish partial data.
+
+The flag is off by default and enabled by the local launcher. It applies to newly extracted chunks;
+existing completed memory is not rewritten or silently re-extracted. This can avoid a slow review
+of an obviously bad candidate, but adds a small screening call to eligible candidates. It is an
+accuracy/early-repair feature, not a demonstrated general latency improvement.
+
 ## Recaps
 
 `RECAP_PREWARM` prepares the normal guarded recap after successful durable ingestion. One background
@@ -123,9 +145,12 @@ python scripts/jev_quality_audit.py --run --output quality.json
 python scripts/jev_quality_audit.py --run --heldout --output heldout.json
 python scripts/jev_quality_audit.py --run --partial --output partial.json
 python scripts/jev_quality_audit.py --run --partial --heldout --output partial-heldout.json
+python scripts/jev_quality_audit.py --run --extraction --output extraction.json
+python scripts/jev_quality_audit.py --run --extraction --heldout --output extraction-heldout.json
 python scripts/jev_reuse_audit.py --run --output reuse.json
 python scripts/jev_reuse_audit.py --run --heldout --output reuse-heldout.json
 python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.env --output prepared.json
+python scripts/reader_preparation_audit.py --run --extraction --env-file /path/to/ignored/.env --output extraction-prepared.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
 python scripts/jev_integration_audit.py --run --partial --repeat 2 --env-file /path/to/ignored/.env --output partial-paired.json
 python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
@@ -152,6 +177,12 @@ Jev cleared 98 of 120 supported claims. All 24 paired API responses passed the e
 citation-frontier and refusal checks. A mixed three-claim explanation required only one GPT claim
 audit. Overall median complete-response latency remained about 3 seconds in both modes; this is
 a reduction in duplicated audit work, not a measured general speedup or a 1.5-second guarantee.
+
+Extraction-screen calibration: 68 frozen development/held-out cases caught 17/34 bad candidates
+with 0/34 false rejections of supported candidates. Missed errors still receive the full review.
+The live synthetic ingestion/preparation trial verifies that screen calls run, complete extraction
+reviews remain mandatory, no unread facts reach either provider, and restart/reset safeguards hold.
+These small samples do not certify factual correctness or real-world false-rejection rates.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [models and pricing](https://docs.typesafe.ai/models),

@@ -56,6 +56,9 @@ from app.ingest.extraction.validation import (
 )
 from app.ingest.manifest import load_manifest
 from app.llm import versioning
+from app.llm import jev_tasks
+from app.llm.jev import JevUnavailable
+from app.llm.jev_budget import budgeted_jev
 
 _RESOLVE_THRESHOLD = 0.82
 _MALFORMED_RETRY_DELAYS = (0.25,)                # initial attempt + one bounded corrective retry
@@ -469,8 +472,35 @@ class IngestWorker:
                             # so the extraction-only durable receipt is truthful during crash recovery.
                             return reviewed.value, reviewed.usage
 
+                        def screen_extraction(payload):
+                            self._check_stopping()
+                            jev = getattr(self._client, "jev", None)
+                            if not getattr(self._settings, "jev_extraction_enabled", False) or jev is None:
+                                return
+                            def run(state, questions):
+                                self._check_stopping()
+                                return budgeted_jev(
+                                    self._catalog, self._settings, jev, book_id,
+                                    phase="jev-extraction-screen", state=state, questions=questions,
+                                    chapter_ordinal=ordinal,
+                                ).value
+                            try:
+                                issues = jev_tasks.extraction_issues(payload, run=run,
+                                    input_limit=self._settings.cost_max_input_tokens_per_call)
+                            except JevUnavailable:
+                                return  # Outages/oversize/ambiguity never become chapter clearances.
+                            if issues:
+                                raise ExtractionGroundingRejected(
+                                    "extraction could not be grounded in its chapter",
+                                    feedback=[f"Recheck {f['path']} against the current source; "
+                                              "a fast screen flagged a possible unsupported assertion: "
+                                              + f["text"][:180] for f in issues[:4]],
+                                )
+
                         clearance = review_extraction(
                             chunk, validated, roster, complete=reviewed_complete,
+                            screen=(screen_extraction if getattr(self._settings, "jev_extraction_enabled", False)
+                                    and getattr(self._client, "jev", None) is not None else None),
                         )
                         parts.append((chunk, validated, clearance))
                         usage_total["in"] += result.usage["in"]
