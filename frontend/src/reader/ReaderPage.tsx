@@ -23,7 +23,12 @@ import { Codex } from "./Codex";
 import { Companion } from "./Companion";
 import { admitRelocation, arrowPagingBlocked, jumpsAhead } from "./guard";
 import { JumpNote } from "./JumpNote";
-import { buildSectionAtomMap, normalizeHref, offsetForAtom } from "./offset";
+import {
+  buildSectionAtomMap,
+  finalPageOffset,
+  normalizeHref,
+  offsetForAtom,
+} from "./offset";
 import { nextPositionClientSequence, positionClientId } from "./positionClient";
 import { ReaderControls } from "./ReaderControls";
 import { ReaderTTS } from "./ReaderTTS";
@@ -48,7 +53,7 @@ import {
   type PreferenceSaveStatus,
   type ReaderPreferences,
 } from "./readerPreferences";
-import { PositionReporter, type PositionSyncState } from "./reporter";
+import { PositionReporter, type PendingPosition, type PositionSyncState } from "./reporter";
 import { StartOverNote } from "./StartOverNote";
 import { useWelcomeBack } from "./welcomeBack";
 import { useCompactReaderShell } from "./mobileShell";
@@ -65,6 +70,7 @@ import type { FoliateTTS } from "./tts";
 import { Icon } from "../ui/Icon";
 import { Button } from "../ui/Button";
 import { presentationFor } from "./bookProfile";
+import { activeOfflineOwner, flushOfflineMutations, queuePosition } from "../pwa/offline";
 
 type FoliateView = HTMLElement & {
   open: (book: unknown) => Promise<void>;
@@ -160,6 +166,10 @@ export function ReaderPage({
     useState<PreferenceSaveStatus>("saved");
   const [toc, setToc] = useState<ReaderTocItem[]>([]);
   const [currentAtom, setCurrentAtom] = useState(0);
+  const [finishCandidate, setFinishCandidate] = useState<{
+    cfi: string;
+    offset: number;
+  } | null>(null);
   const [historyState, setHistoryState] = useState({
     back: false,
     forward: false,
@@ -196,7 +206,7 @@ export function ReaderPage({
   const report = useCallback(
     (cfi: string, offset: number, completedChapter: number) => {
       if (!positionReportingPausedRef.current) {
-        reporterRef.current?.schedule(cfi, offset, completedChapter);
+        reporterRef.current?.schedule(cfi, offset, completedChapter, positionEpochRef.current);
       }
     },
     [],
@@ -243,7 +253,9 @@ export function ReaderPage({
 
   useEffect(() => {
     let dead = false;
+    const owner = activeOfflineOwner();
     setReaderReady(false);
+    setFinishCandidate(null);
     setFatal(null);
     let disposeHistory = () => {};
     let disposeMotion = () => {};
@@ -301,8 +313,9 @@ export function ReaderPage({
       position_epoch: saved.position_epoch,
     });
     const reporter = new PositionReporter(
-      async (cfi, offset, completedChapter) => {
-        const requestEpoch = positionEpochRef.current;
+      async (cfi, offset, completedChapter, requestEpoch) => {
+        if (activeOfflineOwner() !== owner || requestEpoch !== positionEpochRef.current)
+          return "conflict";
         const baseVersion = positionVersionRef.current;
         try {
           const p = await api.putPosition(
@@ -315,7 +328,7 @@ export function ReaderPage({
             clientId,
             nextPositionClientSequence(),
           );
-          if (dead || p.position_epoch !== positionEpochRef.current) return;
+          if (dead || activeOfflineOwner() !== owner || p.position_epoch !== positionEpochRef.current) return;
           positionVersionRef.current = p.position_version ?? baseVersion + 1;
           setPos((current) =>
             normalizePosition(
@@ -361,8 +374,15 @@ export function ReaderPage({
               : "saved";
         } catch (error) {
           if (error instanceof ApiError && error.status === 409) {
+            if (dead || activeOfflineOwner() !== owner) return "conflict";
             const canonical = await api.position(bookId);
-            if (!dead) {
+            if (!dead && activeOfflineOwner() === owner) {
+              if (canonical.position_epoch !== requestEpoch) {
+                reporter.cancel();
+                // A stale renderer belongs to the old pass. Reopen from canonical position before
+                // permitting a new epoch, rather than relabeling its queued old-page reports.
+                setLoadAttempt((attempt) => attempt + 1);
+              }
               positionEpochRef.current = canonical.position_epoch;
               positionVersionRef.current = canonical.position_version ?? 0;
               setPos(normalizePosition(canonical));
@@ -382,7 +402,20 @@ export function ReaderPage({
         error.status >= 500,
     );
     reporterRef.current = reporter;
+    const retainPosition = (pending: Readonly<PendingPosition>) => {
+      if (activeOfflineOwner() !== owner || pending.positionEpoch !== positionEpochRef.current) return;
+      queuePosition(bookId, `/api/books/${bookId}/position`, {
+        cfi: pending.cfi,
+        offset: pending.offset,
+        completed_chapter: pending.completedChapter,
+        position_epoch: pending.positionEpoch,
+        base_version: positionVersionRef.current,
+        client_id: clientId,
+        client_sequence: nextPositionClientSequence(),
+      });
+    };
     const flush = () => {
+      reporter.retain(retainPosition);
       reporter.flush();
       preferenceSaver.flush();
     };
@@ -401,7 +434,11 @@ export function ReaderPage({
         api.manifest(bookId),
       ])
         .then(([fresh, readerMarks, freshManifest]) => {
-          if (dead) return;
+          if (dead || activeOfflineOwner() !== owner) return;
+          if (fresh.position_epoch !== positionEpochRef.current) {
+            reporter.cancel();
+            setLoadAttempt((attempt) => attempt + 1);
+          }
           positionEpochRef.current = fresh.position_epoch;
           positionVersionRef.current =
             fresh.position_version ?? positionVersionRef.current;
@@ -595,6 +632,7 @@ export function ReaderPage({
 
         view.addEventListener("relocate", (e) => {
           if (dead) return;
+          setFinishCandidate(null);
           const d = (e as CustomEvent).detail as {
             cfi?: string;
             range?: Range;
@@ -620,6 +658,15 @@ export function ReaderPage({
           const r = view.renderer;
           const page = r.page ?? 1;
           const pages = r.pages ?? 1;
+          const finalOffset = finalPageOffset(
+            m.atoms,
+            m.mode,
+            atom,
+            page,
+            pages,
+          );
+          if (finalOffset !== null && !positionReportingPausedRef.current)
+            setFinishCandidate({ cfi: d.cfi, offset: finalOffset });
           const offset = offsetForAtom(m.atoms, atom, page, pages);
           // Entering atom N proves only atoms 0..N-1 complete. Even the last visible page remains
           // inside its atom, so claiming atom+1 here could unlock spoilers before the next section.
@@ -706,13 +753,20 @@ export function ReaderPage({
       window.removeEventListener("pagehide", flush);
       window.removeEventListener("online", retry);
       window.removeEventListener("litlet:offline-sync", reconcileOffline);
-      reporter.flush(); // deliver, never drop, the reader's last page-turn
-      reporter.dispose();
+      // Persist before disposal, including a Finish book affirmation waiting behind a live PUT.
+      // Replay follows that PUT's acknowledgment so the old request cannot overwrite a newer CFI.
+      void reporter.drainAndDispose(retainPosition).then(() => {
+        if (activeOfflineOwner() === owner) return flushOfflineMutations();
+      }).catch(() => {});
+      if (reporterRef.current === reporter) reporterRef.current = null;
       preferenceSaver.drainAndDispose();
-      preferenceSaverRef.current = null;
+      if (preferenceSaverRef.current === preferenceSaver) preferenceSaverRef.current = null;
+      const closingView = ownedView;
       if (!initializing) releaseBook();
-      viewRef.current = null; // the keyboard/page-nav handlers must never drive a dead book's view
-      visibleRangeRef.current = null;
+      if (viewRef.current === closingView) {
+        viewRef.current = null; // the keyboard/page-nav handlers must never drive a dead book's view
+        visibleRangeRef.current = null;
+      }
     };
   }, [bookId, publishMarks, report, loadAttempt]);
 
@@ -1212,6 +1266,28 @@ export function ReaderPage({
           </span>
           <span className="reader-page-hint">Use ← → to turn the page</span>
           <div className="reader-page-buttons">
+            {finishCandidate &&
+              manifest &&
+              readerReady &&
+              !startOverOpen &&
+              !pendingJump &&
+              (pos?.bookmark ?? 0) < manifest.atoms.length && (
+                <Button
+                  variant="primary"
+                  disabled={syncState === "saving"}
+                  onClick={() => {
+                    if (positionReportingPausedRef.current) return;
+                    reporterRef.current?.complete(
+                      finishCandidate.cfi,
+                      finishCandidate.offset,
+                      manifest.atoms.length,
+                      positionEpochRef.current,
+                    );
+                  }}
+                >
+                  Finish book
+                </Button>
+              )}
             <button
               className="page-nav prev"
               aria-label="Previous page"

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import type { Position, ReaderMark } from "../api";
+import type { Position, PutPosition, ReaderMark } from "../api";
 
 const ACTIVE_OWNER_KEY = "litlet.offline.owner";
 const SESSION_KEY = "litlet.offline.session";
@@ -25,6 +25,7 @@ type PositionMutation = {
   method: "PUT";
   url: string;
   body: Record<string, unknown>;
+  highWaterOffset?: number;
   createdAt: number;
 };
 
@@ -44,6 +45,33 @@ type OfflineMutation = PositionMutation | MarkMutation;
 
 let flushPromise: Promise<void> | null = null;
 let listenersInstalled = false;
+const positionDeliveries = new Map<string, Set<Promise<unknown>>>();
+const positionAcknowledgments = new Map<string, { deliveryKey: string; epoch: number; sequence: number; version: number }>();
+
+/** Offline replay must follow any earlier live write for the same owner and book. */
+export function trackPositionDelivery<T>(bookId: string, owner: string, send: () => Promise<T>): Promise<T> {
+  const key = `${owner}:${bookId}`;
+  const active = positionDeliveries.get(key) ?? new Set<Promise<unknown>>();
+  const predecessor = active.size ? Promise.allSettled([...active]) : null;
+  positionDeliveries.set(key, active);
+  const delivery = predecessor ? predecessor.then(send) : send();
+  const tracked = delivery.finally(() => {
+    active.delete(tracked);
+    if (!active.size) {
+      positionDeliveries.delete(key);
+      for (const [clockKey, clock] of positionAcknowledgments)
+        if (clock.deliveryKey === key) positionAcknowledgments.delete(clockKey);
+    }
+  });
+  active.add(tracked);
+  return tracked;
+}
+
+async function waitForPositionDeliveries(bookId: string, owner: string): Promise<void> {
+  const key = `${owner}:${bookId}`;
+  while (positionDeliveries.get(key)?.size)
+    await Promise.allSettled([...positionDeliveries.get(key)!]);
+}
 
 function storage(): Storage | null {
   try {
@@ -315,27 +343,74 @@ export function queuePosition(
   body: Record<string, unknown>,
 ): Position {
   const owner = activeOfflineOwner();
-  upsert({
+  const previous = readOutbox(owner).find(
+    (candidate): candidate is PositionMutation =>
+      candidate.kind === "position" && candidate.bookId === bookId,
+  );
+  const epoch = positionOrdinal(body.position_epoch);
+  // A delayed report from a pre-reset tab cannot erase the newer pass's queued position.
+  if (previous && positionOrdinal(previous.body.position_epoch) > epoch)
+    return queuedPosition(previous);
+  const samePass = previous && positionOrdinal(previous.body.position_epoch) === epoch;
+  const latest = samePass && typeof body.client_id === "string"
+    && body.client_id === previous.body.client_id
+    && positionOrdinal(body.client_sequence) < positionOrdinal(previous.body.client_sequence)
+    ? previous.body : body;
+  const completed = Math.max(
+    positionOrdinal(body.completed_chapter),
+    samePass ? positionOrdinal(previous.body.completed_chapter) : 0,
+  );
+  const highWaterOffset = Math.max(
+    positionOrdinal(body.offset),
+    positionOrdinal(body.high_water_offset),
+    samePass ? queuedHighWater(previous) : 0,
+  );
+  const mutation: PositionMutation = {
     id: `position:${bookId}`,
     kind: "position",
     owner,
     bookId,
     method: "PUT",
     url,
-    body,
+    body: {
+      ...latest,
+      completed_chapter: completed,
+      // The local API derives completed chapters from geometry. Hosted mode already accepts the
+      // explicit completed floor and rejects unknown request fields, so keep this local-only.
+      ...(owner === LOCAL_OWNER ? { high_water_offset: highWaterOffset } : {}),
+    },
+    highWaterOffset,
     createdAt: Date.now(),
-  });
-  const completed = Number(body.completed_chapter ?? 0);
-  const offset = Number(body.offset ?? 0);
+  };
+  upsert(mutation);
+  return queuedPosition(mutation);
+}
+
+function positionOrdinal(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function queuedHighWater(item: PositionMutation): number {
+  return Math.max(
+    positionOrdinal(item.highWaterOffset),
+    positionOrdinal(item.body.high_water_offset),
+    positionOrdinal(item.body.offset),
+  );
+}
+
+function queuedPosition(item: PositionMutation): Position {
+  const body = item.body;
+  const completed = positionOrdinal(body.completed_chapter);
+  const offset = positionOrdinal(body.offset);
   return {
     bookmark: completed,
     completed_chapter: completed,
     current_chapter: completed + 1,
     current_offset: offset,
-    high_water_offset: offset,
+    high_water_offset: queuedHighWater(item),
     cfi: typeof body.cfi === "string" ? body.cfi : null,
-    position_epoch: Number(body.position_epoch ?? 0),
-    position_version: Number(body.base_version ?? 0),
+    position_epoch: positionOrdinal(body.position_epoch),
+    position_version: positionOrdinal(body.base_version),
     queued: true,
   } as Position;
 }
@@ -347,7 +422,58 @@ export function pendingPosition(
     (candidate): candidate is PositionMutation =>
       candidate.kind === "position" && candidate.bookId === bookId,
   );
-  return item?.body ?? null;
+  return item ? { ...item.body, high_water_offset: queuedHighWater(item) } : null;
+}
+
+/** Rebase only a successor of this accepted request, never unrelated remote reading progress. */
+export function acknowledgePosition(
+  bookId: string,
+  request: Record<string, unknown>,
+  saved: PutPosition,
+  owner: string,
+): void {
+  if (activeOfflineOwner() !== owner || saved.applied === false) return;
+  if (positionDeliveries.has(`${owner}:${bookId}`) && typeof request.client_id === "string"
+    && positionOrdinal(request.position_epoch) === saved.position_epoch
+    && positionOrdinal(saved.position_version) > positionOrdinal(request.base_version)) {
+    const key = `${owner}:${bookId}:${request.client_id}`;
+    const previous = positionAcknowledgments.get(key);
+    const epoch = saved.position_epoch;
+    const sequence = positionOrdinal(request.client_sequence);
+    if (!previous || epoch > previous.epoch || (epoch === previous.epoch && sequence >= previous.sequence))
+      positionAcknowledgments.set(key, { deliveryKey: `${owner}:${bookId}`, epoch, sequence, version: positionOrdinal(saved.position_version) });
+  }
+  const item = readOutbox(owner).find(
+    (candidate): candidate is PositionMutation => candidate.kind === "position" && candidate.bookId === bookId,
+  );
+  if (!item || typeof request.client_id !== "string" || request.client_id !== item.body.client_id
+    || positionOrdinal(request.position_epoch) !== saved.position_epoch
+    || positionOrdinal(item.body.position_epoch) !== saved.position_epoch) return;
+  if (positionOrdinal(request.client_sequence) >= positionOrdinal(item.body.client_sequence)
+    && saved.bookmark >= positionOrdinal(item.body.completed_chapter)) {
+    removeMutation(item);
+  } else if (positionOrdinal(item.body.base_version) === positionOrdinal(request.base_version)
+    && positionOrdinal(saved.position_version) > positionOrdinal(request.base_version)) {
+    upsert({ ...item, body: { ...item.body, base_version: saved.position_version } });
+  }
+}
+
+/** Only a later same-client intent may inherit a causally preceding successful write's clock. */
+export function positionRequestBody(bookId: string, owner: string, body: Record<string, unknown>): Record<string, unknown> {
+  if (activeOfflineOwner() !== owner || typeof body.client_id !== "string") return body;
+  const acknowledged = positionAcknowledgments.get(`${owner}:${bookId}:${body.client_id}`);
+  return acknowledged && positionOrdinal(body.position_epoch) === acknowledged.epoch
+    && positionOrdinal(body.client_sequence) > acknowledged.sequence
+    && positionOrdinal(body.base_version) < acknowledged.version
+    ? { ...body, base_version: acknowledged.version } : body;
+}
+
+/** A successful explicit reset discards only older-pass intent for this owner and book. */
+export function discardPositionBeforeEpoch(bookId: string, epoch: number, owner: string): void {
+  if (activeOfflineOwner() !== owner) return;
+  const items = readOutbox(owner).filter((item) => item.kind !== "position" || item.bookId !== bookId
+    || positionOrdinal(item.body.position_epoch) >= epoch);
+  writeOutbox(items, owner);
 }
 
 export function queueMarkCreate(
@@ -462,11 +588,16 @@ export function applyPendingMarks(
   return result;
 }
 
-function removeMutation(id: string, owner: string): void {
+function removeMutation(item: OfflineMutation): boolean {
+  const items = readOutbox(item.owner);
+  const current = items.find((candidate) => candidate.id === item.id);
+  // A new relocation can replace this stable id while the request is awaiting its response.
+  if (current && JSON.stringify(current) !== JSON.stringify(item)) return false;
   writeOutbox(
-    readOutbox(owner).filter((item) => item.id !== id),
-    owner,
+    items.filter((candidate) => candidate.id !== item.id),
+    item.owner,
   );
+  return true;
 }
 
 export async function flushOfflineMutations(): Promise<void> {
@@ -481,23 +612,45 @@ export async function flushOfflineMutations(): Promise<void> {
       if (left.kind !== "position" && right.kind === "position") return 1;
       return left.createdAt - right.createdAt;
     });
-    for (const item of items) {
+    for (let index = 0; index < items.length && index < MAX_OUTBOX_MUTATIONS; index++) {
+      if (activeOfflineOwner() !== owner) break;
+      let item = readOutbox(owner).find((candidate) => candidate.id === items[index].id);
+      if (!item) continue;
+      if (item.kind === "position" && positionDeliveries.has(`${owner}:${item.bookId}`)) {
+        await waitForPositionDeliveries(item.bookId, owner);
+        if (activeOfflineOwner() !== owner) break;
+        item = readOutbox(owner).find((candidate) => candidate.id === items[index].id);
+        if (!item) continue;
+      }
+      const removeOrScheduleSuccessor = () => {
+        if (!removeMutation(item)) {
+          const successor = readOutbox(owner).find((candidate) => candidate.id === item.id);
+          if (successor) items.splice(index + 1, 0, successor);
+        }
+      };
       try {
-        const response = await fetch(item.url, {
-          method: item.method,
-          headers: {
-            ...(token ? { "X-CSRF-Token": token } : {}),
-            ...(item.body ? { "content-type": "application/json" } : {}),
-          },
-          ...(item.body ? { body: JSON.stringify(item.body) } : {}),
-          keepalive: true,
-        });
+        const deliver = async () => {
+          const body = item.kind === "position" ? positionRequestBody(item.bookId, owner, item.body) : item.body;
+          const response = await fetch(item.url, {
+            method: item.method,
+            headers: {
+              ...(token ? { "X-CSRF-Token": token } : {}),
+              ...(body ? { "content-type": "application/json" } : {}),
+            },
+            ...(body ? { body: JSON.stringify(body) } : {}),
+            keepalive: true,
+          });
+          const value = response.ok && response.status !== 204
+            ? await response.json().catch(() => null) : null;
+          if (response.ok && item.kind === "position" && value && typeof value === "object")
+            acknowledgePosition(item.bookId, body!, value as PutPosition, owner);
+          return { response, value };
+        };
+        const { response, value } = item.kind === "position"
+          ? await trackPositionDelivery(item.bookId, owner, deliver) : await deliver();
+        if (activeOfflineOwner() !== owner) break;
         if (response.ok) {
-          const value =
-            response.status === 204
-              ? null
-              : await response.json().catch(() => null);
-          removeMutation(item.id, owner);
+          removeOrScheduleSuccessor();
           dispatchSync({
             kind: item.kind,
             bookId: item.bookId,
@@ -508,7 +661,7 @@ export async function flushOfflineMutations(): Promise<void> {
           continue;
         }
         if ([400, 404, 409, 410, 422].includes(response.status)) {
-          removeMutation(item.id, owner);
+          removeOrScheduleSuccessor();
           dispatchSync({
             kind: item.kind,
             bookId: item.bookId,

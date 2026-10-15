@@ -12,6 +12,8 @@
   --accent: #52644b;
   --accent-hover: #41533b;
   --accent-wash: #edf1e9;
+  --on-accent: #fff;
+  --selection: #dce5d4;
   --hairline: #e5e8e1;
   --hairline-strong: #ccd3c6;
   --wash: #edf1e9;
@@ -82,7 +84,7 @@ svg {
   flex-shrink: 0;
   vertical-align: middle;
 }
-button:not([class]),
+button:where(:not([class])),
 input:not([type="radio"]):not([type="range"]),
 select,
 textarea {
@@ -92,14 +94,14 @@ textarea {
   padding: 10px 12px;
   min-height: 42px;
 }
-button:not([class]) {
-  color: var(--paper);
-  background: var(--madder);
-  border-color: var(--madder);
-  font-weight: 600;
+button:where(:not([class])) {
+  color: var(--ink);
+  background: var(--paper);
+  border-color: var(--hairline-strong);
+  font-weight: 500;
 }
-button:not([class]):hover:not(:disabled) {
-  background: var(--accent-hover);
+button:where(:not([class]):hover:not(:disabled)) {
+  background: var(--paper-deep);
 }
 input::placeholder,
 textarea::placeholder {
@@ -127,7 +129,7 @@ main:focus,
 }
 ::selection {
   color: var(--ink);
-  background: #dce5d4;
+  background: var(--selection);
 }
 .sr-only {
   position: absolute;
@@ -215,7 +217,7 @@ main:focus,
 .ui-button--primary {
   background: var(--madder);
   border-color: var(--madder);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 2px 2px #24321c0a;
 }
 .ui-button--primary:hover:not(:disabled) {
@@ -978,6 +980,8 @@ main:focus,
   --madder: #b5c99c;
   --accent-hover: #c7d9b4;
   --accent-wash: #303b2c;
+  --on-accent: #1a2415;
+  --selection: #415544;
   --hairline: #343d31;
   --hairline-strong: #58634f;
   --danger: #e6a491;
@@ -996,6 +1000,8 @@ main:focus,
     --madder: #b5c99c;
     --accent-hover: #c7d9b4;
     --accent-wash: #303b2c;
+    --on-accent: #1a2415;
+    --selection: #415544;
     --hairline: #343d31;
     --hairline-strong: #58634f;
     --danger: #e6a491;
@@ -2188,9 +2194,10 @@ main:focus,
   background: var(--accent-wash);
 }
 .people-index li > button[aria-current] {
-  color: var(--madder);
+  color: var(--ink);
   background: var(--accent-wash);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--madder);
 }
 .people-index li > button span {
   min-width: 0;
@@ -3525,6 +3532,44 @@ main:focus,
 }
 .companion-retry {
   margin-top: 12px;
+}
+.ai-status {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-block: 16px;
+}
+.ai-status strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-status p {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+}
+.ai-status summary {
+  min-height: 32px;
+  padding-top: 7px;
+  color: var(--madder);
+  cursor: pointer;
+}
+.ai-status .ui-button {
+  min-height: 32px;
+  margin-top: 6px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.sidebar-bottom .ai-status {
+  margin-block: 0 16px;
 }
 .confirmation-copy strong {
   font-size: 16px;

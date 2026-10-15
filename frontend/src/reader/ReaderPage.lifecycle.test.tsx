@@ -1,4 +1,10 @@
-import { act, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -44,6 +50,8 @@ vi.mock("./BookNavigation", () => ({
 }));
 
 import { ReaderPage } from "./ReaderPage";
+import { ApiError } from "../api";
+import { pendingPosition } from "../pwa/offline";
 
 class TestFoliateView extends HTMLElement {
   renderer = Object.assign(document.createElement("div"), {
@@ -334,5 +342,183 @@ describe("reader startup and search boundaries", () => {
     );
     expect(results.map((result) => result.cfi)).toEqual(["0:read"]);
     expect(mocks.clearSearch).toHaveBeenCalledOnce();
+  });
+
+  test("final-page landing stays pending until an explicit Finish book action is saved", async () => {
+    mocks.position.mockResolvedValue({
+      bookmark: 2,
+      cfi: "2:resume",
+      position_epoch: 0,
+    });
+    mocks.putPosition.mockResolvedValue({
+      bookmark: 3,
+      cfi: "2:final",
+      position_epoch: 0,
+      current_chapter: 4,
+      chapter_progress: 1,
+    });
+    render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    Object.assign(view.renderer, { page: 8, pages: 10 });
+    act(() =>
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: { cfi: "2:final", section: { current: 2 } },
+        }),
+      ),
+    );
+    expect(mocks.putPosition).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish book" }));
+    await waitFor(() =>
+      expect(mocks.putPosition).toHaveBeenCalledWith(
+        "b",
+        "2:final",
+        300,
+        3,
+        0,
+        0,
+        expect.any(String),
+        expect.any(Number),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Finish book" })).toBeNull(),
+    );
+  });
+
+  test("clears a final-page offer when moving to unmapped backmatter", async () => {
+    mocks.position.mockResolvedValue({
+      bookmark: 2,
+      cfi: "2:resume",
+      position_epoch: 0,
+    });
+    render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    Object.assign(view.renderer, { page: 8, pages: 10 });
+    act(() =>
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: { cfi: "2:final", section: { current: 2 } },
+        }),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Finish book" })).toBeTruthy();
+    act(() =>
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: { cfi: "backmatter", section: { current: 3 } },
+        }),
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Finish book" })).toBeNull();
+  });
+
+  test("immediate unmount retains an in-flight completion and latest reread cursor without racing replay", async () => {
+    mocks.position.mockResolvedValue({ bookmark: 2, cfi: "2:resume", position_epoch: 0 });
+    let release!: (saved: unknown) => void;
+    mocks.putPosition.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+    const { unmount } = render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    Object.assign(view.renderer, { page: 8, pages: 10 });
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "2:finished", section: { current: 2 } },
+    })));
+    fireEvent.click(screen.getByRole("button", { name: "Finish book" }));
+    expect(mocks.putPosition).toHaveBeenCalledTimes(1);
+    Object.assign(view.renderer, { page: 1, pages: 10 });
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "0:rereading", section: { current: 0 } },
+    })));
+    const fetch = vi.mocked(globalThis.fetch);
+    fetch.mockImplementation(async (_url, options) => {
+      expect(JSON.parse(options?.body as string)).toMatchObject({
+        cfi: "0:rereading", offset: 0, completed_chapter: 3,
+        high_water_offset: 300, position_epoch: 0,
+      });
+      return new Response(JSON.stringify({ bookmark: 3, position_epoch: 0 }), { status: 200 });
+    });
+    const callsBeforeUnmount = fetch.mock.calls.length;
+    unmount();
+    expect(pendingPosition("b")).toMatchObject({
+      cfi: "0:rereading", offset: 0, completed_chapter: 3, high_water_offset: 300, position_epoch: 0,
+    });
+    await Promise.resolve();
+    expect(fetch).toHaveBeenCalledTimes(callsBeforeUnmount);
+    await act(async () => release({ bookmark: 3, cfi: "2:finished", position_epoch: 0,
+      current_chapter: 4, chapter_progress: 1 }));
+    await waitFor(() => expect(pendingPosition("b")).toBeNull());
+    expect(fetch).toHaveBeenCalledTimes(callsBeforeUnmount + 1);
+    expect(mocks.putPosition).toHaveBeenCalledTimes(1);
+  });
+
+  test("an ordinary queued offline position leaves explicit Finish available without refreshing locked memory", async () => {
+    mocks.position.mockResolvedValue({ bookmark: 2, cfi: "2:resume", position_epoch: 0 });
+    mocks.putPosition.mockResolvedValueOnce({ bookmark: 2, cfi: "2:final", position_epoch: 0,
+      current_chapter: 3, chapter_progress: 0.8, queued: true })
+      .mockResolvedValueOnce({ bookmark: 3, cfi: "2:final", position_epoch: 0,
+        current_chapter: 4, chapter_progress: 1, queued: true });
+    render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    Object.assign(view.renderer, { page: 8, pages: 10 });
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "2:final", section: { current: 2 } },
+    })));
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    await waitFor(() => expect(mocks.putPosition).toHaveBeenCalledTimes(1));
+    const finish = screen.getByRole("button", { name: "Finish book" }) as HTMLButtonElement;
+    await waitFor(() => expect(finish.disabled).toBe(false));
+    fireEvent.click(finish);
+    await waitFor(() => expect(mocks.putPosition).toHaveBeenCalledWith(
+      "b", "2:final", 300, 3, 0, expect.any(Number), expect.any(String), expect.any(Number),
+    ));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Finish book" })).toBeNull());
+    // Offline intent can update the local progress display, but cannot fetch newly unlocked labels
+    // or facts until a canonical server acknowledgment reaches that frontier.
+    expect(mocks.manifest).toHaveBeenCalledTimes(1);
+    expect(mocks.readerMarks).toHaveBeenCalledTimes(1);
+  });
+
+  test("an epoch conflict cancels queued old-page intent and reloads from the new pass", async () => {
+    mocks.position.mockResolvedValue({ bookmark: 0, cfi: null, position_epoch: 1 })
+      .mockResolvedValueOnce({ bookmark: 2, cfi: "2:resume", position_epoch: 0 });
+    let reject!: (error: Error) => void;
+    mocks.putPosition.mockImplementation(() => new Promise((_resolve, fail) => { reject = fail; }));
+    const { unmount } = render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    Object.assign(view.renderer, { page: 8, pages: 10 });
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "2:old-finish", section: { current: 2 } },
+    })));
+    fireEvent.click(screen.getByRole("button", { name: "Finish book" }));
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "0:old-reread", section: { current: 0 } },
+    })));
+    await act(async () => reject(new ApiError("position reset", 409)));
+    await waitFor(() => expect(mocks.goTo).toHaveBeenCalledWith(0));
+    expect(document.querySelectorAll("foliate-view")).toHaveLength(1);
+    expect(mocks.putPosition).toHaveBeenCalledTimes(1);
+    expect(mocks.putPosition.mock.calls[0][4]).toBe(0);
+    expect(pendingPosition("b")).toBeNull();
+    unmount();
+    expect(mocks.putPosition).toHaveBeenCalledTimes(1);
+  });
+
+  test("reader cleanup never persists an old account's cursor under the newly active owner", async () => {
+    render(<ReaderPage bookId="b" onBack={() => {}} />);
+    await waitFor(() => expect(mocks.init).toHaveBeenCalled());
+    const view = document.querySelector("foliate-view") as TestFoliateView;
+    act(() => view.dispatchEvent(new CustomEvent("relocate", {
+      detail: { cfi: "0:private-page", section: { current: 0 } },
+    })));
+    localStorage.setItem("litlet.offline.owner", "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67");
+    // pagehide exercises the same owner fence as unmount without requiring an account UI fixture.
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(pendingPosition("b")).toBeNull();
+    expect(mocks.putPosition).not.toHaveBeenCalled();
   });
 });

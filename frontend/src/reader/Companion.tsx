@@ -8,6 +8,7 @@ import { roman } from "./roman";
 import { recapFailureMessage } from "./recapFailure";
 import { Icon, type IconName } from "../ui/Icon";
 import { Button } from "../ui/Button";
+import { AiStatus } from "../ui/AiStatus";
 import { keepTabFocusInside } from "./focusTrap";
 
 export function Companion({
@@ -241,6 +242,7 @@ export function Companion({
           <Icon name="shield" size={13} />
           Only what you’ve read
         </div>
+        <AiStatus />
 
         {showPeopleStats && cmu && (
           <div className="companion-stats">

@@ -10,6 +10,7 @@ import { ReaderPage } from "./reader/ReaderPage";
 import { Shelf } from "./shelf/Shelf";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
+import { AiRuntimeProvider } from "./ui/AiStatus";
 
 // Router-less view switch for the shelf and reader.
 const currentBookId = () =>
@@ -89,7 +90,9 @@ function Boot() {
   }
   return (
     <React.StrictMode>
-      <App session={initialization.session} />
+      <AiRuntimeProvider enabled={initialization.session === undefined}>
+        <App session={initialization.session} />
+      </AiRuntimeProvider>
     </React.StrictMode>
   );
 }

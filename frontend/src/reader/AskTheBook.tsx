@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { api, type AskAnswer, type AskCitation } from "../api";
 import { Button } from "../ui/Button";
+import { AiStatus } from "../ui/AiStatus";
 import { useDialogMotion } from "../ui/useDialogMotion";
 import { keepTabFocusInside } from "./focusTrap";
 import { ProviderCost } from "./ProviderCost";
@@ -119,6 +120,7 @@ export function AskTheBook({
           Answers use only the cited passages; if those pages do not establish
           an answer, the companion will say so.
         </p>
+        <AiStatus />
         <form className="ask-form" onSubmit={(event) => void submit(event)}>
           <label htmlFor={`${titleId}-question`}>Your question</label>
           <textarea

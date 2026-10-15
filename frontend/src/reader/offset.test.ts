@@ -4,39 +4,60 @@
  * under-report is always safe, an overshoot never is. */
 import { describe, expect, test } from "vitest";
 import type { Atom } from "../api";
-import { buildSectionAtomMap, offsetForAtom } from "./offset";
+import { buildSectionAtomMap, finalPageOffset, offsetForAtom } from "./offset";
 
 const atoms = (hrefs: string[], char_len = 1000): Atom[] =>
-  hrefs.map((h, i) => ({ ordinal: i + 1, href: h, title: "", part_label: "", char_len }));
+  hrefs.map((h, i) => ({
+    ordinal: i + 1,
+    href: h,
+    title: "",
+    part_label: "",
+    char_len,
+  }));
 
 describe("buildSectionAtomMap", () => {
   test("exact 1:1 mapping, tolerant of ./ and / prefixes", () => {
     const a = atoms(["OEBPS/c1.html", "OEBPS/c2.html"]);
-    expect(buildSectionAtomMap(a, ["./OEBPS/c1.html", "/OEBPS/c2.html"])).toEqual([0, 1]);
+    expect(
+      buildSectionAtomMap(a, ["./OEBPS/c1.html", "/OEBPS/c2.html"]),
+    ).toEqual([0, 1]);
   });
 
   test("front matter with no atom maps to -1 (never guesses)", () => {
     const a = atoms(["OEBPS/c1.html", "OEBPS/c2.html"]);
-    expect(buildSectionAtomMap(a, ["OEBPS/wrap0000.html", "OEBPS/c1.html", "OEBPS/c2.html"]))
-      .toEqual([-1, 0, 1]);
+    expect(
+      buildSectionAtomMap(a, [
+        "OEBPS/wrap0000.html",
+        "OEBPS/c1.html",
+        "OEBPS/c2.html",
+      ]),
+    ).toEqual([-1, 0, 1]);
   });
 
   test("SPOILER: a root-level front-matter file must NOT suffix-steal a late atom whose real section exists", () => {
     // the A-F1 attack: spine has front matter "intro.html" AND the real chapter "text/intro.html";
     // naive suffix matching maps the front matter onto the chapter -> huge offset at 0 chars read
     const a = atoms(["text/ch1.html", "text/intro.html"]);
-    const map = buildSectionAtomMap(a, ["intro.html", "text/ch1.html", "text/intro.html"]);
+    const map = buildSectionAtomMap(a, [
+      "intro.html",
+      "text/ch1.html",
+      "text/intro.html",
+    ]);
     expect(map).toEqual([-1, 0, 1]);
   });
 
   test("global prefix difference falls back to suffix matching (OPF-relative atoms)", () => {
     const a = atoms(["c1.html", "c2.html"]);
-    expect(buildSectionAtomMap(a, ["OEBPS/c1.html", "OEBPS/c2.html"])).toEqual([0, 1]);
+    expect(buildSectionAtomMap(a, ["OEBPS/c1.html", "OEBPS/c2.html"])).toEqual([
+      0, 1,
+    ]);
   });
 
   test("two sections that would suffix-claim the same atom both get -1 (ambiguity = no report)", () => {
     const a = atoms(["ch1.html"]);
-    expect(buildSectionAtomMap(a, ["part1/ch1.html", "part2/ch1.html"])).toEqual([-1, -1]);
+    expect(
+      buildSectionAtomMap(a, ["part1/ch1.html", "part2/ch1.html"]),
+    ).toEqual([-1, -1]);
   });
 
   test("percent-encoded manifest hrefs match foliate's decoded section ids", () => {
@@ -81,7 +102,13 @@ describe("offsetForAtom", () => {
   });
 
   test("NaN/Infinity layout states never produce NaN or an overshoot", () => {
-    for (const [page, pages] of [[NaN, NaN], [Infinity, Infinity], [5, NaN], [NaN, 10], [3, Infinity]]) {
+    for (const [page, pages] of [
+      [NaN, NaN],
+      [Infinity, Infinity],
+      [5, NaN],
+      [NaN, 10],
+      [3, Infinity],
+    ]) {
       const o = offsetForAtom(a, 1, page, pages);
       expect(o).toBe(1000); // degrade to the atom start, never null-body PUTs, never NaN
     }
@@ -91,5 +118,48 @@ describe("offsetForAtom", () => {
     const o = offsetForAtom(a, 1, 15, 10);
     expect(o!).toBeGreaterThanOrEqual(1000);
     expect(o!).toBeLessThan(2000);
+  });
+});
+
+describe("explicit book completion", () => {
+  const a = atoms(["c1.html", "c2.html"]);
+
+  test("offers an exact endpoint only on the final content spread", () => {
+    expect(finalPageOffset(a, "file-driven", 1, 7, 10)).toBeNull();
+    expect(finalPageOffset(a, "file-driven", 1, 8, 10)).toBe(2000);
+    expect(offsetForAtom(a, 1, 8, 10)).toBeLessThan(2000);
+    expect(finalPageOffset(atoms(["only.html"]), "file-driven", 0, 1, 3)).toBe(
+      1000,
+    );
+  });
+
+  test("rejects earlier chapters, ambiguous shared files, and unsupported anchor mapping", () => {
+    expect(finalPageOffset(a, "file-driven", 0, 8, 10)).toBeNull();
+    expect(finalPageOffset(a, "anchor-driven", 1, 8, 10)).toBeNull();
+    expect(
+      finalPageOffset(
+        atoms(["same.html#one", "same.html#two"]),
+        "file-driven",
+        1,
+        8,
+        10,
+      ),
+    ).toBeNull();
+    expect(finalPageOffset([], "file-driven", -1, 8, 10)).toBeNull();
+  });
+
+  test("rejects unlaid out and transient invalid geometry", () => {
+    for (const [page, pages] of [
+      [0, 0],
+      [1, 2],
+      [NaN, 10],
+      [8, Infinity],
+      [10, 10],
+      [8.5, 10],
+    ])
+      expect(finalPageOffset(a, "file-driven", 1, page, pages)).toBeNull();
+    expect(
+      finalPageOffset(atoms(["c.html"], 0), "file-driven", 0, 1, 3),
+    ).toBeNull();
   });
 });

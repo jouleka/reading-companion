@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { api } from "./api";
+import { flushOfflineMutations, pendingPosition, queuePosition } from "./pwa/offline";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -38,6 +39,88 @@ describe("Reader navigation reads", () => {
 });
 
 describe("Hosted writes", () => {
+  test("outbox replay waits for a live completion and preserves the later cursor with its acknowledged version", async () => {
+    localStorage.setItem("litlet.offline.owner", "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67");
+    vi.spyOn(document, "cookie", "get").mockReturnValue("__Host-litlet-csrf=csrf-token");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    let release!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { release = resolve; }))
+      .mockImplementationOnce(async (_url, options) => {
+        expect(JSON.parse(options?.body as string)).toMatchObject({
+          cfi: "rereading", offset: 10, completed_chapter: 3, base_version: 1,
+          position_epoch: 0, client_sequence: 2,
+        });
+        return new Response(JSON.stringify({ bookmark: 3, position_epoch: 0, position_version: 2 }), { status: 200 });
+      });
+    const live = api.putPosition("book", "finished", 300, 3, 0, 0, "reader-client", 1);
+    queuePosition("book", "/api/books/book/position", { cfi: "rereading", offset: 10,
+      completed_chapter: 3, position_epoch: 0, base_version: 0, client_id: "reader-client", client_sequence: 2 });
+    const replay = flushOfflineMutations();
+    await Promise.resolve();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    release(new Response(JSON.stringify({ bookmark: 3, current_chapter: 4, chapter_progress: 1,
+      position_epoch: 0, position_version: 1, applied: true }), { status: 200 }));
+    await live;
+    await replay;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(pendingPosition("book")).toBeNull();
+  });
+
+  test("a failing old-owner position request never queues data under the new owner", async () => {
+    const owner = "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67";
+    localStorage.setItem("litlet.offline.owner", owner);
+    let fail!: (error: Error) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise<Response>((_resolve, reject) => { fail = reject; }));
+    const delivery = api.putPosition("book", "private-page", 10, 1, 0, 0, "reader-client", 1);
+    localStorage.setItem("litlet.offline.owner", "local");
+    fail(new TypeError("offline"));
+    await expect(delivery).rejects.toMatchObject({ status: 409 });
+    expect(pendingPosition("book")).toBeNull();
+    localStorage.setItem("litlet.offline.owner", owner);
+    expect(pendingPosition("book")).toBeNull();
+  });
+
+  test("a reopened reader's live write follows an already replaying outbox position", async () => {
+    localStorage.setItem("litlet.offline.owner", "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67");
+    vi.spyOn(document, "cookie", "get").mockReturnValue("__Host-litlet-csrf=csrf-token");
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    queuePosition("book", "/api/books/book/position", { cfi: "queued-page", offset: 10,
+      completed_chapter: 3, position_epoch: 0, base_version: 0, client_id: "reopening-client", client_sequence: 2 });
+    let release!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { release = resolve; }))
+      .mockImplementationOnce(async (_url, options) => {
+        expect(JSON.parse(options?.body as string)).toMatchObject({ cfi: "newest-page",
+          completed_chapter: 3, base_version: 2, client_sequence: 3 });
+        return new Response(JSON.stringify({ bookmark: 3, current_chapter: 1, chapter_progress: 0.2,
+          position_epoch: 0, position_version: 3, applied: true }), { status: 200 });
+      });
+    const replay = flushOfflineMutations();
+    const live = api.putPosition("book", "newest-page", 20, 3, 0, 0, "reopening-client", 3);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    release(new Response(JSON.stringify({ bookmark: 3, position_epoch: 0,
+      position_version: 2, applied: true }), { status: 200 }));
+    await replay;
+    await live;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(pendingPosition("book")).toBeNull();
+  });
+
+  test("a successful reset discards old-pass intent and preserves a newer queued epoch", async () => {
+    queuePosition("book", "/api/books/book/position", { cfi: "old-finish", offset: 300,
+      completed_chapter: 3, position_epoch: 0 });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({
+      bookmark: 0, cfi: null, position_epoch: 1,
+    }), { status: 200 }));
+    await api.resetPosition("book", 0);
+    expect(pendingPosition("book")).toBeNull();
+    queuePosition("book", "/api/books/book/position", { cfi: "new-pass", offset: 0,
+      completed_chapter: 0, position_epoch: 1 });
+    await api.resetPosition("book", 0);
+    expect(pendingPosition("book")).toMatchObject({ cfi: "new-pass", position_epoch: 1, completed_chapter: 0 });
+  });
+
   test("copies the non-HttpOnly CSRF cookie into provider-setting writes", async () => {
     vi.spyOn(document, "cookie", "get").mockReturnValue("__Host-litlet-csrf=csrf-token");
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({

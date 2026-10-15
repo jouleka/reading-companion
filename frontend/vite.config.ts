@@ -70,7 +70,8 @@ export default defineConfig({
     port: 5173,
     headers: developmentHeaders,
     proxy: {
-      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      // Keep the browser-facing Host so the local API can enforce its same-origin boundary.
+      "/api": { target: "http://127.0.0.1:8000", changeOrigin: false },
     },
   },
   preview: { headers: securityHeaders },

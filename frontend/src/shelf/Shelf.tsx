@@ -10,6 +10,7 @@ import {
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 import { ProviderSettings } from "./ProviderSettings";
+import { AiStatus } from "../ui/AiStatus";
 
 const recentKey = (owner: string) => `litlet.library-recent:${owner}`;
 function readRecent(owner: string): string[] {
@@ -302,6 +303,7 @@ export function Shelf({
           Add a book
         </Button>
         <div className="sidebar-bottom">
+          <AiStatus />
           <div className="sidebar-note">
             <Icon name="shield" size={20} />
             <strong>Your story. At your pace.</strong>
