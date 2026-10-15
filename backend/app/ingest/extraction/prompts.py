@@ -13,7 +13,8 @@ EXTRACT_SYSTEM = (
     "You extract a structured story-memory from ONE chapter of a novel for a spoiler-safe "
     "reading companion. Extract ONLY what this chapter's text states or clearly implies — never "
     "use outside knowledge of the book, and never refer to later events. Output must match the "
-    "provided JSON schema exactly."
+    "provided JSON schema exactly. If you translate or transliterate a canonical name, include its "
+    "observed source-native spelling among aliases so its identity remains traceable to the text."
 )
 
 _NEUTRAL_SYSTEM = (
@@ -21,7 +22,9 @@ _NEUTRAL_SYSTEM = (
     "reading companion. Extract ONLY what this section's text states or clearly implies — never "
     "use outside knowledge of the book, and never refer to later sections. The book may be "
     "nonfiction, verse, drama, a collection, reference material, or structurally unusual; do not "
-    "assume a plot or stable cast. Output must match the provided JSON schema exactly."
+    "assume a plot or stable cast. Output must match the provided JSON schema exactly. If you "
+    "translate or transliterate a canonical name, include its observed source-native spelling among "
+    "aliases so its identity remains traceable to the text."
 )
 
 

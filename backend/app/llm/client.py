@@ -133,6 +133,8 @@ class LLMClient:
         self.api_key = (api_key or env.get("OPENAI_API_KEY") or env.get("OPENROUTER_API_KEY")
                         or env.get("GROQ_API_KEY") or env.get("TOGETHER_API_KEY"))
         self.anthropic_key = anthropic_key or env.get("ANTHROPIC_API_KEY")
+        # Anthropic's endpoint is independent of OpenAI completion/embedding environment settings.
+        self.anthropic_base_url = (base_url or "https://api.anthropic.com/v1").rstrip("/")
         self._is_native_openai = self.base_url.rstrip("/") == _OPENAI_DEFAULT_BASE
         # A non-OpenAI compatible key (OpenRouter/Groq/Together) aimed at the DEFAULT api.openai.com would
         # take the OpenAI-only strict .parse path with the wrong key and auth-fail confusingly. Fail loud
@@ -371,7 +373,7 @@ class LLMClient:
         headers = {"x-api-key": self.anthropic_key, "anthropic-version": "2023-06-01",
                    "content-type": "application/json"}
         for attempt in range(self.max_retries + 1):
-            r = self._http.post("https://api.anthropic.com/v1/messages", headers=headers, json=body)
+            r = self._http.post(f"{self.anthropic_base_url}/messages", headers=headers, json=body)
             if r.status_code in _ANTHROPIC_RETRY_STATUS and attempt < self.max_retries:
                 self._sleep(min(2 ** attempt, 8))         # bounded exponential backoff on 429/5xx
                 continue
@@ -407,13 +409,18 @@ class LLMClient:
             return (schema.model_validate({"references_future": False, "unsupported_claims": []})
                     .model_dump(mode="json"), {"in": len(user) // 4, "out": 5})
         import re
+        # The offline extractor must inspect source prose, not names or instructions in the roster,
+        # prompt scaffold, or book title. Both novel and neutral-profile prompts use this same path.
+        body = user.split("CHAPTER TEXT:\n", 1)[-1] if "CHAPTER TEXT:\n" in user else user
+        if "SECTION TEXT:\n" in body:
+            body = body.split("SECTION TEXT:\n", 1)[1]
+        body = body.split("\n\nExtract ", 1)[0]
         names = []
-        for m in re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", user):
+        for m in re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", body):
             if m not in names and m.lower() not in ("chapter", "the project"):
                 names.append(m)
         ents = [{"canonical_name": n, "type": "character", "aliases": [],
                  "matched_roster": False, "state": None} for n in names[:8]]
-        body = user.split("CHAPTER TEXT:", 1)[-1] if "CHAPTER TEXT:" in user else user
         obj = {"chapter_summary": "[stub] " + " ".join(body.split())[:160], "entities": ents,
                "relationships": [], "events": [], "themes": []}
         return schema.model_validate(obj).model_dump(mode="json"), {"in": len(user) // 4, "out": 50}
@@ -427,14 +434,37 @@ class LLMClient:
                 kind = _provider_failure_kind(exc)
                 self._record_provider_failure("embedding", kind)
                 raise ProviderUnavailable(kind, service="embedding") from exc
+            except (AttributeError, TypeError, ValueError) as exc:
+                # The SDK may reject malformed wire data before our batch validation runs.
+                self._record_provider_failure("embedding", "invalid_response")
+                raise ProviderUnavailable("invalid_response", service="embedding") from exc
             # Realign by the SDK `index` — an OpenAI-compatible proxy may return data out of input order,
             # and a misaligned vector is a silent pin/KNN corruption (pass-1 review MEDIUM). But sort
             # ONLY when EVERY item carries an index: a proxy that OMITS index leaves it None, and a naive
             # sort would `None < None` -> crash; fall back to wire order there (pass-2 review regression).
             data = resp.data
-            if data and all(d.index is not None for d in data):
-                data = sorted(data, key=lambda d: d.index)
-            vecs = [d.embedding for d in data]
+            try:
+                if not isinstance(data, list) or len(data) != len(texts):
+                    raise ValueError("embedding response count does not match input count")
+                indices = [d.index for d in data]
+                if any(index is not None for index in indices):
+                    if (any(isinstance(index, bool) or not isinstance(index, int)
+                            for index in indices)
+                            or sorted(indices) != list(range(len(texts)))):
+                        raise ValueError("embedding response indices are not an input permutation")
+                    data = sorted(data, key=lambda d: d.index)
+                vecs = []
+                for item in data:
+                    if not isinstance(item.embedding, (list, tuple)) or not item.embedding:
+                        raise ValueError("embedding response contains an empty vector")
+                    vector = [float(value) for value in item.embedding]
+                    if (not all(math.isfinite(value) for value in vector)
+                            or (vecs and len(vector) != len(vecs[0]))):
+                        raise ValueError("embedding response has invalid vector dimensions or values")
+                    vecs.append(vector)
+            except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+                self._record_provider_failure("embedding", "invalid_response")
+                raise ProviderUnavailable("invalid_response", service="embedding") from exc
             total = getattr(getattr(resp, "usage", None), "total_tokens", 0) or 0
             self._record_provider_ready("embedding")
             return vecs, {"in": total}

@@ -14,13 +14,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.ask import (
+    ASK_JUDGE_SYSTEM,
     ASK_SYSTEM,
     AskDraft,
     AskRequest,
     AskSafetyError,
     ask_prompt,
+    ask_judge_prompt,
     cited_sources,
-    draft_text,
     source_facts,
     validate_ask_draft,
 )
@@ -1002,7 +1003,6 @@ async def ask_the_book(
                     "cost": _ask_cost(calls),
                 }
             used = cited_sources(draft, context["sources"])
-            answer = draft_text(draft)
             try:
                 reviewed = await _run_owner_completion(
                     request,
@@ -1010,8 +1010,8 @@ async def ask_the_book(
                     book_id,
                     judge,
                     phase="judge",
-                    system=JUDGE_SYSTEM,
-                    user=judge_prompt(answer, source_facts(used)),
+                    system=ASK_JUDGE_SYSTEM,
+                    user=ask_judge_prompt(draft, used),
                     schema=JudgeVerdict,
                     max_output_tokens=500,
                 )
@@ -1219,8 +1219,8 @@ async def chapter_closeout(
                     book_id,
                     judge,
                     phase="judge",
-                    system=JUDGE_SYSTEM,
-                    user=judge_prompt(draft_text(draft), source_facts(used)),
+                    system=ASK_JUDGE_SYSTEM,
+                    user=ask_judge_prompt(draft, used),
                     schema=JudgeVerdict,
                     max_output_tokens=500,
                 )

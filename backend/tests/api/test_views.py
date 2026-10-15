@@ -9,7 +9,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from _epub import three_chapter_book
+from _epub import epub_ncx, three_chapter_book
 from app.config import Settings
 from app.llm.client import ProviderUnavailable
 from app.main import create_app
@@ -219,6 +219,74 @@ def test_ask_the_book_withholds_an_uncited_future_answer_without_leaking_it(env)
     assert "murdered" not in response.text.casefold()
 
 
+def test_ask_uses_legacy_full_chapter_tail_and_returns_the_exact_judged_excerpt(tmp_path, monkeypatch):
+    """Real ingest/search/API wiring with canned completions; no claim about model entailment quality."""
+    from app.memory.dal import BookmarkView
+
+    fact = "the calibration lever is copper."
+    settings = Settings(_env_file=None, allow_stub=True, data_dir=str(tmp_path / "tail-data"))
+    app = create_app(settings, ingest_executor=InlineExecutor())
+    book = epub_ncx([
+        ("one.xhtml", "Chapter I", "Chapter I", "Aldric studied the manual. " * 260 + fact),
+        ("two.xhtml", "Chapter II", "Chapter II", "Vesper concealed the future answer. " * 20),
+    ])
+    with TestClient(app) as c:
+        bid = c.post("/api/books", files={
+            "file": ("tail.epub", book, "application/epub+zip"),
+        }).json()["book_id"]
+        with open(os.path.join(settings.data_dir, "books", bid, "atoms.json"), encoding="utf-8") as f:
+            atoms = json.load(f)["atoms"]
+        c.put(f"/api/books/{bid}/position", json={
+            "cfi": "x", "offset": atoms[0]["char_len"] + 2,
+        })
+        question = "What is the calibration lever made of?"
+        question_vector = app.state.client.embed([question])[0][0]
+        with app.state.store.book(bid) as mem:
+            # Reproduce the old index's limitation: no re-ingest or extra chunks were added.
+            prefixes = mem.view(1).search(question_vector, k=6)
+            assert prefixes and all(fact not in hit[1] for hit in prefixes)
+
+        original_complete = app.state.client.complete
+        original_raw = BookmarkView.raw_text
+        observed = {"raw_keys": [], "synthesis": [], "review": []}
+
+        def read_only_completed(self, chapter_key):
+            observed["raw_keys"].append(chapter_key)
+            assert self.bookmark == 1
+            assert chapter_key == atoms[0]["key"], "future chapter text was loaded"
+            return original_raw(self, chapter_key)
+
+        def answering(system, user, tier="cheap", schema=None):
+            fields = getattr(schema, "model_fields", {}) if schema is not None else {}
+            if "claims" in fields:
+                observed["synthesis"].append(user)
+                assert fact in user and "Vesper" not in user
+                return {"insufficient_evidence": False, "claims": [
+                    {"text": fact, "citation_ids": [1]},
+                ]}, {"in": 30, "out": 10}
+            if "references_future" in fields:
+                data = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+                observed["review"].append(data)
+                assert data["claims"][0]["claim"] == fact
+                assert fact in data["claims"][0]["cited_passages"][0]["text"]
+                return {"references_future": False, "unsupported_claims": []}, {"in": 12, "out": 3}
+            return original_complete(system, user, tier=tier, schema=schema)
+
+        monkeypatch.setattr(BookmarkView, "raw_text", read_only_completed)
+        monkeypatch.setattr(app.state.client, "complete", answering)
+        response = c.post(f"/api/books/{bid}/ask", json={"question": question, "bookmark": 99})
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["as_of_chapter"] == 1
+    assert result["claims"] == [{"text": fact, "citation_ids": [1]}]
+    evidence = observed["review"][0]["claims"][0]["cited_passages"][0]
+    assert result["citations"][0]["excerpt"] == evidence["text"]
+    assert evidence["text"] in observed["synthesis"][0]
+    assert result["citations"][0]["href"] == atoms[0]["href"]
+    assert observed["raw_keys"] and set(observed["raw_keys"]) == {atoms[0]["key"]}
+
+
 def test_selection_actions_use_only_the_visible_selection_and_return_its_anchor(env):
     c, bid, app, _ = env
     original = app.state.client.complete
@@ -265,6 +333,7 @@ def test_selection_actions_use_only_the_visible_selection_and_return_its_anchor(
 def test_chapter_closeout_is_exact_chapter_cited_and_completed_only(env):
     c, bid, app, _ = env
     original = app.state.client.complete
+    judged = []
 
     def closing_out(system, user, tier="cheap", schema=None):
         fields = getattr(schema, "model_fields", {}) if schema is not None else {}
@@ -277,6 +346,7 @@ def test_chapter_closeout_is_exact_chapter_cited_and_completed_only(env):
                 }],
             }, {"in": 30, "out": 10}
         if "references_future" in fields:
+            judged.append(json.loads(user.split("(untrusted JSON data):\n", 1)[1]))
             return {"references_future": False, "unsupported_claims": []}, {"in": 12, "out": 3}
         return original(system, user, tier=tier, schema=schema)
 
@@ -291,6 +361,8 @@ def test_chapter_closeout_is_exact_chapter_cited_and_completed_only(env):
     assert payload["claims"][0]["citation_ids"] == [1]
     assert payload["citations"][0]["ordinal"] == 2
     assert payload["citations"][0]["href"].endswith("c2.xhtml")
+    assert judged[0]["claims"][0]["claim"] == payload["claims"][0]["text"]
+    assert judged[0]["claims"][0]["cited_passages"][0]["text"] == payload["citations"][0]["excerpt"]
 
     future = c.post(f"/api/books/{bid}/chapter-closeout", json={"chapter": 3})
     assert future.status_code == 409

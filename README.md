@@ -18,7 +18,7 @@ SQLite story-memory engine, and an experimental hosted multi-user foundation.
 - Maintain a chapter-bounded, bitemporal story memory.
 - Catch up with an evolving recap and spoiler-bounded chapter views.
 - Browse name cards, relationships, highlights, notes, and bookmarks.
-- Ask questions and run selection assistance against completed reading only.
+- Ask questions about completed chapters and explain text explicitly selected in the reader.
 - Read aloud with browser speech synthesis.
 - Install the reader as a PWA and queue reading-position changes while offline.
 - Use SQLite and `sqlite-vec` locally; exercise PostgreSQL/pgvector parity in the hosted test suite.
@@ -29,6 +29,11 @@ Derived facts are stamped with the chapter that revealed them. Reader-facing que
 to the server-authoritative bookmark, and the retrieval/evaluation suites contain adversarial
 no-look-ahead checks. This is a defense-in-depth design, not a promise that model output can never be
 wrong; keep the deterministic gates and regression tests enabled when changing ingestion or views.
+
+New chapter memory also requires observed names and a source-bounded semantic review before commit.
+Ask and chapter closeout review each claim against its own citations. Existing saved memory is not
+retroactively cleared by these checks. Completing the final visible page requires the explicit
+**Finish book** action; merely displaying that page does not mark its text as read.
 
 The original design is in
 [`docs/spec/2026-06-25-reading-companion-design.md`](docs/spec/2026-06-25-reading-companion-design.md),
@@ -76,6 +81,11 @@ npm run dev
 Open <http://localhost:5173>. The example configuration uses the deterministic offline stub, so you
 can explore without a provider key. Add your own key to the ignored `.env` file and set
 `ALLOW_STUB=false` when you want real extraction. Never commit that file.
+
+The library and companion show whether AI is in demo mode, configured, connected, or unavailable.
+A ready server using the offline stub does not establish working AI or correct answers. See the
+[backend acceptance sample](backend/README.md#provider-status-and-live-acceptance-sample) before
+evaluating a new provider configuration.
 
 ### Single-process local build
 

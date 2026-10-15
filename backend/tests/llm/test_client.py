@@ -296,6 +296,39 @@ def test_openai_embeddings_without_index_uses_wire_order():
     assert vecs == [[0.0], [1.0], [2.0]]
 
 
+@pytest.mark.parametrize("data", [
+    [],
+    [{"index": 0, "embedding": [1.0]}],
+    [{"index": 0, "embedding": [1.0]}, {"index": 0, "embedding": [2.0]}],
+    [{"index": 0, "embedding": [1.0]}, {"index": 2, "embedding": [2.0]}],
+    [{"index": -1, "embedding": [1.0]}, {"index": 1, "embedding": [2.0]}],
+    [{"index": 0, "embedding": [1.0]}, {"embedding": [2.0]}],
+    [{"index": 0, "embedding": []}, {"index": 1, "embedding": [2.0]}],
+    [{"index": 0, "embedding": [1.0]}, {"index": 1, "embedding": [2.0, 3.0]}],
+    [{"index": 0, "embedding": ["NaN"]}, {"index": 1, "embedding": [2.0]}],
+    [{"index": 0, "embedding": ["Infinity"]}, {"index": 1, "embedding": [2.0]}],
+    [{"index": 0, "embedding": ["not numeric"]}, {"index": 1, "embedding": [2.0]}],
+], ids=["empty", "short", "duplicate", "out-of-range", "negative", "partial-indices",
+        "empty-vector", "mixed-dimensions", "nan", "infinity", "non-numeric"])
+def test_malformed_embedding_batch_fails_before_text_vector_pairing(data):
+    def handler(_request):
+        return httpx.Response(200, json={
+            "object": "list", "model": "text-embedding-3-small",
+            "data": [{"object": "embedding", **item} for item in data],
+            "usage": {"total_tokens": 2},
+        })
+
+    client = _embed_client(handler)
+    with pytest.raises(ProviderUnavailable) as failure:
+        client.embed(["first", "second"])
+    assert failure.value.kind == "invalid_response"
+    assert failure.value.service == "embedding"
+    assert "first" not in str(failure.value) and "not numeric" not in str(failure.value)
+    assert client.provider_status()["embedding"] == {
+        "status": "degraded", "reason": "invalid_response",
+    }
+
+
 def test_real_completion_key_implies_real_same_endpoint_embedder():
     # a lone OPENAI_API_KEY must yield a REAL same-endpoint embedder, never a SILENT lexical stub
     # while completion runs on a real model (pass-2: embed_provider inference).
@@ -449,6 +482,29 @@ def test_anthropic_text_completion():
     obj, usage = _anthropic(handler).complete("sys", "user", tier="large")
     assert obj == "recap text"
     assert usage["in"] == 1 and usage["out"] == 2
+
+
+@pytest.mark.parametrize("base_url,expected", [
+    (None, "https://api.anthropic.com/v1/messages"),
+    ("https://approved-proxy.invalid/custom/v1/", "https://approved-proxy.invalid/custom/v1/messages"),
+])
+def test_anthropic_uses_explicit_endpoint_or_own_default_never_openai_environment(base_url, expected):
+    requests = []
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={
+            "content": [{"type": "text", "text": "synthetic response"}],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        })
+    client = LLMClient(
+        provider="anthropic", anthropic_key="audit-dummy", base_url=base_url,
+        http_client=_mock(handler), embed_provider="stub",
+        env={"OPENAI_BASE_URL": "https://different-openai-endpoint.invalid/v1"},
+    )
+    assert client.complete("synthetic system", "synthetic prompt")[0] == "synthetic response"
+    assert str(requests[0].url) == expected
+    assert requests[0].headers["x-api-key"] == "audit-dummy"
+    assert "authorization" not in requests[0].headers
 
 
 def test_anthropic_detected_from_key_takes_priority():

@@ -1017,8 +1017,10 @@ class BookmarkView:
 
     def relationships(self):
         sub, sp = self._vis_entities()
+        # Every visible edge is still valid at this bookmark. Its stored expiry is future
+        # knowledge; exposing that ordinal would disclose when the relationship changes.
         return self._sel("edges", "edge_id, src_entity, dst_entity, rel_type, label, "
-                         "revealed_at, invalid_at",
+                         "revealed_at, NULL AS invalid_at",
                          where=f"src_entity IN ({sub}) AND dst_entity IN ({sub})",
                          params=[*sp, *sp], order="revealed_at, edge_id")
 

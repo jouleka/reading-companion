@@ -41,6 +41,42 @@ A missing, partial, or mismatched configured vec0 schema fails startup rather th
 back. Version 0.1.9 scans within its metadata filter; no sublinear-search claim is made. Index
 verification/backfill is O(N) when a book handle opens.
 
+## Provider status and live acceptance sample
+
+`GET /api/health/ai` describes the local runtime without probing the provider or returning secrets.
+It distinguishes the offline demo from a configured provider and a provider that has completed a
+successful request. `/api/health/ready` alone is not evidence of answer correctness.
+
+New local extraction requires a deterministic observed-name check and one budgeted cheap-tier
+semantic review per extracted part. Review sees only that part and the prior visible identity roster;
+unsupported or unavailable review rejects the whole chapter before memory writes. A clearance binds
+the exact source and extraction through preparation and commit. This increases extraction latency
+and cost, and a reviewer can still make mistakes. Existing completion receipts remain unchanged.
+
+The opt-in synthetic OpenAI sample uses normal import, ingestion and Ask routes against disposable
+data. Configure the ignored `.env` with `OPENAI_API_KEY`, `LLM_CHEAP_MODEL=gpt-5.4-mini`, and
+`LLM_LARGE_MODEL=gpt-5.4`, then run from `backend`:
+
+```bash
+# Preflight only: no provider calls.
+uv run python scripts/live_quality_audit.py --output /path/to/acceptance.json
+# Explicitly allow the small paid sample.
+uv run python scripts/live_quality_audit.py --run --output /path/to/acceptance.json
+```
+
+The harness fixes the native OpenAI endpoint and `text-embedding-3-small`, disables SDK automatic
+retries, requires exactly priced completion models, and applies a $1 per-book application reservation
+limit. It sends synthetic prose only. The report keeps claims, citations, latency, cost and a small
+memory sample for manual inspection; term checks are triage, not a correctness score. Provider
+billing remains authoritative. The normal application dollar ceiling uses an advisory known-model
+price table; hard token limits still apply when model pricing is unknown.
+
+Changing a book's extraction or embedding space now fails with `model_migration_required` rather
+than mixing incompatible facts or vectors. Reading and existing memory remain available. Restore
+the original configuration or perform an explicit migration; changing synthesis models alone is
+allowed. Local API requests also enforce browser Origin/Fetch Metadata checks, so development proxies
+must preserve the browser Host as the committed Vite configuration does.
+
 ## Hosted PostgreSQL foundation (LIT-38)
 
 `app/hosted/schema/` is a separate, dormant hosted migration stream. It does not alter local

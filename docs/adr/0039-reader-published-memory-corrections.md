@@ -19,6 +19,14 @@ currently visible aliases, state, relationships, and event participation are cop
 immutable `replace` correction records source and target identities, the reader's bounded reason,
 schema version, effective bookmark, and database timestamp.
 
+A reread can already have later completed memory. A one-for-one name correction also copies those
+retained dependencies to the replacement inside the transaction, preserving each later reveal and
+validity boundary. This database projection does not add later content to the correction response or
+to model inputs. Split/merge corrections retain their separate explicit-assignment contract. If a
+correction changes a roster while chapter preparation is outside the memory lock, commit rejects the
+stale preparation before writing; the worker prepares the same extraction again against the fresh
+roster, with bounded retries and reusable embeddings rather than a second completion call.
+
 Correction history is itself spoiler-bounded: history reads return only rows whose effective bookmark
 is at or before the requested server-clamped frontier. The Codex shows old-to-new names, reason, and an
 effective-chapter navigation control. Scrubbing before the correction therefore restores both the old

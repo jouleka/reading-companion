@@ -21,6 +21,9 @@ class PositionIn(BaseModel):
     # StrictInt: a stringified/boolean/float offset is REJECTED, never coerced — a malformed offset
     # feeding the frontier could otherwise mis-derive the spoiler bookmark (fail-closed, D-A10).
     offset: StrictInt = Field(ge=0)
+    # Offline coalescing keeps the latest resume cursor while retaining the furthest geometry
+    # observed in the same reset epoch. It is not a caller-supplied chapter ordinal.
+    high_water_offset: StrictInt | None = Field(default=None, ge=0, le=2**63 - 1)
     # Epoch zero keeps pre-LIT-17 clients compatible until the first explicit reset. Thereafter a
     # missing epoch is deliberately stale, so an old tab cannot undo the user's new pass.
     position_epoch: StrictInt | None = Field(default=None, ge=0, le=2**63 - 1)
@@ -73,7 +76,8 @@ def put_position(book_id: str, pos: PositionIn, catalog=Depends(get_catalog),
     # Deletion cannot cross between any of them and let this request bind work to a re-imported row.
     manifest, bounds, _durable = _load_checked(book_id, catalog, store, settings)
     prev = catalog.high_water(book_id)
-    bookmark = frontier.bookmark_high_water(prev, pos.offset, bounds)
+    completed_offset = max(pos.offset, pos.high_water_offset or 0)
+    bookmark = frontier.bookmark_high_water(prev, completed_offset, bounds)
     try:
         state = catalog.set_position(
             book_id, pos.cfi, bookmark,

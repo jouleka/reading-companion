@@ -21,15 +21,18 @@ from app.ask import (
     ASK_SYSTEM,
     AskDraft,
     AskRequest,
+    AskRetrievalLimit,
     AskSafetyError,
     ask_prompt,
     cited_sources,
     draft_text,
+    judge_ask_draft,
+    retrieve_ask_sources,
     source_facts,
     validate_ask_draft,
 )
 
-from app.cost import CostCeilingExceeded, budgeted_completion, budgeted_embedding, pricing_known
+from app.cost import CostCeilingExceeded, budgeted_completion, pricing_known
 from app.deps import (
     book_lifecycle,
     get_catalog,
@@ -55,6 +58,7 @@ from app.eval.spoiler_gate import (
 )
 from app.eval.spoiler_gate.judge import JudgeUnavailable, judge_recap
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
+from app.llm.retrieval import budgeted_query_embedding
 from app.reading_assist import (
     CLOSEOUT_SYSTEM,
     SELECTION_SYSTEM,
@@ -213,10 +217,10 @@ def correct_memory(book_id: str, body: EntityCorrectionRequest,
                    catalog=Depends(get_catalog), store=Depends(get_store),
                    settings=Depends(get_settings), worker=Depends(get_worker)):
     """Publish a one-for-one identity correction at the reader's exact current frontier."""
-    eff, _st, _manifest = _effective(
+    eff, state, _manifest = _effective(
         book_id, body.bookmark, catalog, store, settings, worker
     )
-    if eff != body.bookmark:
+    if eff != body.bookmark or state["bookmark"] != body.bookmark:
         raise HTTPException(409, "reading progress changed; reopen the codex and try again")
     try:
         with store.book(book_id) as mem:
@@ -293,9 +297,13 @@ def search(book_id: str, q: str, k: int = Query(default=5, ge=1, le=50),
            bookmark: int | None = _BM, catalog=Depends(get_catalog), store=Depends(get_store),
            settings=Depends(get_settings), client=Depends(get_client), worker=Depends(get_worker)):
     eff, _st, _m = _effective(book_id, bookmark, catalog, store, settings, worker)
+    if eff <= 0:
+        return {"as_of_chapter": 0, "hits": []}
+    with store.book(book_id) as mem:
+        pinned = mem.pinned_identity()
     try:
-        qvec = budgeted_embedding(
-            catalog, settings, client, book_id, phase="search-embedding", texts=[q]
+        qvec = budgeted_query_embedding(
+            catalog, settings, client, book_id, pinned=pinned, texts=[q]
         ).value[0]                                # OUTSIDE the lock (D-A3 — never IO under it)
     except CostCeilingExceeded as exc:
         raise HTTPException(429, "book cost ceiling reached") from exc
@@ -373,9 +381,11 @@ def ask_the_book(
             "citations": [],
             "cost": _ask_cost_payload(calls),
         }
+    with store.book(book_id) as mem:
+        pinned = mem.pinned_identity()
     try:
-        embedded = budgeted_embedding(
-            catalog, settings, client, book_id, phase="search-embedding", texts=[body.question]
+        embedded = budgeted_query_embedding(
+            catalog, settings, client, book_id, pinned=pinned, texts=[body.question]
         )
     except CostCeilingExceeded as exc:
         raise HTTPException(429, "book cost ceiling reached") from exc
@@ -385,26 +395,22 @@ def ask_the_book(
         provider="stub" if embed_identity.startswith("stub:") else client.embed_provider,
         model=embed_identity,
     )
-    with store.book(book_id) as mem:
-        hits = mem.view(eff).search(embedded.value[0], k=6)
-
     atoms = {atom["key"]: atom for atom in manifest["atoms"]}
-    sources = []
-    seen = set()
-    for _score, text, revealed_at, chapter_key in hits:
-        normalized = " ".join((text or "").split())[:2000]
-        if not normalized or (chapter_key, normalized) in seen:
-            continue
-        seen.add((chapter_key, normalized))
-        atom = atoms.get(chapter_key, {})
-        sources.append({
-            "id": len(sources) + 1,
-            "ordinal": int(revealed_at),
-            "chapter_key": chapter_key,
-            "href": atom.get("href", ""),
-            "title": atom.get("title", "") or f"Chapter {revealed_at}",
-            "text": normalized,
-        })
+    try:
+        with store.book(book_id) as mem:
+            view = mem.view(eff)
+            sources = retrieve_ask_sources(
+                body.question,
+                bookmark=eff,
+                chapters=view.chapters(),
+                read_chapter=view.raw_text,
+                semantic_hits=view.search(embedded.value[0], k=6),
+                atoms=atoms,
+            )
+    except AskRetrievalLimit as exc:
+        raise HTTPException(
+            413, "completed text is too large to search at once; choose an earlier chapter"
+        ) from exc
     if not sources:
         return {
             "as_of_chapter": eff,
@@ -472,10 +478,10 @@ def ask_the_book(
             return result.value, result.usage
 
         try:
-            verdict, _usage = judge_recap(
+            verdict, _usage = judge_ask_draft(
                 client,
-                answer,
-                source_facts(used),
+                draft,
+                used,
                 tier="cheap",
                 complete=judge_complete,
             )
@@ -706,10 +712,10 @@ def chapter_closeout(
             return result.value, result.usage
 
         try:
-            verdict, _usage = judge_recap(
+            verdict, _usage = judge_ask_draft(
                 client,
-                answer,
-                source_facts(used),
+                draft,
+                used,
                 tier="cheap",
                 complete=judge_complete,
             )

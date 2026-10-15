@@ -61,12 +61,9 @@ def validity_snapshot(db, bm):
                 live_events.add(r[idcol])
             if table == "entities":
                 live_entities.add(r[idcol])
-            # A row reaching this point has invalid_at NULL or > bm. Hash the raw value ONLY where a
-            # view read actually SURFACES it (edges: relationships() returns invalid_at) — for the
-            # other valid-time tables nothing visible at bm changes when a FUTURE-dated invalid_at is
-            # stamped, and the pipeline's replace_state stamps one on every state advance, which
-            # churned every earlier bookmark's key per ingested chapter (pass-3 F-P3-2, proved).
-            inv = r["invalid_at"] if (table == "edges" and "invalid_at" in k) else None
+            # A surviving row is still valid at bm. Future expiry is hidden from reader-facing
+            # payloads, including relationships, so stamping it cannot change an earlier recap.
+            inv = None
             fp = r["recorded_at"] if "recorded_at" in k else (r["content_hash"] if "content_hash" in k else "")
             extra = ":".join(str(r[c]) for c in _FP_EXTRA.get(table, ()))
             parts.append(f"{table}:{r[idcol]}:{inv}:{fp}:{extra}")

@@ -132,7 +132,9 @@ def test_online_backup_round_trip_and_portable_json_import(tmp_path):
     result = backup_book(source, book_id, archive)
     assert result.archive == archive
     assert result.sha256 == hashlib.sha256(archive.read_bytes()).hexdigest()
-    assert stat.S_IMODE(archive.stat().st_mode) == 0o600
+    if os.name != "nt":
+        # Windows reports synthetic POSIX mode bits; access is enforced by its inherited DACL.
+        assert stat.S_IMODE(archive.stat().st_mode) == 0o600
     report = verify_archive(archive)
     assert report.book_id == book_id
     assert report.durable_frontier == 1

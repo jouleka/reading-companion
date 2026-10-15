@@ -19,7 +19,17 @@ from app.ingest.extraction import resolve as R
 from app.ingest.extraction.chapter_text import content_hash_of
 from app.ingest.extraction.resolve import _norm
 from app.ingest.extraction.schema import Extraction
+from app.ingest.extraction.validation import (
+    ExtractionClearance,
+    ExtractionSafetyError,
+    assert_observed_entity_names,
+    review_extraction,
+)
 from app.llm import versioning
+
+
+class StalePreparedRoster(RuntimeError):
+    """An identity correction changed resolution inputs while provider work was outside the lock."""
 
 
 def all_entities(view):
@@ -35,12 +45,13 @@ def all_entities(view):
 
 
 def _ensure_pinned(mem, identity):
-    """Pin the extractor/embedding identity ONCE per book, BEFORE any chunk (Inv 6). Idempotent: if the
-    book already carries an embed pin, skip (avoids a redundant canary embed call per chapter)."""
-    if (mem.pinned_identity() or {}).get("embed_model"):
-        return
+    """Pin once before any chunk; every later commit must match that prepared model space."""
+    pinned = mem.pinned_identity()
     if identity is None:
         raise RuntimeError("model identity must be prepared before the chapter transaction")
+    versioning.assert_compatible_identity(pinned, identity)
+    if (pinned or {}).get("embed_model"):
+        return
     mem.pin_models(**identity)
 
 
@@ -52,7 +63,8 @@ def _changed_content_error(key):
 
 
 def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embed_fn=None,
-                    resolve_embed=None, identity=None, threshold=0.82, embed_chars=2000):
+                    resolve_embed=None, identity=None, threshold=0.82, embed_chars=2000,
+                    clearance=None):
     """Validate and prepare every model-derived value without accepting a ``MemoryDB`` handle.
 
     Callers run this outside ``Store.book()``. The returned object contains only values consumed by the
@@ -60,6 +72,16 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
     """
     extraction = Extraction.model_validate(extraction).model_dump(mode="json")
     text = ch.get("text", "") or ""
+    assert_observed_entity_names(text, extraction, roster)
+    if clearance is None:
+        if getattr(client, "provider", None) != "stub":
+            raise ExtractionSafetyError("extraction requires a chapter-grounding review")
+        # Direct offline fixture preparation has no provider IO or paid budget. It still runs the
+        # deterministic guard; the stub verdict is a mock, never evidence of semantic correctness.
+        clearance = review_extraction(text, extraction, roster, complete=client.complete)
+    if not isinstance(clearance, ExtractionClearance):
+        raise ExtractionSafetyError("extraction requires a valid chapter-grounding clearance")
+    clearance.assert_matches(text, extraction)
     actual_content_hash = content_hash_of(text)
     if ch.get("content_hash") not in (None, actual_content_hash):
         raise ValueError("chapter content_hash does not match its text")
@@ -88,6 +110,7 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
         "decisions": decisions,
         "chunk_vec": chunk_vec,
         "completion_cost": completion_cost,
+        "clearance": clearance,
     }
 
 
@@ -107,11 +130,17 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
             f"prepared chapter mismatch: prepared {prepared['chapter_key']!r}@{prepared['ordinal']}/"
             f"{prepared['content_hash']}, commit requested {key!r}@{ordinal}/{content_hash}"
         )
+    clearance = prepared.get("clearance")
+    if not isinstance(clearance, ExtractionClearance):
+        raise ExtractionSafetyError("extraction requires a valid chapter-grounding clearance")
+    clearance.assert_matches(text, prepared["extraction"])
     receipt = mem.chapter_completion(key, ordinal, content_hash)
     if receipt is not None:
         return {"skipped": True, "key": key, "ordinal": ordinal}
     if mem.chapter_live(key):
         raise _changed_content_error(key)
+    if all_entities(mem.view(max(ordinal - 1, 0))) != prepared["roster"]:
+        raise StalePreparedRoster("identity roster changed; prepare the extraction again before commit")
     with mem.transaction():
         result = _write_chapter(
             mem,

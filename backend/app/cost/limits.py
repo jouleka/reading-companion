@@ -20,6 +20,10 @@ class CostCeilingExceeded(RuntimeError):
 # Advisory USD pricing already used by the product. Hard token ceilings remain effective for unknown
 # models; unknown pricing intentionally returns zero rather than pretending a current price is known.
 _USD = {
+    # Standard text-token prices checked against official model documentation 2026-10-15.
+    # Keep the longer mini name first: identities include the provider and model name.
+    "gpt-5.4-mini": (0.75e-6, 4.50e-6),
+    "gpt-5.4": (2.50e-6, 15.0e-6),
     "gpt-4o-mini": (0.15e-6, 0.60e-6),
     "gpt-4o": (2.50e-6, 10.0e-6),
     "text-embedding-3-small": (0.02e-6, 0.0),

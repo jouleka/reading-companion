@@ -1040,7 +1040,8 @@ def test_malformed_extraction_retries_with_backoff_writes_nothing_then_resumes(e
 
     def malformed(*args, **kwargs):
         attempts.append(1)
-        return {}, {"in": 1, "out": 1}
+        # Missing required fields: rejected model prose must not escape through validation errors.
+        return {"chapter_summary": "Corvus kills Berenice in the future."}, {"in": 1, "out": 1}
 
     client.complete = malformed
     app.state.worker._sleep = delays.append
@@ -1057,6 +1058,7 @@ def test_malformed_extraction_retries_with_backoff_writes_nothing_then_resumes(e
     assert len(attempts) == 2
     assert delays == [0.25]
     assert "malformed extraction" in (status["error"] or "").lower()
+    assert "Corvus" not in status["error"] and "kills" not in status["error"]
     with app.state.store.book(bid) as mem:
         for table in ("chapters", "raw_chapters", "entities", "edges", "events", "chunks"):
             assert mem._audit_all(table) == [], table
@@ -1096,10 +1098,96 @@ def test_malformed_first_response_then_valid_retry_writes_exactly_once(env, monk
 
     status = c.get(f"/api/books/{bid}/ingest").json()
     assert status["status"] == "done" and status["ingest_progress"] == 1
-    assert calls["count"] == 2 and delays == [0.25]
+    # Two extraction attempts and one review of the schema-valid retry; no review of malformed data.
+    assert calls["count"] == 3 and delays == [0.25]
     with app.state.store.book(bid) as mem:
         assert len(mem._audit_all("chapters")) == 1
         assert len(mem._audit_all("ingested_chapters")) == 1
+
+
+@pytest.mark.parametrize("case", ["absent_name", "swapped_roles", "negation", "supported"])
+def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path, monkeypatch, case):
+    """Canned reviewer verdicts exercise the real worker/ledger/commit path, not model quality."""
+    from app.ingest.extraction.schema import Extraction
+
+    source = ("Aldric gave Berenice a copper lantern. Aldric did not open the chest. " * 8)
+    book = epub_ncx([
+        ("one.xhtml", "Chapter I", "Chapter I", source),
+        ("two.xhtml", "Chapter II", "Chapter II", "Vesper concealed the secret verdict. " * 12),
+    ])
+    settings = Settings(_env_file=None, allow_stub=True, data_dir=str(tmp_path / "review-data"))
+    app = create_app(settings, ingest_executor=InlineExecutor())
+    with TestClient(app) as c:
+        bid = c.post("/api/books", files={
+            "file": ("grounding.epub", book, "application/epub+zip"),
+        }).json()["book_id"]
+        client = app.state.client
+        original_complete = client.complete
+        seen = {"extract": 0, "review": 0}
+        heal = {"value": case == "supported"}
+
+        def completing(system, user, tier="cheap", schema=None):
+            assert not app.state.store._lock_for(bid).locked(), "review IO ran under Store lock"
+            if schema is Extraction:
+                seen["extract"] += 1
+                assertion = "Berenice received a copper lantern from Aldric."
+                names = ["Aldric", "Berenice"]
+                if not heal["value"]:
+                    if case == "absent_name":
+                        assertion, names = "Aldric poisoned Corvus.", ["Aldric", "Corvus"]
+                    elif case == "swapped_roles":
+                        assertion = "Aldric received a copper lantern from Berenice."
+                    elif case == "negation":
+                        assertion = "Aldric opened the chest."
+                return {
+                    "chapter_summary": assertion,
+                    "entities": [{"canonical_name": name, "type": "character", "aliases": [],
+                                  "matched_roster": False, "state": None} for name in names],
+                    "relationships": [],
+                    "events": [{"summary": assertion, "participants": names}],
+                    "themes": [],
+                }, {"in": 19, "out": 11}
+            if "references_future" in getattr(schema, "model_fields", {}):
+                seen["review"] += 1
+                payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+                assert source.strip() in payload["current_chapter_text"]
+                assert payload["prior_visible_identities"] == []
+                assert "Vesper" not in user and "secret verdict" not in user
+                assert payload["extraction"]["events"]
+                return {"references_future": False,
+                        "unsupported_claims": [] if heal["value"] else ["unsupported assertion"]}, {
+                    "in": 23, "out": 5,
+                }
+            return original_complete(system, user, tier=tier, schema=schema)
+
+        monkeypatch.setattr(client, "complete", completing)
+        position = {"cfi": "x", "offset": _mlen(settings, bid, 0) + 2}
+        c.put(f"/api/books/{bid}/position", json=position)
+        state = c.get(f"/api/books/{bid}/ingest").json()
+        assert seen["extract"] == 1
+        assert seen["review"] == (0 if case == "absent_name" else 1)
+        if not heal["value"]:
+            assert state["status"] == "error" and state["ingest_progress"] == 0
+            assert "Corvus" not in state["error"]
+            with app.state.store.book(bid) as mem:
+                for table in ("chapters", "raw_chapters", "entities", "events", "ingested_chapters"):
+                    assert mem._audit_all(table) == []
+            assert app.state.catalog.get_cost_reservations(bid) == []
+            failed_costs = app.state.catalog.get_costs(bid)
+            assert sum(row["input_tokens"] for row in failed_costs) == (
+                19 if case == "absent_name" else 42
+            )
+            heal["value"] = True
+            c.put(f"/api/books/{bid}/position", json=position)
+            state = c.get(f"/api/books/{bid}/ingest").json()
+        assert state["status"] == "done" and state["ingest_progress"] == 1
+        assert app.state.catalog.get_cost_reservations(bid) == []
+        costs = [row for row in app.state.catalog.get_costs(bid) if row["phase"] == "extraction"]
+        assert len(costs) == 1
+        assert costs[0]["input_tokens"] == 42 and costs[0]["output_tokens"] == 16
+        with app.state.store.book(bid) as mem:
+            assert len(mem._audit_all("ingested_chapters")) == 1
+            assert mem.view(1).timeline()[0]["summary"] == "Berenice received a copper lantern from Aldric."
 
 
 def test_catalog_progress_failure_after_memory_commit_resumes_without_duplicates(env, monkeypatch):

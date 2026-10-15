@@ -55,6 +55,13 @@ authenticated as envelope metadata. Root/owner directories are mode `0700`, obje
 created mode `0600`, writes fsync a same-directory temporary file and publish it without clobbering an
 existing object identity. Authentication, metadata, size, and checksum failures fail closed.
 
+On Windows, POSIX mode bits do not describe access control. The adapter uses native security APIs to
+establish and verify a protected directory DACL granting only the service account, SYSTEM, and
+Administrators access; new object files inherit those permissions. This also repairs pre-existing
+broad root/owner permissions, without changing ancestor folders. An untrusted filesystem owner,
+owner-directory reparse point, or ACL setup/verification failure closes access. The native path works
+independently of Python's version-specific `mkdir(mode=0700)` behavior; `chmod` alone is insufficient.
+
 ### S3 writes require checksum and server-side encryption confirmation
 
 The S3-compatible adapter uses Signature V4 and path-style addressing for custom endpoints. `PutObject`
