@@ -11,6 +11,7 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    merge_evidence_audits,
     source_name_text,
 )
 from app.evidence_text import field_segments, source_passages
@@ -49,6 +50,84 @@ def _canned(draft, sources):
          "evidence": [copy.deepcopy(reference)], "diagnostic": None}
         for unit in claim["units"]
     ]} for claim in payload["claims"]]}
+
+
+def test_selective_prompt_keeps_original_ids_full_answer_context_and_all_selected_sources():
+    draft = _draft("Nell received a key.", "She returned it; she thanked Orin.", "Orin left.")
+    sources = [_source(1, "Nell received a key. She returned it and thanked Orin. Orin left.")]
+    original = _payload(draft, sources)
+    data = json.loads(evidence_prompt(draft, sources, question="What happened?", claim_ids=[2]).split(
+        "(untrusted JSON data):\n")[1])
+    assert data["claims"] == [original["claims"][1]]
+    assert data["answer_context"] == original["claims"]
+    assert data["sources"] == original["sources"]
+    assert data["reader_question"] == "What happened?"
+    assert "not book evidence" in data["review_scope"]
+
+
+@pytest.mark.parametrize("ids", [[], [0], [4], [2, 2], [3, 1], [True], ["2"], (2,)])
+def test_selective_prompt_rejects_invalid_subsets(ids):
+    with pytest.raises(AskEvidenceError) as caught:
+        evidence_prompt(_draft("Nell received a key.", "Orin left.", "Nell waited."),
+                        [_source(1, "Nell received a key. Orin left. Nell waited.")], claim_ids=ids)
+    assert not caught.value.repairable
+
+
+def partial_fixture():
+    draft = _draft("Nell received a key.", "She returned it; she thanked Orin.", "Orin left.")
+    sources = [_source(1, "Nell received a key. She returned it and thanked Orin. Orin left.")]
+    all_audits = _canned(draft, sources)["claim_audits"]
+    return draft, sources, {"claim_audits": [all_audits[0], all_audits[2]]}, {
+        "claim_audits": [all_audits[1]]}
+
+
+def test_merge_covers_every_original_claim_and_contextual_unit_without_changing_text():
+    draft, sources, approved, review = partial_fixture()
+    before = copy.deepcopy((draft, sources, approved, review))
+    merged = merge_evidence_audits(draft, sources, approved, review)
+    assert [c["claim_id"] for c in merged["claim_audits"]] == [1, 2, 3]
+    assert complete_evidence_citations(draft, sources, merged) == draft
+    assert (draft, sources, approved, review) == before
+
+
+@pytest.mark.parametrize("fault", ["missing", "renumber", "overwrite", "foreign", "duplicate",
+                                    "unit_missing", "unit_foreign", "span", "source", "negative_approval"])
+def test_merge_never_silently_clears_a_missing_rewritten_or_forged_partial_audit(fault):
+    draft, sources, approved, review = partial_fixture()
+    claim = review["claim_audits"][0]
+    if fault == "missing":
+        review["claim_audits"] = []
+    if fault == "renumber":
+        claim["claim_id"] = 1
+    if fault == "overwrite":
+        review["claim_audits"].append(copy.deepcopy(approved["claim_audits"][0]))
+    if fault == "foreign":
+        approved["claim_audits"][0]["claim_id"] = 4
+    if fault == "duplicate":
+        approved["claim_audits"].append(copy.deepcopy(approved["claim_audits"][0]))
+    if fault == "unit_missing":
+        claim["units"].pop()
+    if fault == "unit_foreign":
+        claim["units"][0]["unit_id"] = 99
+    if fault == "span":
+        claim["units"][0]["evidence"][0]["passage_ids"] = [999]
+    if fault == "source":
+        sources.append(_source(2, "Orin owned an unrelated book."))
+        approved["claim_audits"][0]["units"][0]["evidence"][0]["source_id"] = 2
+    if fault == "negative_approval":
+        approved["claim_audits"][0]["units"][0]["supported"] = False
+    with pytest.raises(AskEvidenceError) as caught:
+        merge_evidence_audits(draft, sources, approved, review)
+    assert not caught.value.repairable
+
+
+def test_unresolved_negative_audit_remains_a_real_rejection_with_original_diagnostic_ids():
+    draft, sources, approved, review = partial_fixture()
+    review["claim_audits"][0]["units"][1].update(
+        supported=False, evidence=[], diagnostic="The stated reason is unsupported.")
+    with pytest.raises(AskEvidenceError) as caught:
+        merge_evidence_audits(draft, sources, approved, review)
+    assert caught.value.repairable and caught.value.review_feedback[0].startswith("Claim 2, unit 1:")
 
 
 def test_common_container_needs_its_own_positive_source_and_unproved_ids_are_not_inherited():

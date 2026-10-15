@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     jev_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
     jev_selection_enabled: bool = True
     jev_evidence_enabled: bool = True
+    jev_partial_evidence_enabled: bool = False
     jev_recap_enabled: bool = False  # Experimental: conservative routing added latency in live QA.
     jev_min_probability: float = Field(default=0.95, ge=0.9, le=1)
     jev_min_confidence: float = Field(default=0.85, ge=0.8, le=1)

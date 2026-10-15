@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reader-fast-mode", action="store_true")
+    parser.add_argument("--partial", action="store_true", help="Compare complete versus unresolved-only GPT evidence audits")
     parser.add_argument("--repeat", type=int, choices=range(1, 4), default=1)
     args = parser.parse_args()
     if not args.run:
@@ -32,6 +33,8 @@ def main():
     report = {"scope": "Paired live synthetic API sample, one shared ingested book, same model roles. "
                        "Small sample; terms are triage, inspect complete claims and citations.",
               "per_book_budget_usd": 1.0, "cases": [], "jev_calls": []}
+    modes = ("jev", "partial") if args.partial else ("gpt", "jev")
+    report["modes"] = modes
     args.output.parent.mkdir(parents=True, exist_ok=True)
     def save():
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -87,8 +90,9 @@ def main():
                                 "and how it was returned.", "expected": "answer",
                     "required": ["jonas", "mara", "red tin", "sink", "return"]}]
                 for i, case in enumerate(cases * args.repeat):
-                    for mode in (["gpt", "jev"] if i % 2 == 0 else ["jev", "gpt"]):
-                        provider.jev = jev if mode == "jev" else None
+                    for mode in (modes if i % 2 == 0 else modes[::-1]):
+                        provider.jev = jev if mode in {"jev", "partial"} else None
+                        settings.jev_partial_evidence_enabled = mode == "partial"
                         provider.answers.invalidate_book(bid)
                         before = len(report.get("model_calls", [])), len(report["jev_calls"])
                         started = time.perf_counter()
@@ -110,6 +114,8 @@ def main():
                             "seconds": round(time.perf_counter()-started, 4), "status": response.status_code,
                             "basic_check": passed, "response": value,
                             "model_calls": len(report.get("model_calls", []))-before[0],
+                            "evidence_calls": [c for c in report.get("model_calls", [])[before[0]:]
+                                               if c.get("schema") == "AskEvidenceReview"],
                             "jev_calls": len(report["jev_calls"])-before[1]})
                         if value.get("claims") and response.status_code == 200:
                             started = time.perf_counter()
@@ -122,8 +128,9 @@ def main():
                                 and repeat.json().get("citations") == citations
                                 and repeat.json().get("cost", {}).get("calls") == [])
                         save()
-                for mode in ("gpt", "jev"):
-                    provider.jev = jev if mode == "jev" else None
+                for mode in modes:
+                    provider.jev = jev if mode in {"jev", "partial"} else None
+                    settings.jev_partial_evidence_enabled = mode == "partial"
                     app.state.recaps.invalidate_book(bid)
                     for cache in ("cold", "warm"):
                         started = time.perf_counter()
@@ -142,7 +149,7 @@ def main():
                 jev.close()
                 report["latency"] = {mode: {"median_seconds": statistics.median(
                     c["seconds"] for c in report["cases"] if c["mode"] == mode)}
-                    for mode in ("gpt", "jev") if any(c["mode"] == mode for c in report["cases"])}
+                    for mode in modes if any(c["mode"] == mode for c in report["cases"])}
                 save()
     print(json.dumps({"status": report["status"], "latency": report["latency"],
                       "basic_passed": sum(c["basic_check"] for c in report["cases"]),

@@ -43,6 +43,7 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    merge_evidence_audits,
 )
 from app.ask_selection import (
     SOURCE_SELECTION_SYSTEM,
@@ -415,6 +416,7 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
     if draft.insufficient_evidence or client.provider == "stub":
         return complete_ask_citations(draft, sources, known_names=known_names)
     review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
+    approved = None
     jev = getattr(client, "jev", None)
     if jev is not None and settings.jev_evidence_enabled:
         def run(state, questions):
@@ -424,11 +426,20 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
                 remember_jev(result)
             return result.value
         try:
-            audit = jev_tasks.evidence(draft.model_dump(mode="json"), sources,
-                                       question=question, run=run, settings=settings)
-            reviewed = complete_evidence_citations(draft.model_dump(mode="json"), sources, audit)
-            return complete_ask_citations(AskDraft.model_validate(reviewed), sources,
-                                          known_names=known_names, include_context=False)
+            audit_fn = (jev_tasks.evidence_partial if settings.jev_partial_evidence_enabled
+                        else jev_tasks.evidence)
+            audit = audit_fn(draft.model_dump(mode="json"), sources,
+                             question=question, run=run, settings=settings)
+            approved_ids = [c["claim_id"] for c in audit["claim_audits"]]
+            remaining = [i for i in range(1, len(draft.claims)+1) if i not in approved_ids]
+            if not remaining:
+                reviewed = complete_evidence_citations(draft.model_dump(mode="json"), sources, audit)
+                return complete_ask_citations(AskDraft.model_validate(reviewed), sources,
+                                              known_names=known_names, include_context=False)
+            if approved_ids:
+                approved = audit
+                review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources,
+                                                question=question, claim_ids=remaining)
         except JevUnavailable:
             pass  # Existing complete positive-evidence audit remains the bounded fallback.
     try:
@@ -443,8 +454,10 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
         # The budget layer already retains their conservative failed-call charge.
         raise AskEvidenceError(repairable=False) from None
     remember(audited)
+    audit_value = (merge_evidence_audits(draft.model_dump(mode="json"), sources, approved, audited.value)
+                   if approved is not None else audited.value)
     reviewed = AskDraft.model_validate(complete_evidence_citations(
-        draft.model_dump(mode="json"), sources, audited.value,
+        draft.model_dump(mode="json"), sources, audit_value,
     ))
     # A positive reviewer can mistake an inline chapter label for a speaker attribution.
     # Add only missing named-body context from this same selected pool, within the existing

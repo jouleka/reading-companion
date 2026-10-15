@@ -112,7 +112,8 @@ def select(question, sources, *, run, settings):
     return validate_selection({"source_ids": ids}, sources)
 
 
-def evidence(draft, sources, *, question, run, settings):
+def evidence_partial(draft, sources, *, question, run, settings):
+    """Approve only whole claims whose complete composition and every contextual unit pass."""
     payload = json.loads(evidence_prompt(draft, sources, question=question).split(
         "(untrusted JSON data):\n")[1])
     # Only each claim's own original citations are eligible for the fast path. The fallback
@@ -138,8 +139,8 @@ def evidence(draft, sources, *, question, run, settings):
     state = {"reader_question": payload.get("reader_question"), "claims": entries,
              "audit_policy": ASK_EVIDENCE_SYSTEM}
     answers = run(state, questions)
-    if not all(confident(answer, settings) for answer in answers.values()):
-        raise JevUnavailable("Evidence requires the generative audit")
+    if set(answers) != set(questions):
+        raise JevUnavailable("Evidence review is incomplete")
     return {"claim_audits": [{
         "claim_id": claim["claim_id"], "units": [{
             "unit_id": unit["unit_id"], "supported": True, "diagnostic": None,
@@ -147,7 +148,16 @@ def evidence(draft, sources, *, question, run, settings):
                           "passage_ids": [p["id"] for p in s["passages"] if p["text"].strip()]}
                          for s in claim["cited_sources"]],
         } for unit in claim["units"]],
-    } for claim in entries]}
+    } for i, claim in enumerate(entries)
+        if all(confident(answers[f"c{i}_{label}"], settings)
+               for label in ["whole", *[str(u["unit_id"]) for u in claim["units"]]])]}
+
+
+def evidence(draft, sources, *, question, run, settings):
+    result = evidence_partial(draft, sources, question=question, run=run, settings=settings)
+    if len(result["claim_audits"]) != len(draft["claims"]):
+        raise JevUnavailable("Evidence requires the generative audit")
+    return result
 
 
 def recap(text, facts, *, run, settings):

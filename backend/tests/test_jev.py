@@ -79,6 +79,40 @@ def test_other_claims_cannot_lend_their_citations_to_a_claim():
                        question="What happened?", run=run, settings=Settings())
 
 
+@pytest.mark.parametrize("failed_check", ["whole", "0", "1"])
+def test_partial_evidence_only_approves_entire_claims_with_every_unit_supported(failed_check):
+    value = {"insufficient_evidence": False, "claims": [
+        {"text": "Nell gave Orin a key.", "citation_ids": [1]},
+        {"text": "Orin left; Nell thanked him.", "citation_ids": [2]},
+        {"text": "Pavo waited.", "citation_ids": [3]}]}
+    original = copy.deepcopy(value)
+    sources = [source(1, "Nell gave Orin a key."), source(2, "Orin left; Nell thanked him."),
+               source(3, "Pavo waited.")]
+    def run(state, questions):
+        assert [c["claim_id"] for c in state["claims"]] == [1, 2, 3]
+        answers = positive(state, questions)
+        answers[f"c1_{failed_check}"] = answer(p=.94)
+        return answers
+    result = jev_tasks.evidence_partial(value, sources, question="What happened?",
+        run=run, settings=Settings())
+    assert [c["claim_id"] for c in result["claim_audits"]] == [1, 3]
+    assert value == original
+
+
+@pytest.mark.parametrize("fault", ["missing", "extra"])
+def test_partial_evidence_malformed_coverage_cannot_create_implicit_approvals(fault):
+    def run(state, questions):
+        answers = positive(state, questions)
+        if fault == "missing":
+            answers.pop(next(iter(answers)))
+        else:
+            answers["c9_whole"] = answer()
+        return answers
+    with pytest.raises(JevUnavailable):
+        jev_tasks.evidence_partial(draft(), [source(1, "Nell gave Orin a key.")],
+                                  question="What happened?", run=run, settings=Settings())
+
+
 def test_recap_checks_all_sentences_and_the_complete_composition():
     def run(state, questions):
         assert "Nell gave Orin a key." == "".join(state["sentences"])

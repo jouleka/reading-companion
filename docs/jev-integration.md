@@ -11,6 +11,7 @@ JEV_ENABLED=true
 JEV_MODEL=jev-1.13.0
 JEV_SELECTION_ENABLED=true
 JEV_EVIDENCE_ENABLED=true
+JEV_PARTIAL_EVIDENCE_ENABLED=true
 JEV_RECAP_ENABLED=false
 RECAP_PREWARM=true
 RECAP_DISK_CACHE=true
@@ -38,6 +39,17 @@ dependency is required.
    existing budgeted GPT selector/auditor. A rejection is never silently converted to approval.
 4. The independent GPT own-citation reviewer and all deterministic spoiler/citation gates remain
    mandatory, including when Jev returns a falsely confident approval.
+
+`JEV_PARTIAL_EVIDENCE_ENABLED` narrows the GPT evidence audit to unresolved **whole claims** when
+Jev clears some claims but remains uncertain about others. A claim is eligible only when its whole
+composition and every original contextual unit pass against its own original citations. There are
+no individual clause approvals. GPT receives the original unresolved claim/unit IDs, all selected
+completed sources and the full unchanged answer as context, without Jev's verdicts. Other claims
+are context, never proof. The deterministic merge requires exact complementary coverage and valid
+source spans before the full independent own-citation GPT judge. Missing, overwritten, renumbered
+or forged reviews fail closed; unsupported claims remain rejections. Outages, overlarge batches
+and zero confident claims retain the ordinary complete audit. The flag is off by default and on in
+the tested local profile, including its background answer preparation. Cache identity includes it.
 
 The fallback is bounded by existing call/repair limits and durable book spend reservations. Jev
 uses a fixed HTTPS endpoint, a pinned model version, no redirects and no automatic retries. Failed
@@ -109,10 +121,13 @@ Run the usual Ruff and pytest suites, then opt into paid synthetic checks:
 ```powershell
 python scripts/jev_quality_audit.py --run --output quality.json
 python scripts/jev_quality_audit.py --run --heldout --output heldout.json
+python scripts/jev_quality_audit.py --run --partial --output partial.json
+python scripts/jev_quality_audit.py --run --partial --heldout --output partial-heldout.json
 python scripts/jev_reuse_audit.py --run --output reuse.json
 python scripts/jev_reuse_audit.py --run --heldout --output reuse-heldout.json
 python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.env --output prepared.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
+python scripts/jev_integration_audit.py --run --partial --repeat 2 --env-file /path/to/ignored/.env --output partial-paired.json
 python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
 ```
 
@@ -122,7 +137,7 @@ GPT models, actual embeddings and a $1 durable per-book ceiling. It alternates p
 complete claims/citations and call timings, and verifies that a reading reset cannot serve an advanced
 cached recap. It includes a complete multi-fact explanation and separately measures identical cached
 answers. Inspect semantic results manually: term matches and a small sample are not accuracy
-certification. Both scripts delete temporary databases and imported EPUBs when finished.
+certification. Integration scripts delete temporary databases and imported EPUBs when finished.
 
 Current preparation verification: two live reviewed synthetic answers returned in 5–40 ms,
 the full reviewed recap in 10 ms, and five page-position saves in 8–16 ms. Preparation cost $0.0021;
@@ -130,6 +145,13 @@ restart incurred no new provider spend and reset rejected advanced answers. The 
 had 0 false accepts across 45 development and 24 held-out multi-candidate checks, accepting only
 4 of 24 eligible paraphrases. That limited recall is intentional; these small samples do not
 establish production accuracy or a universal 1.5-second guarantee.
+
+Selective-review verification: 1,368 backend tests passed (83 optional/platform skips). Mixed
+development and held-out checks covered 180 claim judgments with 0 unsupported fast approvals;
+Jev cleared 98 of 120 supported claims. All 24 paired API responses passed the expected answer,
+citation-frontier and refusal checks. A mixed three-claim explanation required only one GPT claim
+audit. Overall median complete-response latency remained about 3 seconds in both modes; this is
+a reduction in duplicated audit work, not a measured general speedup or a 1.5-second guarantee.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [models and pricing](https://docs.typesafe.ai/models),

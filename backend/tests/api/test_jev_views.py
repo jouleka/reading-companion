@@ -110,3 +110,75 @@ def test_jev_recap_changes_cache_identity_and_uncertainty_uses_original_review(e
     assert reset.status_code == 200
     zero = api.get(f"/api/books/{bid}/catch-me-up", params={"bookmark": 999})
     assert zero.json()["recap"] is None and zero.json()["as_of_chapter"] == 0
+
+
+@pytest.mark.parametrize("mode", ["pass", "outage", "all_uncertain", "missing", "overwrite",
+                                    "negative", "reject_final"])
+@pytest.mark.parametrize("route", ["ask", "chapter-closeout"])
+def test_partial_evidence_reviews_only_unresolved_claims_but_final_judge_sees_complete_answer(
+    env, monkeypatch, mode, route,
+):
+    api, bid, app, _ = env
+    client, settings = app.state.client, app.state.settings
+    client.provider = "openai-compatible"
+    client.cheap_model = client.large_model = "gpt-6-luna"
+    settings.jev_selection_enabled = False
+    settings.jev_partial_evidence_enabled = True
+    settings.reader_answer_cache = True
+    selected = [1] if route == "chapter-closeout" else []
+    evidence_calls, final_calls = [], []
+    texts = ["Berenice met Aldric at the forge.", "Berenice and Aldric spoke."]
+    def evaluate(state, questions):
+        assert "Corvus" not in json.dumps(state)
+        assert not app.state.store._lock_for(bid).locked()
+        assert all(s["completed_chapter"] <= 2 for c in state["claims"] for s in c["cited_sources"])
+        if mode == "outage":
+            raise JevUnavailable("unavailable")
+        return {key: answer(q["criteria"], p=.7 if key.startswith("c1_") or mode == "all_uncertain"
+                           else .99) for key, q in questions.items()}, {"in": 100, "out": 40}
+    client.jev = SimpleNamespace(model="jev-1.13.0", evaluate=evaluate, close=lambda: None)
+    def complete(system, user, tier="cheap", schema=None):
+        data = (json.loads(user.split("(untrusted JSON data):\n")[1])
+                if "(untrusted JSON data):\n" in user else None)
+        assert "Corvus" not in user
+        if schema.__name__ == "SourceSelection":
+            selected[:] = [next(s["id"] for s in data["candidates"] if "Berenice met Aldric" in s["text"])]
+            return {"source_ids": selected}, {"in": 50, "out": 5}
+        if schema.__name__ == "AskDraft":
+            return {"insufficient_evidence": False,
+                    "claims": [{"text": t, "citation_ids": selected[:]} for t in texts]}, {"in": 50, "out": 20}
+        if schema.__name__ == "AskEvidenceReview":
+            evidence_calls.append(data)
+            expected = [1, 2] if mode in {"outage", "all_uncertain"} else [2]
+            assert [c["claim_id"] for c in data["claims"]] == expected
+            if expected == [2]:
+                assert [c["text"] for c in data["answer_context"]] == texts
+                assert "approved" not in data  # No Jev verdicts feed the independent reviewer.
+            review = _supported_citation_audit(data, selected)
+            if mode == "missing":
+                review["claim_audits"] = []
+            if mode == "overwrite":
+                review["claim_audits"][0]["claim_id"] = 1
+            if mode == "negative":
+                review["claim_audits"][0]["units"][0].update(
+                    supported=False, evidence=[], diagnostic="The assertion lacks proof.")
+            return review, {"in": 50, "out": 20}
+        assert schema.__name__ == "AskVerdict"
+        final_calls.append(data)
+        assert [c["claim"] for c in data["claims"]] == texts
+        assert all([s["id"] for s in c["cited_passages"]] == selected for c in data["claims"])
+        return {"references_future": False,
+                "unsupported_claims": ["Rejected independently"] if mode == "reject_final" else []}, {"in": 50, "out": 5}
+    monkeypatch.setattr(client, "complete", complete)
+    body = {"chapter": 2} if route == "chapter-closeout" else {"question": "What did Berenice and Aldric do?", "bookmark": 999}
+    response = api.post(f"/api/books/{bid}/{route}", json=body)
+    assert response.status_code == (200 if mode in {"pass", "outage", "all_uncertain"} else 502), response.text
+    assert evidence_calls
+    assert bool(final_calls) == (mode in {"pass", "outage", "all_uncertain", "reject_final"})
+    assert "Corvus" not in response.text
+    if response.status_code == 200:
+        assert [c["text"] for c in response.json()["claims"]] == texts
+        assert all(s["ordinal"] <= 2 for s in response.json()["citations"])
+    else:
+        assert api.get(f"/api/books/{bid}/prepared-questions").json()["questions"] == []
+    assert app.state.catalog.get_cost_reservations(bid) == []

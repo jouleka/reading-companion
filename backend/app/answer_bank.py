@@ -20,7 +20,7 @@ def answer_scope(book_id, eff, state, manifest, *, catalog, store, settings, cli
     identity = [eff, state["position_epoch"], snapshot, manifest["atom_set_version"],
                 client.extractor_version("large"), client.extractor_version("cheap"),
                 getattr(client, "base_url", ""), settings.jev_selection_enabled,
-                settings.jev_evidence_enabled,
+                settings.jev_evidence_enabled, settings.jev_partial_evidence_enabled,
                 getattr(getattr(client, "jev", None), "model", None),
                 settings.jev_min_probability, settings.jev_min_confidence,
                 settings.reader_reuse_min_probability, settings.reader_reuse_min_confidence,

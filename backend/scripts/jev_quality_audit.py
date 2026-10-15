@@ -78,16 +78,68 @@ HELDOUT = [
 ]
 
 
+def partial_audit(args, settings, rows):
+    report = {"scope": "Frozen mixed-claim audit; each claim judged against its own original citations.",
+              "model": settings.jev_model, "heldout": args.heldout,
+              "cases": [], "usd": 0.0}
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    client = JevClient(api_key=windows_credential(), model=settings.jev_model)
+    try:
+        for index, (text, supported, unsupported) in enumerate(rows):
+            for reverse in (False, True):
+                claims = [({"text": supported, "citation_ids": [1]}, True),
+                          ({"text": "Zira folded a blue cloth.", "citation_ids": [2]}, True),
+                          ({"text": unsupported, "citation_ids": [1]}, False)]
+                if reverse:
+                    claims.reverse()
+                decisions = {}
+                def run(state, questions):
+                    estimate = len(json.dumps({"state": state, "questions": questions}).encode())+256
+                    if report["usd"]+estimate*.042e-6 > .02:
+                        raise RuntimeError("Synthetic mixed audit spending cap reached")
+                    answers, usage = client.evaluate(state, questions)
+                    decisions.update(answers)
+                    report["usd"] += usage["in"]*.042e-6
+                    return answers
+                started = time.perf_counter()
+                result = jev_tasks.evidence_partial(
+                    {"insufficient_evidence": False, "claims": [c for c, _ in claims]},
+                    [{"id": 1, "ordinal": 1, "title": "Scene", "text": text},
+                     {"id": 2, "ordinal": 1, "title": "Scene", "text": "Zira folded a blue cloth."}],
+                    question="What do these completed passages establish?", run=run, settings=settings)
+                approved = {c["claim_id"] for c in result["claim_audits"]}
+                report["cases"].append({"id": index, "reverse": reverse,
+                    "seconds": time.perf_counter()-started, "approved": sorted(approved),
+                    "claims": [{**c, "supported_gold": gold} for c, gold in claims],
+                    "false_approvals": sum(i in approved and not gold
+                        for i, (_, gold) in enumerate(claims, 1)),
+                    "supported_approved": sum(i in approved and gold
+                        for i, (_, gold) in enumerate(claims, 1)), "decisions": decisions})
+                args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    finally:
+        client.close()
+    report["summary"] = {"cases": len(report["cases"]), "claim_judgments": 3*len(report["cases"]),
+        "false_approvals": sum(c["false_approvals"] for c in report["cases"]),
+        "supported_approved": sum(c["supported_approved"] for c in report["cases"]),
+        "supported_claims": 2*len(report["cases"])}
+    args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(json.dumps(report["summary"]))
+    return int(report["summary"]["false_approvals"] > 0)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--heldout", action="store_true")
+    parser.add_argument("--partial", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required for the small paid synthetic evaluation")
     settings = Settings(_env_file=None)
     rows = HELDOUT if args.heldout else PAIRS
+    if args.partial:
+        return partial_audit(args, settings, rows)
     report = {"scope": "Synthetic frozen-label challenges; not a production accuracy estimate.",
               "model": settings.jev_model, "heldout": args.heldout,
               "fixture_sha256": hashlib.sha256(json.dumps(rows).encode()).hexdigest(),
