@@ -158,6 +158,23 @@ def test_semantic_review_keeps_swapped_citations_distinct_despite_identical_word
     ]
 
 
+def test_semantic_review_continuation_hints_cannot_borrow_another_claims_source():
+    sources = [dict(SOURCES[0], ordinal=3, chapter_key="three", text="The youngest child was Rowan."),
+               dict(SOURCES[1], ordinal=4, chapter_key="four", text="He loved music. This young man was Ren.",
+                    continuity_ids=[1])]
+    draft = AskDraft(insufficient_evidence=False, claims=[
+        {"text": "Ren is Rowan.", "citation_ids": [2, 1]},
+        {"text": "Ren loved music.", "citation_ids": [2]},
+    ])
+    data = _judge_data(ask_judge_prompt(draft, sources))
+    assert data["claims"][0]["narrative_continuations"] == [
+        {"previous_chapter_tail_source_id": 1, "next_chapter_opening_source_id": 2},
+    ]
+    assert [source["id"] for source in data["claims"][0]["cited_passages"]] == [1, 2]
+    assert data["claims"][1]["narrative_continuations"] == []
+    assert [source["id"] for source in data["claims"][1]["cited_passages"]] == [2]
+
+
 @pytest.mark.parametrize("verdict", [
     {"references_future": False},
     {"references_future": "false", "unsupported_claims": []},

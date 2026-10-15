@@ -74,6 +74,9 @@ its text does not change. Incomplete or invalid audits withhold. A valid unsuppo
 bounded regeneration using private, capped criticism. The mandatory independent judge then sees
 exactly the resulting own citations, without that criticism or the audit's approval. These are
 fallible semantic judgments; complete reference coverage alone does not establish factual truth.
+The evidence audit sees the untrusted reader question for contextual bindings, never as proof of a
+premise. Sources are displayed in chapter order. Retained chapter-tail/opening location hints help
+both reviewers inspect narrative continuity; the body text still has to establish the asserted link.
 Name presence and context hints do not establish an alias, speaker, or fact by themselves. Invalid
 selection, missing identity, unsupported facts and unavailable review withhold the answer. Typed
 provider authentication/availability failures stop without purchasing another synthesis attempt.

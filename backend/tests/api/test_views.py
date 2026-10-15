@@ -473,6 +473,8 @@ def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_
         if "claim_audits" in fields:
             evidence_prompts.append(user)
             assert diagnostic not in user
+            if route == "ask":
+                assert data["reader_question"] == "Where did Berenice meet Aldric?"
             if review_mode == "parse_error":
                 raise ValueError("private-canary malformed review")
             if review_mode == "sdk_truncation":

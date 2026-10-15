@@ -378,7 +378,7 @@ def _public_ask_source(source):
 
 
 def _complete_citation_evidence(value, sources, *, catalog, settings, client, book_id,
-                                remember, known_names=()):
+                                remember, known_names=(), question=None):
     """Explicit evidence coverage before the fresh, claim-specific semantic review.
 
     This call runs outside the book lock. It may change only citation IDs, using exact spans of
@@ -387,7 +387,7 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
     draft = AskDraft.model_validate(value)
     if draft.insufficient_evidence or client.provider == "stub":
         return complete_ask_citations(draft, sources, known_names=known_names)
-    review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources)
+    review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
     try:
         audited = budgeted_completion(
             catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
@@ -522,6 +522,7 @@ def ask_the_book(
             completed = _complete_citation_evidence(
                 generated.value, sources, catalog=catalog, settings=settings, client=client,
                 book_id=book_id, known_names=known_names,
+                question=body.question,
                 remember=lambda result: remember(result, provider=client.provider,
                                                   model=client._model_for("cheap")),
             )

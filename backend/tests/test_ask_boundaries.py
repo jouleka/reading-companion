@@ -4,6 +4,7 @@ from collections import Counter
 import pytest
 
 from app.ask import AskRetrievalLimit, retrieve_ask_sources
+from app.ask_context import complete_ask_context
 from app.eval.spoiler_gate.grounding import content_words
 from app.retrieval_passages import normalize_source, passage_windows
 
@@ -69,6 +70,69 @@ def test_deep_lexical_answer_retains_its_zero_overlap_predecessor_despite_wrong_
     assert all(loaded[key] == 1 for key in raw if key != "future")
     assert len(sources) == 24, "context must survive a full pool before lower-relevance fill"
     _assert_exact_pool(sources, raw, ordinals, 93)
+
+
+@pytest.mark.parametrize("direction", ["before", "after"])
+def test_selecting_only_a_lexical_neighbor_completes_back_to_the_anchor_naming_the_defendant(direction):
+    decision = 'The foreman gave the jurors\' answer: "Liable."'
+    protest = "The defendant Aster protested the verdict."
+    text = "soft " * 840 + decision + " still" * 210 + " " + protest + " soft" * 350
+    raw, ordinals = {"decision": text}, {"decision": 1}
+    question = "What verdict was announced for Aster?"
+    sources = retrieve_ask_sources(
+        question, bookmark=1, chapters=_chapters(raw, ordinals), read_chapter=raw.get,
+        semantic_hits=[], atoms=_atoms(raw), candidate_pool=True, known_names=["Aster"],
+    )
+    windows = list(passage_windows(text))
+    index = next(index for index, (_start, _end, passage) in enumerate(windows) if protest in passage)
+    anchor = next(source for source in sources if source["text"] == windows[index][2])
+    neighbor_text = windows[index - 1 if direction == "before" else index + 1][2]
+    neighbor = next(source for source in sources if source["text"] == neighbor_text)
+    assert "Aster" not in neighbor["text"] and "Aster" in anchor["text"]
+    assert anchor["id"] in neighbor["context_ids"] and neighbor["id"] in anchor["context_ids"]
+    if direction == "before":
+        assert decision in neighbor["text"] and protest not in neighbor["text"]
+    completed = complete_ask_context(question, [neighbor], sources, ["Aster"])
+    assert completed[0] == neighbor and anchor in completed
+    assert len(completed) <= 6 and len({source["id"] for source in completed}) == len(completed)
+    assert all(source in sources for source in completed)
+    assert complete_ask_context(question, [neighbor], sources, ["Aster"]) == completed
+    _assert_exact_pool(sources, raw, ordinals, 1)
+
+
+def test_first_person_semantic_seed_adds_retained_opening_before_remote_attribution():
+    literal = "I kept the coins sewn inside a cloth pouch at my throat. "
+    quotient, remainder = divmod(1250 - len(literal), 5)
+    padding = "hush " * quotient
+    if remainder:
+        padding = "hush " * (quotient - 1) + "hush" + "x" * remainder + " "
+    prefix = literal + padding
+    assert len(prefix) == 1250
+    attribution = "Aster said the account was his own."
+    text = prefix + "I told the story. " + "hush " * 1000 + attribution + " hush" * 400
+    windows = list(passage_windows(text))
+    seed = windows[1][2]
+    assert seed.startswith("I ") and literal.strip() not in seed
+    raw, ordinals = {"account": text}, {"account": 1}
+    question = "Where did Aster keep the coins?"
+    sources = retrieve_ask_sources(
+        question, bookmark=1, chapters=_chapters(raw, ordinals), read_chapter=raw.get,
+        semantic_hits=[(.9, seed, 1, "account")], atoms=_atoms(raw), candidate_pool=True,
+        known_names=["Aster"],
+    )
+    by_id = {source["id"]: source for source in sources}
+    direct = next(source for source in sources if source["text"] == seed)
+    opening = next(source for source in sources if source["text"] == windows[0][2])
+    remote_id = next(source_id for source_id in direct["context_ids"]
+                     if attribution in by_id[source_id]["text"])
+    assert opening["id"] in direct["context_ids"] and direct["id"] in opening["context_ids"]
+    assert direct["context_ids"].index(opening["id"]) < direct["context_ids"].index(remote_id)
+    completed = complete_ask_context(question, [direct], sources, ["Aster"])
+    ids = [source["id"] for source in completed]
+    assert opening in completed and ids.index(opening["id"]) < ids.index(remote_id)
+    assert literal.strip() in opening["text"]
+    assert len(completed) <= 6 and len(set(ids)) == len(ids)
+    _assert_exact_pool(sources, raw, ordinals, 1)
 
 
 def test_chapter_opening_links_only_to_an_exact_retained_immediately_prior_tail_without_rereads():
