@@ -400,9 +400,14 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
         # The budget layer already retains their conservative failed-call charge.
         raise AskEvidenceError(repairable=False) from None
     remember(audited)
-    return AskDraft.model_validate(complete_evidence_citations(
+    reviewed = AskDraft.model_validate(complete_evidence_citations(
         draft.model_dump(mode="json"), sources, audited.value,
     ))
+    # A positive reviewer can mistake an inline chapter label for a speaker attribution.
+    # Add only missing named-body context from this same selected pool, within the existing
+    # three-citation cap. Name presence is a necessary clue, never truth clearance: all normal
+    # deterministic gates and the fresh own-citation NLI still review the complete result.
+    return complete_ask_citations(reviewed, sources, known_names=known_names, include_context=False)
 
 
 @router.post("/ask")

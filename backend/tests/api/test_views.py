@@ -438,6 +438,41 @@ def _supported_citation_audit(data, ids):
         for claim in data["claims"]]}
 
 
+def test_positive_citation_audit_adds_missing_body_name_without_using_optional_context_slots(monkeypatch):
+    from app.api import views
+
+    title = "Chapter VII. Mara's Secret"
+    sources = [
+        {"id":1, "ordinal":2, "chapter_key":"two", "href":"two.xhtml", "title":title,
+         "source_offset":0, "context_ids":[3], "text":title + ' "I kept seven coins," he began.'},
+        {"id":4, "ordinal":2, "chapter_key":"two", "href":"two.xhtml", "title":title,
+         "source_offset":1200, "text":'"I put them in a tin."'},
+        {"id":3, "ordinal":2, "chapter_key":"two", "href":"two.xhtml", "title":title,
+         "source_offset":2000, "text":"The room was quiet."},
+        {"id":2, "ordinal":2, "chapter_key":"two", "href":"two.xhtml", "title":title,
+         "source_offset":3000, "text":'"Those seven coins were mine," said Mara.'},
+    ]
+    value = {"insufficient_evidence":False, "claims":[{
+        "text":"Mara kept seven coins in a tin.", "citation_ids":[1, 4],
+    }]}
+    remembered = []
+
+    def positive_but_incomplete(_catalog, _settings, _client, _book, **request):
+        assert request["phase"] == "citation-review"
+        data = json.loads(request["user"].split("(untrusted JSON data):\n", 1)[1])
+        assert "".join(p["text"] for p in data["sources"][0]["passages"]) == sources[0]["text"]
+        return SimpleNamespace(value=_supported_citation_audit(data, [1, 4]))
+
+    monkeypatch.setattr(views, "budgeted_completion", positive_but_incomplete)
+    draft = views._complete_citation_evidence(
+        value, sources, catalog=None, settings=None, client=SimpleNamespace(provider="openai-compatible"),
+        book_id="fixture", remember=remembered.append, question="What did Mara keep?",
+    )
+    assert draft.claims[0].citation_ids == [1, 4, 2]
+    assert draft.claims[0].text == value["claims"][0]["text"] and len(remembered) == 1
+    assert sources[0]["text"].startswith(title)
+
+
 @pytest.mark.parametrize("review_mode", [
     "pass", "repair", "missing_audit", "foreign_source", "parse_error", "sdk_truncation",
     "provider_auth", "reject_in_final_judge",

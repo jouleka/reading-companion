@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from app.ask_evidence import source_name_text
 from app.ask_selection import MAX_SELECTED_SOURCES, MAX_SOURCE_CANDIDATES, SourceSelectionError, validate_selection
 from app.eval.spoiler_gate.grounding import STOPWORDS
 from app.ingest.extraction.resolve import ROLE_NOUNS
@@ -133,7 +134,7 @@ def complete_ask_context(question, selected, candidates, known_names=(), *, allo
     result, available, context = _validated_pool(selected, candidates)
     if not available:
         return []
-    terms = {source_id: set(word_tokens(source["text"])) for source_id, source in available.items()}
+    terms = {source_id: set(word_tokens(source_name_text(source))) for source_id, source in available.items()}
     if not result:
         result = _named_fallback(question, known_names, available, terms)
         if not result:

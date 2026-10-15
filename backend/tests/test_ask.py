@@ -18,6 +18,7 @@ from app.ask import (
     draft_text,
     judge_ask_draft,
     retrieve_ask_sources,
+    source_facts,
     validate_ask_draft,
 )
 from app.eval.spoiler_gate.judge import JudgeUnavailable
@@ -199,6 +200,55 @@ def test_same_chapter_generation_and_review_order_does_not_add_an_uncited_interm
 
     verdict, _usage = judge_ask_draft(None, draft, sources, complete=reject_missing_binding)
     assert verdict["unsupported_claims"] == [draft.claims[0].text]
+
+
+def test_inline_heading_cannot_supply_named_speaker_but_existing_body_context_can():
+    title = "Chapter VII. Mara's Secret"
+    opening = dict(SOURCES[0], title=title, source_offset=0,
+                   text=title + ' "I kept seven coins in a tin," he began.')
+    speaker = dict(SOURCES[1], ordinal=opening["ordinal"], chapter_key=opening["chapter_key"],
+                   source_offset=2000, text='"I kept the seven coins," said Mara.')
+    sources = [opening, speaker]
+    draft = AskDraft(insufficient_evidence=False, claims=[
+        {"text":"Mara kept seven coins in a tin.", "citation_ids":[opening["id"]]},
+    ])
+    with pytest.raises(AskSafetyError, match="named identity"):
+        validate_ask_draft(draft, sources, defer_lexical_to_judge=True)
+    before = [dict(source) for source in sources]
+    completed = complete_ask_citations(draft, sources)
+    assert completed.claims[0].citation_ids == [opening["id"], speaker["id"]]
+    assert validate_ask_draft(completed, sources, defer_lexical_to_judge=True) == completed
+    own = _judge_data(ask_judge_prompt(draft, sources))["claims"][0]["cited_passages"]
+    assert own[0]["text"] == opening["text"]  # Necessary name clues never rewrite semantic proof.
+    assert source_facts([opening])["chapter_summaries"] == [opening["text"]]
+    assert sources == before
+
+
+def test_post_audit_name_completion_keeps_room_for_body_attribution_before_optional_neighbors():
+    title = "Chapter VII. Mara's Secret"
+    opening = dict(SOURCES[0], id=1, title=title, source_offset=0, context_ids=[3],
+                   text=title + ' "I kept seven coins," he began.')
+    tin = dict(SOURCES[1], id=4, text='"I put them in a tin."')
+    neighbor = dict(SOURCES[1], id=3, text="The room was quiet.")
+    speaker = dict(SOURCES[1], id=2, text='"Those seven coins were mine," said Mara.')
+    sources = [opening, tin, neighbor, speaker]
+    draft = AskDraft(insufficient_evidence=False, claims=[
+        {"text":"Mara kept seven coins in a tin.", "citation_ids":[1, 4]},
+    ])
+    completed = complete_ask_citations(draft, sources, include_context=False)
+    assert completed.claims[0].citation_ids == [1, 4, 2]
+    assert completed.claims[0].text == draft.claims[0].text
+    assert validate_ask_draft(completed, sources, defer_lexical_to_judge=True) == completed
+    with pytest.raises(AskSafetyError, match="context policy"):
+        complete_ask_citations(draft, sources, include_context="false")
+
+
+def test_title_prefix_name_clues_cannot_remove_negation_from_generation_review_or_source_facts():
+    source = dict(SOURCES[0], title="No", source_offset=0, text="No one saw Mara.")
+    draft = AskDraft(insufficient_evidence=False, claims=[{"text":"Someone saw Mara.", "citation_ids":[1]}])
+    assert source["text"] in ask_prompt("Who saw Mara?", [source])
+    assert _judge_data(ask_judge_prompt(draft, [source]))["claims"][0]["cited_passages"][0]["text"] == source["text"]
+    assert source_facts([source])["chapter_summaries"] == [source["text"]]
 
 
 def test_audited_lexical_deferral_is_not_truth_clearance_and_keeps_names_qualifications_and_shape():

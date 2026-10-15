@@ -142,6 +142,24 @@ def source_order(source) -> tuple[int, int]:
     return source["ordinal"], offset
 
 
+def source_name_text(source) -> str:
+    """Conservatively exclude a matching initial title from necessary name-coverage clues.
+
+    Matching a prefix is NOT structural proof of a heading. This projection must never be
+    used as book evidence, in semantic prompts or in source facts: removing an initial 'No'
+    could reverse a passage's meaning. A missing name clue may only require extra original
+    context or reject a draft. All semantic reviews still read the exact original strings.
+    """
+    text = source["text"]
+    title = " ".join(str(source.get("title", "")).split())
+    offset = source.get("source_offset")
+    if type(offset) is int and offset == 0 and title and text.startswith(title):
+        rest = text[len(title):]
+        if not rest or rest[0].isspace():
+            return rest.lstrip()
+    return text
+
+
 def narrative_continuations(sources) -> list[dict]:
     """Project only retained previous-chapter location hints; never infer a factual relation."""
     available = {source["id"]: source for source in sources}

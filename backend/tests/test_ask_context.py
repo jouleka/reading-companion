@@ -33,6 +33,20 @@ def test_context_hints_are_added_even_if_name_already_occurs_in_selected_text():
     assert complete_ask_context("What did Rowan hear?", [answer], [answer, speaker], ["Rowan"]) == [answer, speaker]
 
 
+def test_inline_heading_does_not_hide_the_need_to_retrieve_named_body_context():
+    title = "Chapter III. Rowan"
+    answer = source(1, title + " I kept the ledger.", title=title, source_offset=0)
+    speaker = source(2, "Rowan gave his account of the ledger.", source_offset=1200)
+    assert complete_ask_context("What did Rowan keep?", [answer], [answer, speaker], ["Rowan"]) == [answer, speaker]
+
+
+def test_inline_heading_names_cannot_satisfy_the_named_fallback_prose_requirement():
+    title = "Chapter III. Rowan and Mara"
+    opening = source(1, title + " The room was empty.", title=title, source_offset=0)
+    assert complete_ask_context("What did Rowan tell Mara?", [], [opening],
+                                allow_named_fallback=True) == []
+
+
 def test_explicit_previous_chapter_continuity_preserves_exact_body_text_and_bounds():
     ending = source(12, "The younger son, Rowan, now entered the garden.", ordinal=2, chapter="two")
     opening = source(7, "He was called Wren by his brothers.", ordinal=3, chapter="three", continuity_ids=[12])

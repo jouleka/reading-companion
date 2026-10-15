@@ -10,6 +10,7 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    source_name_text,
 )
 from app.evidence_text import field_segments, source_passages
 
@@ -159,6 +160,43 @@ def test_review_rejects_malformed_source_order_locations_without_paid_repair(off
     with pytest.raises(AskEvidenceError) as caught:
         _payload(_draft("Mara arrived."), sources)
     assert not caught.value.repairable
+
+
+def test_title_prefix_is_excluded_only_from_name_clues_and_original_evidence_is_unchanged():
+    title = "Chapter VII. Mara's Secret"
+    opening = dict(_source(1, title + ' "I kept seven coins," he began.'),
+                   title=title, source_offset=0)
+    speaker = dict(_source(2, '"I kept seven coins," said Mara.'), source_offset=2000)
+    sources = [opening, speaker]
+    before = copy.deepcopy(sources)
+    payload = _payload(_draft("Mara kept seven coins."), sources)
+    assert payload["sources"][0]["chapter_title"] == title
+    body = "".join(part["text"] for part in payload["sources"][0]["passages"])
+    assert body == opening["text"]
+    assert source_name_text(opening) == '"I kept seven coins," he began.'
+    assert "Mara" in "".join(part["text"] for part in payload["sources"][1]["passages"])
+    assert sources == before
+
+
+@pytest.mark.parametrize("offset", [None, 10])
+def test_name_projection_does_not_guess_an_unknown_or_midchapter_heading_boundary(offset):
+    source = dict(_source(1, "Mara kept the record."), title="Mara")
+    if offset is not None:
+        source["source_offset"] = offset
+    assert source_name_text(source) == source["text"]
+
+
+def test_name_projection_requires_complete_heading_words_and_preserves_following_prose_exactly():
+    source = dict(_source(1, "Marauder answered."), title="Mara", source_offset=0)
+    assert source_name_text(source) == source["text"]
+    source.update(title="Chapter VII. Mara", text='Chapter VII. Mara  “I spoke,” he said.  End.')
+    assert source_name_text(source) == '“I spoke,” he said.  End.'
+
+
+def test_title_no_cannot_turn_a_negative_original_passage_into_affirmative_evidence():
+    source = dict(_source(1, "No one saw Mara."), title="No", source_offset=0)
+    payload = _payload(_draft("Someone saw Mara."), [source])
+    assert "".join(part["text"] for part in payload["sources"][0]["passages"]) == "No one saw Mara."
 
 
 @pytest.mark.parametrize("references", [[True], [1, 1], "1", [3]])

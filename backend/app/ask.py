@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.ask_evidence import narrative_continuations, source_order
+from app.ask_evidence import narrative_continuations, source_name_text, source_order
 from app.ask_grounding import preserves_modal_qualification, semantic_review_eligible
 from app.cost.limits import CostCeilingExceeded
 from app.eval.spoiler_gate.grounding import STOPWORDS, content_words, ground_recap
@@ -694,13 +694,15 @@ def _claim_names(text, parts):
             if normalize_text(word.text) in parts}
 
 
-def complete_ask_citations(draft, sources, *, known_names=()):
+def complete_ask_citations(draft, sources, *, known_names=(), include_context=True):
     """Attach existing selected context explicitly before the normal independent safety review.
 
     No claims change, no unselected evidence is introduced, and at most three IDs remain per claim.
     Presence of a name is only a necessary clue. The same semantic judge must establish the whole
     claim from the resulting citations; the returned answer uses precisely those reviewed IDs.
     """
+    if type(include_context) is not bool:
+        raise AskSafetyError("invalid citation context policy")
     value = draft if isinstance(draft, AskDraft) else AskDraft.model_validate(draft)
     available = {int(source["id"]): source for source in sources}
     parts = _citation_name_parts(sources, known_names)
@@ -711,7 +713,7 @@ def complete_ask_citations(draft, sources, *, known_names=()):
             raise AskSafetyError("answer cited a passage outside the supplied set")
         contexts = [context for source_id in ids for key in ("context_ids", "continuity_ids")
                     for context in available[source_id].get(key, [])
-                    if context in available and context not in ids]
+                    if context in available and context not in ids] if include_context else []
         for context in contexts:
             if len(ids) >= 3:
                 break
@@ -719,12 +721,12 @@ def complete_ask_citations(draft, sources, *, known_names=()):
                 ids.append(context)
         named = _claim_names(claim.text, parts)
         while len(ids) < 3:
-            seen = set(word_tokens(" ".join(str(available[source_id]["text"]) for source_id in ids)))
+            seen = set(word_tokens(" ".join(source_name_text(available[source_id]) for source_id in ids)))
             missing = named - seen
             if not missing:
                 break
             chapters = {available[source_id]["chapter_key"] for source_id in ids}
-            options = [(len(missing & set(word_tokens(str(source["text"])))),
+            options = [(len(missing & set(word_tokens(source_name_text(source)))),
                         source["chapter_key"] in chapters, -index, int(source["id"]))
                        for index, source in enumerate(sources) if int(source["id"]) not in ids]
             if not options or not max(options)[0]:
@@ -763,7 +765,7 @@ def validate_ask_draft(
         except KeyError as exc:
             raise AskSafetyError("answer cited a passage outside the supplied set") from exc
         named = _claim_names(claim.text, visible_name_parts)
-        cited_words = set(word_tokens(" ".join(str(source["text"]) for source in cited)))
+        cited_words = set(word_tokens(" ".join(source_name_text(source) for source in cited)))
         missing = sorted(named - cited_words)
         if missing:
             raise AskSafetyError(
