@@ -39,8 +39,9 @@ def build_state(settings: Settings) -> dict:
         reader = copy(client)
         reader._oai = client._oai.with_options(max_retries=0)
         reader.service_tier = "fast"
-    from app.lifecycle_cache import RecapRegistry
-    reader.answers = RecapRegistry(max_entries=128, max_failures=1, max_flights=8)
+    from app.answer_bank import AnswerBank
+    reader.answers = AnswerBank(persist_path=(os.path.join(settings.data_dir, "reviewed-answers-v2.json")
+                                             if settings.reader_answer_cache else None))
     catalog = Catalog(os.path.join(settings.data_dir, "catalog.db"),
                       schema_version_default=migrations.CURRENT_VERSION)
     return {

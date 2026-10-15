@@ -15,6 +15,8 @@ JEV_RECAP_ENABLED=false
 RECAP_PREWARM=true
 RECAP_DISK_CACHE=true
 READER_ANSWER_CACHE=true
+READER_PREPARE_ENABLED=true
+READER_REUSE_ENABLED=true
 READER_FAST_MODE=false
 ```
 
@@ -50,20 +52,41 @@ their existing clients. Fast tokens cost twice Standard; reservations and displa
 that premium. The flag requires native GPT-6 Luna or GPT-6.1 Sol for both generative roles.
 It remains off in the local profile: the higher-priced tier did not meet the complete-answer target.
 
-`READER_ANSWER_CACHE` reuses complete cleared answers in a bounded 128-entry process cache. Keys
+`READER_ANSWER_CACHE` reuses complete cleared answers in a bounded 128-entry cache, checkpointed
+in one atomic file capped at 2 MiB. Shape, checksum and full identity must match after restart. Keys
 include the question, effective frontier, reset epoch, incarnation, validity snapshot, model/endpoint
 and review configuration. A hit has zero new provider cost. Refusals and rejected drafts are not
 cached. Cold explanations still require sequential generation and independent review: **there is
 no verified 1.5-second guarantee for complete fresh answers**. Jev selects/checks; it does not write
 explanations. No quote-only response or first-token timing substitutes for a complete answer.
 
+`READER_REUSE_ENABLED` asks Jev whether a new question requests the same facts as an original
+reviewed question **and** whether its unchanged complete answer covers every requested detail.
+Both independent decisions require probability >=0.99 and confidence >=0.90. Up to four candidates
+are shortlisted within the exact same source/frontier/model scope; word overlap never approves a
+match. Ambiguous pronouns, new premises, extra questions and uncertain results fall back to normal
+Ask. Aliases retain the original reviewed question, preventing chains of paraphrases from drifting.
+The lookup has a 0.65-second provider timeout and makes no retries. Exact hits need no Jev call.
+
+`READER_PREPARE_ENABLED` prepares up to three likely chapter questions after the recap, using only
+the most recent completed chapter's facts. Each answer uses the normal retrieval, evidence and
+independent GPT review route. Only cleared answers appear in the existing Ask suggestions through
+the read-only `/prepared-questions` endpoint; no model call is triggered by listing suggestions.
+The preparation admission cap is $0.25 per book, including pending reservations and failed calls,
+in addition to the ordinary book cap. Scope attempts are persisted to avoid repeated spending on
+unchanged chapters after scrolling or restarting. These three optional reader flags remain off
+by default; the local Jev profile enables them together.
+
 ## Recaps
 
 `RECAP_PREWARM` prepares the normal guarded recap after successful durable ingestion. One background
 consumer and an eight-book queue bound work. Startup also schedules up to eight existing books.
-Preparation shares read access with answers; reset, position updates and deletion wait exclusively.
-It rechecks the catalog incarnation and recomputes the authoritative
-frontier. It never trusts a queued bookmark, reads ahead, changes the reading position, or bypasses
+Page reports notify this same coalesced scheduler; repeated reports within a completed chapter
+do not launch more model calls. The scheduler takes a short snapshot lease and releases it before
+provider IO, allowing position saves, resets and deletion to proceed while preparing. It validates
+incarnation, reset epoch and frontier atomically before paid reservations, and validates the full
+source snapshot before publishing. A source correction schedules a fresh snapshot, including when
+it arrives during an active job. It never trusts a queued bookmark, reads ahead, changes the reading position, or bypasses
 review. Existing snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs
 still apply. Queued work is discarded at shutdown; active work finishes before stores close.
 
@@ -86,6 +109,9 @@ Run the usual Ruff and pytest suites, then opt into paid synthetic checks:
 ```powershell
 python scripts/jev_quality_audit.py --run --output quality.json
 python scripts/jev_quality_audit.py --run --heldout --output heldout.json
+python scripts/jev_reuse_audit.py --run --output reuse.json
+python scripts/jev_reuse_audit.py --run --heldout --output reuse-heldout.json
+python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.env --output prepared.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
 python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
 ```
@@ -97,6 +123,13 @@ complete claims/citations and call timings, and verifies that a reading reset ca
 cached recap. It includes a complete multi-fact explanation and separately measures identical cached
 answers. Inspect semantic results manually: term matches and a small sample are not accuracy
 certification. Both scripts delete temporary databases and imported EPUBs when finished.
+
+Current preparation verification: two live reviewed synthetic answers returned in 5–40 ms,
+the full reviewed recap in 10 ms, and five page-position saves in 8–16 ms. Preparation cost $0.0021;
+restart incurred no new provider spend and reset rejected advanced answers. The direct reuse sample
+had 0 false accepts across 45 development and 24 held-out multi-candidate checks, accepting only
+4 of 24 eligible paraphrases. That limited recall is intentional; these small samples do not
+establish production accuracy or a universal 1.5-second guarantee.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [models and pricing](https://docs.typesafe.ai/models),

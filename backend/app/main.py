@@ -407,7 +407,7 @@ def create_app(
                               if settings.recap_disk_cache else None),
             )
             warmer = None
-            if settings.recap_prewarm:
+            if settings.recap_prewarm or settings.reader_prepare_enabled:
                 from app.recap_warm import RecapPrewarmer
                 warmer = RecapPrewarmer(app)
                 app.state.worker.on_complete = warmer.notify

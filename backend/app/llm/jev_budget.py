@@ -4,7 +4,7 @@ import json
 from app.cost.limits import BudgetedResult, CostCeilingExceeded, usd_of
 
 
-def budgeted_jev(catalog, settings, jev, book_id, *, phase, state, questions):
+def budgeted_jev(catalog, settings, jev, book_id, *, phase, state, questions, timeout_seconds=None):
     # UTF-8 bytes deliberately overestimate tokens, just as the completion budget does.
     estimated = len(json.dumps({"model": jev.model, "state": state, "questions": questions},
                                ensure_ascii=False).encode("utf-8")) + 256
@@ -24,7 +24,8 @@ def budgeted_jev(catalog, settings, jev, book_id, *, phase, state, questions):
     except RuntimeError as exc:
         raise CostCeilingExceeded(str(exc)) from exc
     try:
-        answers, usage = jev.evaluate(state, questions)
+        options = {"timeout_seconds": timeout_seconds} if timeout_seconds is not None else {}
+        answers, usage = jev.evaluate(state, questions, **options)
     except Exception:
         catalog.settle_cost(book_id, reservation, phase=f"{phase}-failed-reserved")
         raise

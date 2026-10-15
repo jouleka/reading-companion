@@ -61,12 +61,13 @@ class JevClient:
     def close(self):
         self._http.close()
 
-    def evaluate(self, state, questions):
+    def evaluate(self, state, questions, *, timeout_seconds=None):
         if not questions or len(questions) > 24:
             raise JevUnavailable("Jev question batch is outside the bounded contract")
         body = {"model": self.model, "state": state, "questions": questions}
         try:
-            with self._http.stream("POST", "/v1/systemone", json=body) as response:
+            options = {"timeout": timeout_seconds} if timeout_seconds is not None else {}
+            with self._http.stream("POST", "/v1/systemone", json=body, **options) as response:
                 if response.status_code != 200:
                     raise ValueError("provider status")
                 chunks, size = [], 0

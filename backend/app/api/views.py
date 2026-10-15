@@ -35,6 +35,7 @@ from app.ask import (
     source_facts,
     validate_ask_draft,
 )
+from app.answer_bank import answer_scope, valid_answer
 from app.ask_context import complete_ask_context
 from app.ask_evidence import (
     ASK_EVIDENCE_SYSTEM,
@@ -234,6 +235,23 @@ def graph(book_id: str, bookmark: int | None = _BM, catalog=Depends(get_catalog)
     return {"as_of_chapter": eff, "characters": chars, "relationships": rels}
 
 
+@router.get("/prepared-questions")
+def prepared_questions(book_id: str, bookmark: int | None = _BM,
+                       catalog=Depends(get_catalog), store=Depends(get_store),
+                       settings=Depends(get_settings), client=Depends(get_reader_client),
+                       worker=Depends(get_worker)):
+    """Read-only: offer questions only when their complete current answer has cleared review."""
+    eff, state, manifest = _effective(book_id, bookmark, catalog, store, settings, worker)
+    questions = []
+    bank = getattr(client, "answers", None)
+    if eff > 0 and settings.reader_answer_cache and bank is not None:
+        scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                             settings=settings, client=client)
+        questions = [c["reviewed_question"] for c in bank.candidates(scope, "completed chapter", limit=3)
+                     if valid_answer(c["payload"]) and c["payload"]["as_of_chapter"] == eff]
+    return {"as_of_chapter": eff, "questions": questions}
+
+
 @router.get("/memory-corrections")
 def memory_corrections(book_id: str, bookmark: int | None = _BM,
                        catalog=Depends(get_catalog), store=Depends(get_store),
@@ -248,7 +266,7 @@ def memory_corrections(book_id: str, bookmark: int | None = _BM,
 
 
 @router.post("/memory-corrections")
-def correct_memory(book_id: str, body: EntityCorrectionRequest,
+def correct_memory(book_id: str, body: EntityCorrectionRequest, request: Request,
                    catalog=Depends(get_catalog), store=Depends(get_store),
                    settings=Depends(get_settings), worker=Depends(get_worker)):
     """Publish a one-for-one identity correction at the reader's exact current frontier."""
@@ -268,6 +286,9 @@ def correct_memory(book_id: str, body: EntityCorrectionRequest,
             items = mem.entity_correction_history(eff)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+    warmer = request.app.state.recap_warmer
+    if warmer is not None:
+        warmer.notify(book_id, catalog.get_book(book_id)["incarnation"], force=True)
     return {"as_of_chapter": eff, **result, "items": items}
 
 
@@ -468,19 +489,36 @@ def ask_the_book(
     answer_cache = getattr(client, "answers", None) if settings.reader_answer_cache else None
     answer_key = None
     if answer_cache is not None:
-        with store.book(book_id) as mem:
-            snapshot = validity_snapshot(mem, eff)
-        answer_key = (book_id, catalog.get_book(book_id)["incarnation"], str((
-            eff, state["position_epoch"], snapshot, manifest["atom_set_version"], body.question,
-            client.extractor_version("large"), client.extractor_version("cheap"),
-            getattr(client, "base_url", ""), settings.jev_selection_enabled, settings.jev_evidence_enabled,
-            getattr(getattr(client, "jev", None), "model", None),
-            settings.jev_min_probability, settings.jev_min_confidence,
-            "reviewed-answer-v1",
-        )))
+        scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                             settings=settings, client=client)
+        answer_key = (*scope, body.question)
         cached = answer_cache.get(answer_key)
-        if cached is not None:
+        if cached is not None and cached.get("as_of_chapter") == eff and valid_answer(cached):
             return {**deepcopy(cached), "cached": True, "cost": _ask_cost_payload([])}
+        if (settings.reader_reuse_enabled and not getattr(client, "preparing", False)
+                and getattr(client, "jev", None) is not None):
+            candidates = answer_cache.candidates(scope, body.question)
+            candidates = [c for c in candidates if c["payload"]["as_of_chapter"] == eff
+                          and valid_answer(c["payload"])]
+            if candidates:
+                def reuse_run(data, questions):
+                    result = budgeted_jev(catalog, settings, client.jev, book_id,
+                                          phase="jev-answer-reuse", state=data, questions=questions,
+                                          timeout_seconds=settings.reader_reuse_timeout_seconds)
+                    remember(result, provider="typesafe", model=client.jev.model)
+                    return result.value
+                try:
+                    matched = jev_tasks.reuse_answer(body.question, candidates, run=reuse_run,
+                                                     settings=settings)
+                    payload = {**matched["payload"], "cached": True,
+                               "cost": _ask_cost_payload(calls)}
+                    answer_cache.set(answer_key, payload,
+                                     reviewed_question=matched["reviewed_question"])
+                    return payload
+                except JevUnavailable:
+                    pass
+                except CostCeilingExceeded as exc:
+                    raise HTTPException(429, "book cost ceiling reached") from exc
 
     def finish(payload):
         if answer_cache is not None and not payload["insufficient_evidence"]:

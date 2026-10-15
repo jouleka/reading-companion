@@ -8,8 +8,8 @@ import {
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { axeAA } from "../test-a11y";
 
-const mocks = vi.hoisted(() => ({ askBook: vi.fn() }));
-vi.mock("../api", () => ({ api: { askBook: mocks.askBook } }));
+const mocks = vi.hoisted(() => ({ askBook: vi.fn(), preparedQuestions: vi.fn() }));
+vi.mock("../api", () => ({ api: mocks }));
 
 import { AskTheBook } from "./AskTheBook";
 
@@ -46,9 +46,31 @@ const answer = {
 
 beforeEach(() => {
   mocks.askBook.mockReset();
+  mocks.preparedQuestions.mockReset().mockResolvedValue({ as_of_chapter: 2, questions: [] });
 });
 
 describe("AskTheBook", () => {
+  test("offers current reviewed questions and submits the exact question", async () => {
+    const question = "Where did Berenice meet Aldric?";
+    mocks.preparedQuestions.mockResolvedValue({ as_of_chapter: 2, questions: [question] });
+    mocks.askBook.mockResolvedValue(answer);
+    render(<AskTheBook bookId="b" bookmark={2} onNavigate={() => {}} onClose={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: question }));
+    fireEvent.click(screen.getByRole("button", { name: /ask with citations/i }));
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    expect(mocks.askBook).toHaveBeenCalledWith("b", question, 2);
+  });
+
+  test("discards late prepared questions after rewinding or switching books", async () => {
+    let finish: (value: { as_of_chapter: number; questions: string[] }) => void = () => {};
+    mocks.preparedQuestions.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const { rerender } = render(<AskTheBook bookId="b" bookmark={2} onNavigate={() => {}} onClose={() => {}} />);
+    rerender(<AskTheBook bookId="other" bookmark={1} onNavigate={() => {}} onClose={() => {}} />);
+    await act(async () => { finish({ as_of_chapter: 2, questions: ["Future identity?"] }); });
+    expect(screen.queryByText("Future identity?")).toBeNull();
+    expect(screen.getByRole("button", { name: "What should I remember so far?" })).toBeTruthy();
+  });
+
   test("renders cited claims, measured provider cost, and navigates a citation", async () => {
     mocks.askBook.mockResolvedValue(answer);
     const onNavigate = vi.fn();
