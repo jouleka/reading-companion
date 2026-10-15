@@ -57,8 +57,7 @@ from app.ingest.extraction.validation import (
 from app.ingest.manifest import load_manifest
 from app.llm import versioning
 
-_EMBED_CHARS = 2000                              # pinned to the ingest_chapter call below — the memo
-_RESOLVE_THRESHOLD = 0.82                        # is warmed with EXACTLY the texts the lock phase uses
+_RESOLVE_THRESHOLD = 0.82
 _MALFORMED_RETRY_DELAYS = (0.25,)                # initial attempt + one bounded corrective retry
 _GROUNDING_REPAIR_INSTRUCTION = (
     "Generate a fresh complete extraction. A previous candidate failed chapter grounding. "
@@ -588,7 +587,7 @@ class IngestWorker:
                     resolve_embed=memo if real_embed else None,
                     identity=identity,
                     threshold=_RESOLVE_THRESHOLD,
-                    embed_chars=_EMBED_CHARS,
+                    embedding_input_limit=self._settings.cost_max_input_tokens_per_call,
                     clearance=clearance,
                 )
             except Exception:
@@ -627,7 +626,8 @@ class IngestWorker:
                     prepared = prepare_chapter(
                         ch, extraction, self._client, roster=stale_roster, usage=usage, usd=usd,
                         embed_fn=memo, resolve_embed=memo if real_embed else None, identity=identity,
-                        threshold=_RESOLVE_THRESHOLD, embed_chars=_EMBED_CHARS,
+                        threshold=_RESOLVE_THRESHOLD,
+                        embedding_input_limit=self._settings.cost_max_input_tokens_per_call,
                         clearance=clearance,
                     )
                     memo.seal()

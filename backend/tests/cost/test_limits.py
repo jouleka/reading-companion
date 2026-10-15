@@ -117,7 +117,7 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
         EXTRACT_SYSTEM, extract_user_prompt("Huge", roster, ""), Extraction
     )
     settings = _settings(
-        cost_max_input_tokens_per_call=overhead + 300,
+        cost_max_input_tokens_per_call=overhead + 8000,
         cost_max_input_tokens_per_book=100_000,
         cost_max_output_tokens_per_book=100_000,
     )
@@ -130,7 +130,7 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
         return original(system, user, tier=tier, schema=schema)
 
     client.complete = capture
-    text = ("Aldric crossed the long valley and met Berenice.\n\n" * 50)
+    text = ("Aldric crossed the long valley and met Berenice.\n\n" * 200)
     extraction, usage, _usd, reservations, clearance = worker._complete_extraction(
         "b", 1, "Huge", roster, text
     )
@@ -140,8 +140,9 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
     assert extraction["chapter_summary"] and usage["in"] > 0
     assert len(reservations) == len(sent)               # only extraction awaits the LIT-7 receipt
     clearance.assert_matches(text, extraction)
-    reviewed_sources = [json.loads(prompt.split("(untrusted JSON data):\n", 1)[1])[
-        "current_chapter_text"] for schema, prompt in prompts if schema is not Extraction]
+    reviewed_sources = ["".join(passage["text"] for passage in json.loads(
+        prompt.split("(untrusted JSON data):\n", 1)[1])["source_passages"])
+        for schema, prompt in prompts if schema is not Extraction]
     assert reviewed_sources == sent
     reviews = catalog.get_costs("b")
     assert len(reviews) == len(sent)

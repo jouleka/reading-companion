@@ -46,6 +46,7 @@ _DEFAULT_MODELS = {
     "stub": {"cheap": "stub-cheap", "large": "stub-large"},
 }
 _OPENAI_DEFAULT_BASE = "https://api.openai.com/v1"
+_LOW_REASONING_MODELS = frozenset({"gpt-6-luna", "gpt-6.1-sol"})
 _ANTHROPIC_RETRY_STATUS = (429, 500, 502, 503, 504)
 
 
@@ -260,18 +261,41 @@ class LLMClient:
         return True
 
     @staticmethod
-    def _usage_openai(resp):
+    def _usage_openai(resp, *, native=False):
         u = getattr(resp, "usage", None)
-        return {"in": getattr(u, "prompt_tokens", 0) or 0, "out": getattr(u, "completion_tokens", 0) or 0}
+        usage = {"in": getattr(u, "prompt_tokens", 0) or 0,
+                 "out": getattr(u, "completion_tokens", 0) or 0}
+        # completion_tokens already includes reasoning: never add reasoning_tokens a second time.
+        # Proxy cache metadata does not establish native OpenAI billing discounts.
+        if native:
+            details = getattr(u, "prompt_tokens_details", None)
+            for source, target in (("cached_tokens", "cache_read"), ("cache_write_tokens", "cache_write")):
+                value = getattr(details, source, None)
+                if value is not None and value != 0:
+                    usage[target] = value
+        return usage
 
     def _complete_openai(self, system, user, tier, schema, max_output_tokens):
         model = self._model_for(tier)
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         cap_name = "max_completion_tokens" if self._is_native_openai else "max_tokens"
         cap = ({cap_name: max_output_tokens} if max_output_tokens is not None else {})
+        if self._is_native_openai and model in _LOW_REASONING_MODELS:
+            # These exact models support low (Sol does not support none/minimal). The shared cap
+            # bounds visible output AND reasoning; standard processing matches the pricing table.
+            # Only Luna's claim/attribution verdict gets medium reasoning. Hosted calls use this
+            # same native adapter, so schema policy cannot diverge from the local runtime.
+            reasoning = ("medium" if model == "gpt-6-luna"
+                         and getattr(schema, "__name__", None) == "AskVerdict" else "low")
+            cap = {"max_completion_tokens": max_output_tokens if max_output_tokens is not None else 4096,
+                   "reasoning_effort": reasoning, "service_tier": "default"}
         if schema is None:
             resp = self._oai.chat.completions.create(model=model, messages=messages, **cap)
-            return resp.choices[0].message.content or "", self._usage_openai(resp)
+            if (self._is_native_openai and model in _LOW_REASONING_MODELS
+                    and getattr(resp, "service_tier", None) not in (None, "default")):
+                self._record_provider_failure("completion", "unsupported_service_tier")
+                raise ProviderUnavailable("unsupported_service_tier", service="completion")
+            return resp.choices[0].message.content or "", self._usage_openai(resp, native=self._is_native_openai)
         if self._is_native_openai:
             resp = self._oai.chat.completions.parse(
                 model=model, messages=messages, response_format=schema, **cap
@@ -279,7 +303,11 @@ class LLMClient:
             parsed = resp.choices[0].message.parsed
             if parsed is None:
                 raise ValueError("OpenAI returned no parsed structured output (refusal or truncation)")
-            return parsed.model_dump(mode="json"), self._usage_openai(resp)
+            if (model in _LOW_REASONING_MODELS
+                    and getattr(resp, "service_tier", None) not in (None, "default")):
+                self._record_provider_failure("completion", "unsupported_service_tier")
+                raise ProviderUnavailable("unsupported_service_tier", service="completion")
+            return parsed.model_dump(mode="json"), self._usage_openai(resp, native=True)
         return self._complete_generic_structured(model, messages, schema, max_output_tokens)
 
     def _complete_generic_structured(self, model, messages, schema, max_output_tokens):
@@ -402,6 +430,26 @@ class LLMClient:
             return (schema.model_validate({
                 "insufficient_evidence": True, "text": None, "citation_ids": [],
             }).model_dump(mode="json"), {"in": len(user) // 4, "out": 5})
+        if "field_audits" in model_fields:
+            # An EXPLICIT synthetic audit for the offline structural pipeline, never an entailment
+            # oracle. Real providers must produce every required evidence row themselves; the
+            # validator supplies no missing-row/legacy-verdict defaults. Keep this stub-only.
+            payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+            chapter_ids = [part["id"] for part in payload["source_passages"]
+                           if part["text"].strip()]
+            audits = []
+            for field in payload["fields"]:
+                sources = chapter_ids[:1]
+                if not sources and field["kind"] == "identity" and payload["prior_visible_identities"]:
+                    sources = [-1]
+                audits.append({"field_id": field["id"], "assertions": [{
+                    "segment_id": segment["id"], "source_ids": sources,
+                    "support": "supported" if sources else "unsupported",
+                } for segment in field["segments"]]})
+            value = schema.model_validate({
+                "references_future": False, "unsupported_claims": [], "field_audits": audits,
+            }).model_dump(mode="json")
+            return value, {"in": len(user) // 4, "out": len(json.dumps(value)) // 4}
         if "references_future" in getattr(schema, "model_fields", {}):
             # the LIT-14 judge: the stub is not a real reviewer, and the stub recap is grounded in its
             # source by construction, so emit a benign (safe) verdict — keeps the offline recap pipeline

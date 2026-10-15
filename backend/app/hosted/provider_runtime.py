@@ -8,7 +8,9 @@ import uuid
 from app.cost.limits import (
     BudgetedResult,
     CostCeilingExceeded,
+    completion_usage,
     estimate_input_tokens,
+    reserved_usd_of,
     usd_of,
 )
 from app.hosted.tenant.models import OwnerId
@@ -67,7 +69,7 @@ async def budgeted_hosted_completion(
     reserved_input = estimated_input * 2 + cap + 512 if generic_reask else estimated_input
     reserved_output = cap * (2 if generic_reask else 1)
     reserved_usage = {"in": reserved_input, "out": reserved_output}
-    reserved_usd = usd_of(setting["model"], reserved_usage)
+    reserved_usd = reserved_usd_of(setting["model"], reserved_usage)
     reservation = await repository.reserve_provider_call(
         owner_id,
         book_id,
@@ -101,13 +103,12 @@ async def budgeted_hosted_completion(
             usd=f"{reserved_usd:.10f}",
         )
         raise
-    actual = {
-        "in": int(usage.get("in", 0) or 0),
-        "out": int(usage.get("out", 0) or 0),
-    }
-    if actual == {"in": 0, "out": 0}:
+    actual = completion_usage(usage)
+    missing_usage = actual == {"in": 0, "out": 0}
+    if missing_usage:
         actual = reserved_usage
-    actual_usd = usd_of(setting["model"], actual)
+    actual_usd = (reserved_usd_of(setting["model"], actual) if missing_usage
+                  else usd_of(setting["model"], actual))
     if actual["in"] > reserved_input or actual["out"] > reserved_output or actual_usd > reserved_usd:
         await repository.settle_provider_call(
             owner_id,

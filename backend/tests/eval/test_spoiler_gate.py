@@ -861,11 +861,11 @@ def test_reveal_correctness_flags_a_stamp_below_all_prose(tmp_path):
     from app.llm.client import LLMClient
     from app.ingest.extraction.pipeline import all_entities, ingest_chapter, prepare_chapter
     from app.memory.store import Store
-    ex_empty = {"chapter_summary": "s", "entities": [], "relationships": [], "events": [], "themes": []}
-    ex2 = {"chapter_summary": "s", "entities": [
+    ex_empty = {"chapter_summary": "", "entities": [], "relationships": [], "events": [], "themes": []}
+    ex2 = {"chapter_summary": "Hero Prime walked.", "entities": [
         {"canonical_name": "Hero Prime", "type": "character", "aliases": [],
          "matched_roster": False, "state": None}], "relationships": [], "events": [], "themes": []}
-    store, client = Store(data_dir=str(tmp_path)), LLMClient(provider="stub", allow_stub=True)
+    store, client = Store(data_dir=str(tmp_path)), LLMClient(provider="stub", allow_stub=True, env={})
     ch1 = {"ordinal": 1, "key": "g:c1", "title": "C1", "text": ""}
     ch2 = {"ordinal": 2, "key": "g:c2", "title": "C2", "text": "Hero Prime walked."}
     prepared1 = prepare_chapter(ch1, ex_empty, client, roster=[])

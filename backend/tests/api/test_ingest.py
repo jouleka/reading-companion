@@ -1109,6 +1109,7 @@ def test_malformed_first_response_then_valid_retry_writes_exactly_once(env, monk
 def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path, monkeypatch, case):
     """Canned reviewer verdicts exercise the real worker/ledger/commit path, not model quality."""
     from app.ingest.extraction.schema import Extraction
+    from tests.ingest._grounding import canned_grounding_verdict, reviewed_source
 
     source = ("Aldric gave Berenice a copper lantern. Aldric did not open the chest. " * 8)
     book = epub_ncx([
@@ -1150,12 +1151,13 @@ def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path
             if "references_future" in getattr(schema, "model_fields", {}):
                 seen["review"] += 1
                 payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
-                assert source.strip() in payload["current_chapter_text"]
+                assert source.strip() in reviewed_source(user)
                 assert payload["prior_visible_identities"] == []
                 assert "Vesper" not in user and "secret verdict" not in user
                 assert payload["extraction"]["events"]
-                return {"references_future": False,
-                        "unsupported_claims": [] if heal["value"] else ["unsupported assertion"]}, {
+                return canned_grounding_verdict(
+                    user, unsupported_claims=[] if heal["value"] else ["unsupported assertion"],
+                ), {
                     "in": 23, "out": 5,
                 }
             return original_complete(system, user, tier=tier, schema=schema)

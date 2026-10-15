@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.api._epub import epub_ncx
+from tests.ingest._grounding import canned_grounding_verdict, reviewed_source
 from app.config import Settings
 from app.cost import CostCeilingExceeded, estimate_input_tokens, usd_of
 from app.ingest.extraction.pipeline import all_entities, content_hash_of
@@ -38,7 +39,7 @@ def runtime(tmp_path):
     book = epub_ncx([
         ("one.xhtml", "Chapter I", "Chapter I", "Aldric worked at the forge. " * 12),
         ("two.xhtml", "Chapter II", "Chapter II",
-         "Aldric handed the copper lantern to Berenice. He remained at the forge. " * 60),
+         "Aldric handed the copper lantern to Berenice. He remained at the forge. " * 120),
         ("three.xhtml", "Chapter III", "Chapter III", "Corvus concealed the future verdict. " * 12),
     ])
     app = create_app(settings, ingest_executor=InlineExecutor())
@@ -107,9 +108,11 @@ def _extraction(*, rejected=False, empty_entities=False):
     }
 
 
-def _verdict(reject=False):
-    return {"references_future": False,
-            "unsupported_claims": ["REJECTED JUDGE PROSE: swapped roles"] if reject else []}
+def _verdict(reject=False, *, user=None):
+    claims = ["REJECTED JUDGE PROSE: swapped roles"] if reject else []
+    if user is not None:
+        return canned_grounding_verdict(user, unsupported_claims=claims)
+    return {"references_future": False, "unsupported_claims": claims}
 
 
 def _totals(rows):
@@ -151,13 +154,13 @@ def test_one_grounding_repair_reuses_exact_context_commits_once_and_accounts_bot
             return _extraction(rejected=index == 0), usages[index]
         assert schema is ExtractionVerdict
         payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
-        assert payload["current_chapter_text"] == runtime.chapter["text"]
+        assert reviewed_source(user) == runtime.chapter["text"]
         expected_roster = [{key: entity[key] for key in ("canonical_name", "type", "aliases")}
                            for entity in runtime.roster]
         assert payload["prior_visible_identities"] == expected_roster
         assert "Corvus" not in user and "future verdict" not in user
         assert "REJECTED JUDGE PROSE" not in system + user
-        return _verdict(reject=index == 1), usages[index]
+        return _verdict(reject=index == 1, user=user), usages[index]
 
     monkeypatch.setattr(runtime.client, "complete", complete)
     status = _advance(runtime)
@@ -210,7 +213,7 @@ def test_second_grounding_rejection_has_no_third_pass_or_partial_memory(runtime,
         assert len(calls) <= 4
         if schema is Extraction:
             return _extraction(rejected=True), {"in": 11, "out": 3}
-        return _verdict(reject=True), {"in": 13, "out": 2}
+        return _verdict(reject=True, user=user), {"in": 13, "out": 2}
 
     monkeypatch.setattr(runtime.client, "complete", complete)
     status = _advance(runtime)
@@ -259,12 +262,12 @@ def test_capped_injection_shaped_criticism_stays_private_json_and_never_reaches_
         assert "bounded filler" not in user
         assert worker_module._REPAIR_FEEDBACK_START not in user
         payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
-        assert set(payload) == {"current_chapter_text", "prior_visible_identities", "extraction"}
-        assert payload["current_chapter_text"] == runtime.chapter["text"]
+        assert set(payload) == {"source_passages", "prior_visible_identities", "extraction", "fields"}
+        assert reviewed_source(user) == runtime.chapter["text"]
         assert "Corvus" not in user and "invented source" not in user
         reviews.append(payload)
         rejected = len(reviews) == 1 or not repair_accepted
-        return {"references_future": False, "unsupported_claims": diagnostics if rejected else []}, {
+        return canned_grounding_verdict(user, unsupported_claims=diagnostics if rejected else []), {
             "in": 13, "out": 2,
         }
 
@@ -313,7 +316,7 @@ def test_operational_or_invalid_failures_do_not_start_grounding_repair(
                 return {"incomplete": "not a valid structured response"}, {"in": 11, "out": 3}
         if schema is Extraction:
             return _extraction(), {"in": 11, "out": 3}
-        return _verdict(), {"in": 13, "out": 2}
+        return _verdict(user=user), {"in": 13, "out": 2}
 
     monkeypatch.setattr(worker_module, "budgeted_completion", budgeted)
     monkeypatch.setattr(runtime.client, "complete", complete)
@@ -348,7 +351,7 @@ def test_stop_after_rejection_settles_first_pass_without_repair(runtime, monkeyp
         if schema is Extraction:
             return _extraction(rejected=True), {"in": 11, "out": 3}
         runtime.worker._stopping.set()
-        return _verdict(reject=True), {"in": 13, "out": 2}
+        return _verdict(reject=True, user=user), {"in": 13, "out": 2}
 
     monkeypatch.setattr(runtime.client, "complete", complete)
     status = _advance(runtime)
@@ -373,7 +376,7 @@ def test_rejected_pass_spend_counts_against_actual_catalog_budget_before_repair(
         # Both current calls were already admitted. Their actual combined spend now exhausts the
         # book's ceiling; the attempted repair must be refused by the real atomic catalog check.
         runtime.settings.cost_max_input_tokens_per_book = existing_input + 24
-        return _verdict(reject=True), {"in": 13, "out": 2}
+        return _verdict(reject=True, user=user), {"in": 13, "out": 2}
 
     monkeypatch.setattr(runtime.client, "complete", complete)
     status = _advance(runtime)
@@ -392,7 +395,7 @@ def test_actual_repair_input_budget_includes_capped_multibyte_diagnostics(runtim
     system = extract_system_for(runtime.book_type, runtime.language)
     empty = extract_user_prompt(runtime.chapter["title"], runtime.roster, "",
                                 book_type=runtime.book_type, content_language=runtime.language)
-    runtime.settings.cost_max_input_tokens_per_call = estimate_input_tokens(system, empty, Extraction) + 3000
+    runtime.settings.cost_max_input_tokens_per_call = estimate_input_tokens(system, empty, Extraction) + 8000
 
     def complete(system, user, *, tier, schema):
         _assert_uncommitted(runtime, baseline)
@@ -401,7 +404,7 @@ def test_actual_repair_input_budget_includes_capped_multibyte_diagnostics(runtim
             return _extraction(empty_entities=True), {"in": 11, "out": 3}
         # The private cap is characters, while admission counts UTF-8 bytes. Keep all source text
         # and diagnostics; the larger repair must be refused, never truncated to force admission.
-        return {"references_future": False, "unsupported_claims": ["\U0001f6d1" * 1024]}, {
+        return canned_grounding_verdict(user, unsupported_claims=["\U0001f6d1" * 1024]), {
             "in": 13, "out": 2,
         }
 
@@ -421,7 +424,7 @@ def test_late_chunk_rejection_restarts_whole_source_and_settles_all_failed_chunk
     system = extract_system_for(runtime.book_type, runtime.language)
     empty = extract_user_prompt(runtime.chapter["title"], runtime.roster, "",
                                 book_type=runtime.book_type, content_language=runtime.language)
-    runtime.settings.cost_max_input_tokens_per_call = estimate_input_tokens(system, empty, Extraction) + 3000
+    runtime.settings.cost_max_input_tokens_per_call = estimate_input_tokens(system, empty, Extraction) + 8000
 
     def complete(system, user, *, tier, schema):
         _assert_uncommitted(runtime, baseline)
@@ -434,9 +437,8 @@ def test_late_chunk_rejection_restarts_whole_source_and_settles_all_failed_chunk
                 assert len(_costs(runtime)) == 4
                 assert _totals(_costs(runtime)) == {"in": 50, "out": 10}
             return _extraction(empty_entities=True), usage
-        payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
-        review_sources.append(payload["current_chapter_text"])
-        return _verdict(reject=len(review_sources) == 2), usage
+        review_sources.append(reviewed_source(user))
+        return _verdict(reject=len(review_sources) == 2, user=user), usage
 
     monkeypatch.setattr(runtime.client, "complete", complete)
     status = _advance(runtime)
@@ -496,7 +498,7 @@ def test_mixed_model_review_charge_is_not_replayed_during_receipt_crash_recovery
         tiers.append(tier)
         if schema is Extraction:
             return _extraction(), {"in": 11, "out": 3}
-        return _verdict(), {"in": 13, "out": 2}
+        return _verdict(user=user), {"in": 13, "out": 2}
 
     monkeypatch.setattr(runtime.catalog, "finalize_ingest", finalize)
     monkeypatch.setattr(runtime.client, "complete", complete)

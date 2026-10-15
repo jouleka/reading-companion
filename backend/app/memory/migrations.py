@@ -9,7 +9,7 @@ raises (fail-closed, no silent downgrade). No Alembic — too heavy for many sma
 import os
 
 BASELINE_VERSION = 1           # the version the schema/memory.sql baseline DDL represents
-CURRENT_VERSION = 6            # bump when adding a MIGRATIONS step
+CURRENT_VERSION = 7            # bump when adding a MIGRATIONS step
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 def _columns(conn, table):
@@ -103,6 +103,44 @@ def _migrate_v6(conn):
     )
 
 
+def _migrate_v7(conn):
+    """Version the derived full-source index without rewriting extracted facts or old vectors."""
+    additions = {"source_version": "TEXT", "source_hash": "TEXT",
+                 "source_start": "INTEGER", "source_end": "INTEGER"}
+    existing = _columns(conn, "chunks")
+    for column, definition in additions.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE chunks ADD COLUMN {column} {definition}")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS retrieval_index_chapters (
+          chapter_key TEXT PRIMARY KEY REFERENCES chapters(chapter_key),
+          book_id TEXT NOT NULL,
+          revealed_at INTEGER NOT NULL,
+          index_version TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          embed_model TEXT NOT NULL,
+          embed_dim INTEGER NOT NULL,
+          chunk_count INTEGER NOT NULL,
+          completed_at TEXT NOT NULL,
+          retracted_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS retrieval_index_batches (
+          chapter_key TEXT NOT NULL REFERENCES chapters(chapter_key),
+          book_id TEXT NOT NULL,
+          revealed_at INTEGER NOT NULL,
+          index_version TEXT NOT NULL,
+          source_hash TEXT NOT NULL,
+          batch_id TEXT NOT NULL,
+          embed_model TEXT NOT NULL,
+          embed_dim INTEGER NOT NULL,
+          passages_json TEXT NOT NULL,
+          recorded_at TEXT NOT NULL,
+          retracted_at TEXT,
+          PRIMARY KEY (chapter_key, index_version, source_hash, batch_id)
+        );
+    """)
+
+
 # version v -> SQL string or callable(conn) migrating a book from v-1 to v.
 MIGRATIONS: dict[int, object] = {
     2: """
@@ -124,6 +162,7 @@ MIGRATIONS: dict[int, object] = {
     4: _migrate_v4,
     5: _migrate_v5,
     6: _migrate_v6,
+    7: _migrate_v7,
 }
 
 

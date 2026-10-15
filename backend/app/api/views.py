@@ -24,12 +24,22 @@ from app.ask import (
     AskRetrievalLimit,
     AskSafetyError,
     ask_prompt,
+    ask_repair_prompt,
     cited_sources,
+    complete_ask_citations,
     draft_text,
     judge_ask_draft,
     retrieve_ask_sources,
     source_facts,
     validate_ask_draft,
+)
+from app.ask_context import complete_ask_context
+from app.ask_selection import (
+    SOURCE_SELECTION_SYSTEM,
+    SourceSelection,
+    SourceSelectionError,
+    selection_prompt as source_selection_prompt,
+    validate_selection,
 )
 
 from app.cost import CostCeilingExceeded, budgeted_completion, estimate_input_tokens, pricing_known
@@ -410,6 +420,11 @@ def ask_the_book(
     try:
         with store.book(book_id) as mem:
             view = mem.view(eff)
+            known_names = []
+            for character in view.characters():
+                known_names.append(character["canonical_name"])
+                known_names.extend(alias["surface_form"]
+                                   for alias in view.aliases_of(character["entity_id"]))
             sources = retrieve_ask_sources(
                 body.question,
                 bookmark=eff,
@@ -417,11 +432,28 @@ def ask_the_book(
                 read_chapter=view.raw_text,
                 semantic_hits=view.search(embedded.value[0], k=6),
                 atoms=atoms,
+                candidate_pool=client.provider != "stub",
+                known_names=known_names,
             )
     except AskRetrievalLimit as exc:
         raise HTTPException(
             413, "completed text is too large to search at once; choose an earlier chapter"
         ) from exc
+    if sources and client.provider != "stub":
+        candidates = sources
+        try:
+            selection = budgeted_completion(
+                catalog, settings, client, book_id, phase="source-selection",
+                system=SOURCE_SELECTION_SYSTEM, user=source_selection_prompt(body.question, sources),
+                tier="cheap", schema=SourceSelection,
+            )
+            remember(selection, provider=client.provider, model=client._model_for("cheap"))
+            sources = validate_selection(selection.value, sources)
+            sources = complete_ask_context(body.question, sources, candidates, known_names=known_names)
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except (SourceSelectionError, ValueError) as exc:
+            raise HTTPException(502, "evidence selection could not be cleared") from exc
     if not sources:
         return {
             "as_of_chapter": eff,
@@ -432,6 +464,7 @@ def ask_the_book(
         }
 
     prompt = ask_prompt(body.question, sources)
+    repair_feedback = []
     for _attempt in range(2):
         try:
             generated = budgeted_completion(
@@ -441,7 +474,7 @@ def ask_the_book(
                 book_id,
                 phase="synthesis",
                 system=ASK_SYSTEM,
-                user=prompt,
+                user=ask_repair_prompt(prompt, repair_feedback),
                 tier="large",
                 schema=AskDraft,
             )
@@ -449,8 +482,16 @@ def ask_the_book(
             raise HTTPException(429, "book cost ceiling reached") from exc
         remember(generated, provider=client.provider, model=client._model_for("large"))
         try:
-            draft = validate_ask_draft(generated.value, sources)
-        except (AskSafetyError, ValueError):
+            completed = complete_ask_citations(generated.value, sources, known_names=known_names)
+            draft = validate_ask_draft(completed, sources, known_names=known_names)
+        except (AskSafetyError, ValueError) as exc:
+            repair_feedback = [
+                "The draft was not traceable to its own cited passages or had an invalid citation "
+                "shape. Use only directly supported factual sentences, omit standalone Yes/No "
+                "acknowledgments, and preserve source wording for identities and qualifications."
+            ]
+            if isinstance(exc, AskSafetyError):
+                repair_feedback.extend(exc.review_feedback)
             continue
         if draft.insufficient_evidence:
             return {
@@ -469,6 +510,10 @@ def ask_the_book(
             or score["prolepsis_hits"]
             or score["unsupported_event_bindings"]
         ):
+            repair_feedback = [
+                "The draft failed the completed-source safety checks. Remove unsupported "
+                "developments or bindings and state only what its own cited passages establish."
+            ]
             continue
 
         used = cited_sources(draft, sources)
@@ -495,12 +540,16 @@ def ask_the_book(
                 used,
                 tier="cheap",
                 complete=judge_complete,
+                question=body.question,
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
         except JudgeUnavailable:
             continue
         if verdict["references_future"] or verdict["unsupported_claims"]:
+            repair_feedback = verdict["unsupported_claims"] or [
+                "The draft asserted a development not established by its cited passages."
+            ]
             continue
         return {
             "as_of_chapter": eff,

@@ -105,6 +105,16 @@ def _seed(data_dir: Path, book_id: str = "bkfixture0001", *, title: str = "Fixtu
     return store, catalog, book_id
 
 
+def _remove_v7_chunk_columns(export):
+    """Older-format fixtures must actually have the old canonical chunk shape."""
+    chunks = export["memory"]["chunks"]
+    for column in ("source_version", "source_hash", "source_start", "source_end"):
+        index = chunks["columns"].index(column)
+        chunks["columns"].pop(index)
+        for row in chunks["rows"]:
+            row.pop(index)
+
+
 def _scalar(db: Path, sql: str):
     connection = sqlite3.connect(db)
     try:
@@ -248,6 +258,7 @@ def test_v2_archive_forward_migrates_on_exact_and_portable_restore(tmp_path):
     catalog.close()
 
     del legacy["memory"]["entity_corrections"]
+    _remove_v7_chunk_columns(legacy)
     position = legacy["catalog"]["reading_state"]
     epoch_index = position["columns"].index("position_epoch")
     position["columns"].pop(epoch_index)
@@ -325,6 +336,7 @@ def test_v3_archive_forward_migrates_on_exact_and_portable_restore(tmp_path):
     store, catalog, book_id = _seed(source)
     report = _validate_data_tree(source, book_id)
     legacy = _portable_export(source, book_id)
+    _remove_v7_chunk_columns(legacy)
     store.close()
     catalog.close()
 

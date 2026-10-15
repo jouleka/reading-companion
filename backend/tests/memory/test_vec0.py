@@ -145,7 +145,7 @@ def test_v5_migration_backfills_vec0_from_canonical_chunks(tmp_path):
 
     hits = _search(tmp_path, "vec0", bookmark=3)
     assert [hit[1] for hit in hits] == ["future-exact", "past-best", "past-second"]
-    assert migrations.CURRENT_VERSION == 6
+    assert migrations.CURRENT_VERSION >= 6
 
 
 def test_configured_vec0_refuses_to_fall_back_when_extension_load_fails(tmp_path, monkeypatch):

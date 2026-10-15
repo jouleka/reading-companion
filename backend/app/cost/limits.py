@@ -22,25 +22,72 @@ class CostCeilingExceeded(RuntimeError):
 _USD = {
     # Standard text-token prices checked against official model documentation 2026-10-15.
     # Keep the longer mini name first: identities include the provider and model name.
+    "gpt-6-luna": (0.10e-6, 0.50e-6),
+    "gpt-6.1-sol": (2.00e-6, 10.0e-6),
     "gpt-5.4-mini": (0.75e-6, 4.50e-6),
     "gpt-5.4": (2.50e-6, 15.0e-6),
     "gpt-4o-mini": (0.15e-6, 0.60e-6),
     "gpt-4o": (2.50e-6, 10.0e-6),
     "text-embedding-3-small": (0.02e-6, 0.0),
 }
+_CACHE_INPUT_USD = {
+    "gpt-6-luna": (0.01e-6, 0.125e-6),
+    "gpt-6.1-sol": (0.10e-6, 2.50e-6),
+}
+
+
+def _price_name(model):
+    identity = model or ""
+    for name in _USD:
+        # Do not accidentally price a future GPT-6 suffix/tier as an established model.
+        if (identity.rsplit(":", 1)[-1] == name if name in _CACHE_INPUT_USD else name in identity):
+            return name
+    return None
+
+
+def completion_usage(usage):
+    """Keep billed output (including reasoning) and validated cache subdivisions of total input."""
+    actual = {"in": int(usage.get("in", 0) or 0), "out": int(usage.get("out", 0) or 0)}
+    read, write = usage.get("cache_read", 0), usage.get("cache_write", 0)
+    if (not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0
+                for value in (read, write)) or read + write > actual["in"]):
+        # Malformed discounts cannot make a call cheap. Charge the maximum native cache-write
+        # input rate for the new models; other models retain their existing uncached estimate.
+        write, read = actual["in"], 0
+    if read:
+        actual["cache_read"] = read
+    if write:
+        actual["cache_write"] = write
+    return actual
 
 
 def usd_of(model, usage):
-    for name, (input_price, output_price) in _USD.items():
-        if name in (model or ""):
-            return usage.get("in", 0) * input_price + usage.get("out", 0) * output_price
-    return 0.0
+    name = _price_name(model)
+    if name is None:
+        return 0.0
+    input_price, output_price = _USD[name]
+    if name not in _CACHE_INPUT_USD:
+        return usage.get("in", 0) * input_price + usage.get("out", 0) * output_price
+    actual = completion_usage(usage)
+    read, write = actual.get("cache_read", 0), actual.get("cache_write", 0)
+    cached_price, write_price = _CACHE_INPUT_USD[name]
+    # GPT-6 long-context premiums apply to the entire request, not only the excess tokens.
+    input_scale, output_scale = (2, 1.5) if actual["in"] > 272_000 else (1, 1)
+    return (((actual["in"] - read - write) * input_price + read * cached_price + write * write_price)
+            * input_scale + actual["out"] * output_price * output_scale)
+
+
+def reserved_usd_of(model, usage):
+    """Reserve an uncached request, including the worst-case implicit cache-write premium."""
+    if _price_name(model) in _CACHE_INPUT_USD:
+        usage = {**usage, "cache_read": 0, "cache_write": usage.get("in", 0)}
+    return usd_of(model, usage)
 
 
 def pricing_known(model: str | None) -> bool:
     """Whether the advisory table can truthfully price this provider model."""
     identity = model or ""
-    return identity.startswith(("stub:", "stub-")) or any(name in identity for name in _USD)
+    return identity.startswith(("stub:", "stub-")) or _price_name(identity) is not None
 
 
 def estimate_input_tokens(system: str, user: str, schema=None) -> int:
@@ -160,7 +207,7 @@ def budgeted_completion(catalog, settings, client, book_id, *, phase, system, us
             model=model,
             input_tokens=reserved_input,
             output_tokens=reserved_output,
-            usd=usd_of(model, reserved_usage),
+            usd=reserved_usd_of(model, reserved_usage),
             max_input_tokens=settings.cost_max_input_tokens_per_book,
             max_output_tokens=settings.cost_max_output_tokens_per_book,
             max_usd=settings.cost_max_usd_per_book,
@@ -176,10 +223,11 @@ def budgeted_completion(catalog, settings, client, book_id, *, phase, system, us
     except Exception:
         catalog.settle_cost(book_id, reservation_id, phase=f"{phase}-failed-reserved")
         raise
-    actual = {"in": int(usage.get("in", 0) or 0), "out": int(usage.get("out", 0) or 0)}
-    if actual == {"in": 0, "out": 0} and getattr(client, "provider", None) != "stub":
+    actual = completion_usage(usage)
+    missing_usage = actual == {"in": 0, "out": 0} and getattr(client, "provider", None) != "stub"
+    if missing_usage:
         actual = reserved_usage                         # missing real-provider usage fails conservative
-    actual_usd = usd_of(model, actual)
+    actual_usd = reserved_usd_of(model, actual) if missing_usage else usd_of(model, actual)
     try:
         catalog.note_reservation_actual(
             book_id, reservation_id, input_tokens=actual["in"], output_tokens=actual["out"],

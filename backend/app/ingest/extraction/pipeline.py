@@ -26,6 +26,7 @@ from app.ingest.extraction.validation import (
     review_extraction,
 )
 from app.llm import versioning
+from app.retrieval_passages import prepare_passages, source_digest
 
 
 class StalePreparedRoster(RuntimeError):
@@ -63,7 +64,7 @@ def _changed_content_error(key):
 
 
 def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embed_fn=None,
-                    resolve_embed=None, identity=None, threshold=0.82, embed_chars=2000,
+                    resolve_embed=None, identity=None, threshold=0.82, embedding_input_limit=60_000,
                     clearance=None):
     """Validate and prepare every model-derived value without accepting a ``MemoryDB`` handle.
 
@@ -97,7 +98,8 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
                            "input_tokens": usage.get("in", 0), "output_tokens": usage.get("out", 0),
                            "usd": usd}
     chunk_embed = embed_fn or (lambda texts: client.embed(texts)[0])
-    chunk_vec = chunk_embed([text[:embed_chars]])[0] if text else None
+    passages = prepare_passages(ch.get("title", ""), text, chunk_embed,
+                                input_limit=embedding_input_limit)
     decisions = R.resolve_chapter(extraction["entities"], roster, resolve_embed, threshold)
     return {
         "chapter_key": ch["key"],
@@ -108,13 +110,14 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
         "extractor_version": extractor_version,
         "roster": roster,
         "decisions": decisions,
-        "chunk_vec": chunk_vec,
+        "passages": passages,
+        "source_hash": source_digest(ch.get("title", ""), text),
         "completion_cost": completion_cost,
         "clearance": clearance,
     }
 
 
-def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
+def ingest_chapter(mem, ch, prepared):
     """Commit one prepared chapter atomically using database operations only.
 
     Every memory row, including the completion/cost receipt marker, commits in one SQLite transaction.
@@ -150,9 +153,9 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
             extractor_version=prepared["extractor_version"],
             roster=prepared["roster"],
             decisions=prepared["decisions"],
-            chunk_vec=prepared["chunk_vec"],
+            passages=prepared["passages"],
+            source_hash=prepared["source_hash"],
             completion_cost=prepared["completion_cost"],
-            chunk_chars=chunk_chars,
         )
     if mem.chapter_completion(key, ordinal, content_hash) is None:
         raise RuntimeError(f"chapter {key!r} committed without its LIT-7 completion marker")
@@ -160,7 +163,7 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
 
 
 def _write_chapter(mem, ch, extraction, *, identity, extractor_version, roster, decisions,
-                   chunk_vec, completion_cost, chunk_chars=500):
+                   passages, source_hash, completion_cost):
     """Ingest ONE chapter's validated extraction into ``mem`` (a sole-owned MemoryDB, accessed under the
     Store's per-book lock and ``mem.transaction()``). ``extraction`` has already passed the schema.
 
@@ -263,8 +266,8 @@ def _write_chapter(mem, ch, extraction, *, identity, extractor_version, roster, 
     for th in extraction["themes"]:
         mem.add_theme(th["name"], th.get("description") or "", ordinal, extractor_version=xv)
 
-    if text:                                               # RAG chunk (pinned-space vector)
-        mem.add_chunk(key, ordinal, text[:chunk_chars], chunk_vec)
+    mem.publish_source_index(key, ordinal, source_hash, passages, identity,
+                             require_completion=False)
 
     mem.mark_chapter_ingested(key, content_hash, cost=completion_cost)  # LAST: durable done/receipt
 

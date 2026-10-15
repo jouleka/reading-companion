@@ -133,9 +133,11 @@ def test_worker_reprepares_a_corrected_roster_without_a_second_completion(audit_
     original_prepare = worker_module.prepare_chapter
     targets, completion_calls = [], []
 
-    def extracted(*_args, **kwargs):
+    def extracted(_system, user, **kwargs):
         if kwargs["schema"] is ExtractionVerdict:
-            return {"references_future": False, "unsupported_claims": []}, {"in": 10, "out": 10}
+            from tests.ingest._grounding import canned_grounding_verdict
+
+            return canned_grounding_verdict(user), {"in": 10, "out": 10}
         assert kwargs["schema"] is Extraction
         completion_calls.append(1)
         return {

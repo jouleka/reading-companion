@@ -31,6 +31,10 @@ no-look-ahead checks. This is a defense-in-depth design, not a promise that mode
 wrong; keep the deterministic gates and regression tests enabled when changing ingestion or views.
 
 New chapter memory also requires observed names and a source-bounded semantic review before commit.
+The review must cover every memory field with numbered source evidence; prose fragments must retain
+the complete original wording so an unsupported location, time, or causal link cannot be omitted from
+the audit. Incomplete or invalid audits withhold the entire chapter. Evidence validation enforces the
+review contract; semantic support remains a model judgment.
 Ask and chapter closeout review each claim against its own citations. Existing saved memory is not
 retroactively cleared by these checks. Completing the final visible page requires the explicit
 **Finish book** action; merely displaying that page does not mark its text as read.

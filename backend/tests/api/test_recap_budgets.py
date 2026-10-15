@@ -65,10 +65,12 @@ def runtime(tmp_path, monkeypatch):
             return value, usage
 
         monkeypatch.setattr(client, "complete", complete)
+        ingest_input_ceiling = settings.cost_max_input_tokens_per_call
         settings.cost_max_input_tokens_per_call = 8000
         yield SimpleNamespace(
             api=api, app=app, settings=settings, book_id=book_id, client=client,
             catalog=app.state.catalog, chapters=chapters, calls=calls,
+            ingest_input_ceiling=ingest_input_ceiling,
         )
 
 
@@ -197,11 +199,19 @@ def test_current_model_and_provider_identity_invalidate_recap_cache_without_repi
 def test_unchanged_actual_model_keeps_earlier_recap_cached_after_later_ingest(runtime):
     assert _recap(runtime).status_code == 200
     assert len(_syntheses(runtime)) == 1
-    advanced = runtime.api.put(f"/api/books/{runtime.book_id}/position", json={
-        "cfi": "third", "offset": sum(len(ch["text"]) for ch in runtime.chapters),
-    })
+    recap_ceiling = runtime.settings.cost_max_input_tokens_per_call
+    # The deliberately small recap ceiling cannot fit the independent chapter-evidence audit.
+    # Ingest with the normal fixture budget, then restore the recap limit before testing its cache.
+    runtime.settings.cost_max_input_tokens_per_call = runtime.ingest_input_ceiling
+    try:
+        advanced = runtime.api.put(f"/api/books/{runtime.book_id}/position", json={
+            "cfi": "third", "offset": sum(len(ch["text"]) for ch in runtime.chapters),
+        })
+    finally:
+        runtime.settings.cost_max_input_tokens_per_call = recap_ceiling
     assert advanced.status_code == 200
-    assert runtime.catalog.get_state(runtime.book_id)["ingest_progress"] == 3
+    assert runtime.catalog.get_state(runtime.book_id)["ingest_progress"] == 3, (
+        runtime.api.get(f"/api/books/{runtime.book_id}/ingest").json())
     count = len(runtime.calls)
     assert _recap(runtime, 2).json()["cached"] is True
     assert len(runtime.calls) == count

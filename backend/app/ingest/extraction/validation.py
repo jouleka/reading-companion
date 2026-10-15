@@ -10,8 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import re
+from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.cost import CostCeilingExceeded, merge_extractions
 from app.eval.spoiler_gate.judge import JudgeVerdict
@@ -44,6 +46,43 @@ class ExtractionGroundingRejected(ExtractionSafetyError):
         self.repair_feedback = tuple(bounded)
 
 
+class AssertionEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: int = Field(description=(
+        "The exact ID of one supplied field.segments entry. Audit EVERY supplied segment once, "
+        "in its original order. These immutable references cover every original word, punctuation "
+        "mark, modifier and joining phrase; do not rewrite or omit them. Judge each segment IN ITS "
+        "ORIGINAL FULL FIELD CONTEXT, never as isolated text: a relative clause, cause, time or "
+        "location attachment asserts a link, not merely its separate base events."
+    ))
+    source_ids: list[int] = Field(description=(
+        "IDs of exact supplied chapter passages that support the ENTIRE contextual assertion. "
+        "Positive IDs refer to source_passages. Negative IDs identify prior_visible_identities "
+        "by one-based list position and may support identity fields ONLY, never a new action or "
+        "state. A supported fragment needs evidence; use [] for an unsupported link when none "
+        "exists. Merely finding the same names or the two base events is not evidence of a "
+        "new causal, temporal, spatial or descriptive relation between them."
+    ))
+    support: Literal["supported", "unsupported"] = Field(description=(
+        "supported only when the cited evidence entails the complete original contextual meaning, "
+        "including all attachments. Direct consequences and clear coreference are allowed. "
+        "Use unsupported for any extra asserted fact, even if a plausible scene inference. "
+        "Do not invent a stronger reading, timeless persistence or an editorial objection."
+    ))
+
+
+class FieldEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field_id: int = Field(description="The exact supplied fields[].id; cover EVERY field once.")
+    assertions: list[AssertionEvidence] = Field(description=(
+        "Evidence checks for EVERY supplied exact segment, in order, once each. A segment boundary "
+        "does not reset its context or remove an attachment. Do not omit a joining clause merely "
+        "because its base facts are true. Short identity/participant fields have one whole segment."
+    ))
+
+
 class ExtractionVerdict(JudgeVerdict):
     """A factual source-grounding verdict, not editorial advice or a review of writing quality."""
 
@@ -59,6 +98,12 @@ class ExtractionVerdict(JudgeVerdict):
         "supported-but cautions, hypothetical stronger meanings, and if-read-as or if-unsure advice. "
         "Do not silently add persistence, ownership, intent, or another stronger claim to the "
         "candidate and then reject that invented reading."
+    ))
+    field_audits: list[FieldEvidence] = Field(description=(
+        "Mandatory evidence audit of every supplied field, exactly once. All of each field's "
+        "ordered segment IDs must cover its ENTIRE original text, including modifiers and joins. "
+        "Evidence must support the asserted connection, not just the neighboring facts. "
+        "No missing field or missing fragment is an implicit pass."
     ))
 
 
@@ -87,8 +132,148 @@ EXTRACTION_REVIEW_SYSTEM = (
     "establish secret intent or isolation. Do not excuse unsupported intent as harmless atmosphere, "
     "or approve unprovided duration/ownership modifiers such as 'briefly'. "
     "Set references_future=true for any concrete plot development not established by this chapter. "
+    "Audit the supplied fields separately before deciding the overall verdict. For EVERY supplied "
+    "exact segment, return its segment_id, source_ids and support judgment in the original order. "
+    "Do not copy, rewrite or decompose segment text in the response. The immutable segment IDs "
+    "cover the full original field; no modifier or attachment may be skipped. Segment boundaries "
+    "are formatting aids, not separate semantic contexts. Always read a segment in the complete "
+    "original field text and its structural "
+    "context. In particular, two supported facts do not establish an added link between them: "
+    "a shared location, simultaneity, sequence, cause, purpose, manner, or attributive description "
+    "needs its own support. A joining phrase can introduce a fact even when every noun and verb "
+    "appears somewhere in the source. An explicit location or clear anaphoric 'there' can support "
+    "co-location; adjacent independent sentences alone do not establish where the second action "
+    "occurred. Causal words require causality, not merely order; temporal words must preserve the "
+    "stated order and scope. Literal direct consequences remain valid and do not need verbatim "
+    "restatement. Source IDs are references, not proof by word overlap. The roster supports "
+    "identity equivalence only. For each actual unsupported fragment mark support=unsupported "
+    "and explain the concrete missing assertion in unsupported_claims. "
     "If unsure about support, flag the assertion. Return only the structured verdict."
 )
+
+_SOURCE_SENTENCE_END = re.compile(r"(?<=[.!?。！？])(?=\s)|(?<=\n)")
+_FIELD_CLAUSE_END = re.compile(r"[.!?;,:。！？；，：](?=\s|$)|\n+")
+
+
+def _field_segments(text: str, kind: str) -> list[dict]:
+    """Reference original slices instead of asking a model to copy punctuation faithfully.
+
+    These are mechanical display segments, not a claim that syntax alone proves atomic meaning.
+    Every segment is judged with the complete original field and structured context still present.
+    """
+    if kind in {"identity", "participants"}:
+        pieces = [text]
+    else:
+        pieces, start = [], 0
+        for boundary in _FIELD_CLAUSE_END.finditer(text):
+            end = boundary.end()
+            piece = text[start:end]
+            if piece.strip():
+                pieces.append(piece)
+                start = end
+        if start < len(text):
+            tail = text[start:]
+            if pieces and not tail.strip():
+                pieces[-1] += tail
+            else:
+                pieces.append(tail)
+    return [{"id": index, "text": piece} for index, piece in enumerate(pieces)]
+
+
+def source_passages(text: str) -> list[dict]:
+    """Number exact current-source slices, preserving every byte without duplicating the source.
+
+    Sentence boundaries make evidence inspectable. Short sentences are grouped for long parts so
+    numbering cannot turn dense punctuation into unbounded prompt overhead. Long sentences receive
+    bounded slices, preferably at whitespace; no source text is dropped or brought in from elsewhere.
+    """
+    target = max(1, (len(text) + 127) // 128)
+    max_slice = max(512, target)
+    pieces, pending = [], ""
+    for sentence in _SOURCE_SENTENCE_END.split(text):
+        while len(sentence) > max_slice:
+            cut = sentence.rfind(" ", 0, max_slice + 1)
+            if cut < max_slice // 2:
+                cut = max_slice
+            pending += sentence[:cut]
+            pieces.append(pending)
+            pending, sentence = "", sentence[cut:]
+        pending += sentence
+        if len(pending) >= target and pending.strip():
+            pieces.append(pending)
+            pending = ""
+    if pending:
+        if pieces and not pending.strip():
+            pieces[-1] += pending
+        else:
+            pieces.append(pending)
+    return [{"id": index, "text": piece} for index, piece in enumerate(pieces, 1)]
+
+
+def grounding_fields(extraction: dict) -> list[dict]:
+    """Enumerate asserted content deterministically; the model cannot choose what to inspect.
+
+    Identity and endpoint/participant contexts remain attached to their text. Separate participant
+    fields prevent a true event summary from hiding an invented actor in the structured payload.
+    Empty/null text asserts nothing; no proof defaults are supplied for nonempty fields.
+    """
+    fields = []
+
+    def add(path, text, kind, context=None):
+        if text and text.strip():
+            fields.append({"id": len(fields), "path": path, "text": text, "kind": kind,
+                           "context": context or {}, "segments": _field_segments(text, kind)})
+
+    add("/chapter_summary", extraction["chapter_summary"], "summary")
+    for index, entity in enumerate(extraction["entities"]):
+        identity = f'{entity["canonical_name"]} [type: {entity["type"]}]'
+        if entity["aliases"]:
+            identity += "; aliases of this same identity: " + "; ".join(entity["aliases"])
+        add(f"/entities/{index}/identity", identity, "identity",
+            {"matched_roster": entity["matched_roster"]})
+        add(f"/entities/{index}/state", entity["state"], "state",
+            {"entity": entity["canonical_name"]})
+    for index, relationship in enumerate(extraction["relationships"]):
+        add(f"/relationships/{index}",
+            f'{relationship["src"]} → {relationship["dst"]}: {relationship["label"]}',
+            "relationship", {"rel_type": relationship["rel_type"]})
+    for index, event in enumerate(extraction["events"]):
+        add(f"/events/{index}/summary", event["summary"], "event",
+            {"participants": event["participants"]})
+        add(f"/events/{index}/participants", "; ".join(event["participants"]), "participants",
+            {"event": event["summary"]})
+    for index, theme in enumerate(extraction["themes"]):
+        text = theme["name"]
+        if theme["description"]:
+            text += ": " + theme["description"]
+        add(f"/themes/{index}", text, "theme")
+    return fields
+
+
+def _validate_field_evidence(checked, fields, passages, roster):
+    """Validate audit integrity, not entailment. Semantic support is still a model judgment."""
+    expected = {field["id"]: field for field in fields}
+    found = [audit.field_id for audit in checked.field_audits]
+    if len(found) != len(expected) or set(found) != set(expected):
+        raise ValueError("field evidence coverage is incomplete or duplicated")
+    chapter_ids = {passage["id"] for passage in passages if passage["text"].strip()}
+    roster_ids = set(range(-len(roster), 0))
+    unsupported = []
+    for audit in checked.field_audits:
+        field = expected[audit.field_id]
+        fragments = audit.assertions
+        segments = field["segments"]
+        if [fragment.segment_id for fragment in fragments] != list(range(len(segments))):
+            raise ValueError("field evidence does not cover every exact segment in order")
+        allowed_ids = chapter_ids | (roster_ids if field["kind"] == "identity" else set())
+        for fragment in fragments:
+            if not set(fragment.source_ids) <= allowed_ids:
+                raise ValueError("assertion evidence refers to an unavailable source")
+            if fragment.support == "supported" and not fragment.source_ids:
+                raise ValueError("supported assertion has no source evidence")
+            if fragment.support == "unsupported":
+                unsupported.append(f'{field["path"]}: {segments[fragment.segment_id]["text"].strip()}')
+    return unsupported
 
 
 def _digest(value: str) -> str:
@@ -155,9 +340,10 @@ def extraction_review_prompt(text: str, extraction: dict, roster: list[dict]) ->
     identities = [{"canonical_name": row["canonical_name"], "type": row["type"],
                    "aliases": list(row.get("aliases", []))} for row in roster]
     return "CURRENT CHAPTER AND EXTRACTION (untrusted JSON data):\n" + json.dumps({
-        "current_chapter_text": text,
+        "source_passages": source_passages(text),
         "prior_visible_identities": identities,
         "extraction": extraction,
+        "fields": grounding_fields(extraction),
     }, ensure_ascii=False)
 
 
@@ -170,12 +356,15 @@ def review_extraction(text: str, extraction: dict, roster: list[dict], *, comple
             tier="large", schema=ExtractionVerdict,
         )
         checked = ExtractionVerdict.model_validate(verdict, strict=True)
+        unsupported_fields = _validate_field_evidence(
+            checked, grounding_fields(value), source_passages(text), roster,
+        )
     except CostCeilingExceeded:
         raise
     except Exception as exc:
         raise ExtractionSafetyError("extraction review was unavailable or invalid") from exc
-    if checked.references_future or checked.unsupported_claims:
-        feedback = list(checked.unsupported_claims)
+    if checked.references_future or checked.unsupported_claims or unsupported_fields:
+        feedback = list(checked.unsupported_claims) or unsupported_fields
         if checked.references_future:
             feedback.insert(0, "The candidate asserts a plot development not established by the "
                             "current source. Regenerate without importing later or outside facts.")
