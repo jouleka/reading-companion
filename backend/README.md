@@ -61,13 +61,19 @@ it does not migrate the hosted PostgreSQL source model.
 
 Real-provider Ask chooses up to six exact passages from at most 24 verified completed-source
 candidates using one budgeted cheap-role selection call. Independent semantic hits, lexical matches,
-nearby dialogue and named attribution remain separate candidates. Deterministic context completion
+nearby dialogue and named attribution remain separate candidates. The strongest lexical anchors
+retain adjacent prose even without question-word overlap; chapter openings may retain an exact
+immediately preceding chapter tail for narrative continuity. Deterministic context completion
 retains the selected passages and adds existing context within the same six-source cap.
 When selection is valid but empty, the API may recover up to three exact candidate windows covering
 every proper query-name part (at least two); it never treats this coverage as an answer clearance.
-Each claim
-can explicitly acquire missing selected context or name evidence within its three-citation cap;
-its text does not change. The mandatory independent judge sees exactly the resulting own citations.
+Each real-provider claim receives a budgeted positive-evidence audit of every immutable text segment,
+with its whole meaning visible. The audit must explicitly reference exact numbered spans in the final
+selected sources. Those commitments become the claim's own citations, within its three-source cap;
+its text does not change. Incomplete or invalid audits withhold. A valid unsupported audit permits one
+bounded regeneration using private, capped criticism. The mandatory independent judge then sees
+exactly the resulting own citations, without that criticism or the audit's approval. These are
+fallible semantic judgments; complete reference coverage alone does not establish factual truth.
 Name presence and context hints do not establish an alias, speaker, or fact by themselves. Invalid
 selection, missing identity, unsupported facts and unavailable review withhold the answer. Typed
 provider authentication/availability failures stop without purchasing another synthesis attempt.
@@ -130,9 +136,10 @@ price table; hard token limits still apply when model pricing is unknown.
 
 For a lightweight local profile set both `LLM_CHEAP_MODEL=gpt-6-luna` and
 `LLM_LARGE_MODEL=gpt-6-luna` in `.env`. These are role names; setting both uses Luna for extraction,
-memory review, synthesis, and answer review. Exact native Luna/Sol requests use Standard processing
-and the configured output cap, including reasoning. Luna's question/claim review uses medium
-reasoning; other Luna/Sol calls use low reasoning. No model fallback is configured.
+memory review, synthesis, and answer review. Every exact native Luna completion uses medium
+reasoning, including source selection, extraction, generation, and reviews. Native `gpt-6.1-sol`
+uses low reasoning. Both use Standard processing and the configured output cap, including reasoning.
+The per-call and per-book budget guarantees remain in force. No model fallback is configured.
 Standard API prices checked on 2026-10-15 are $0.10 input/$0.50 output per million tokens for Luna,
 and $2/$10 for `gpt-6.1-sol`; cache-write, cache-read and long-context rates differ. See
 [the official model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).

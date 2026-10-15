@@ -33,6 +33,71 @@ def test_context_hints_are_added_even_if_name_already_occurs_in_selected_text():
     assert complete_ask_context("What did Rowan hear?", [answer], [answer, speaker], ["Rowan"]) == [answer, speaker]
 
 
+def test_explicit_previous_chapter_continuity_preserves_exact_body_text_and_bounds():
+    ending = source(12, "The younger son, Rowan, now entered the garden.", ordinal=2, chapter="two")
+    opening = source(7, "He was called Wren by his brothers.", ordinal=3, chapter="three", continuity_ids=[12])
+    completed = complete_ask_context("Who was called Wren?", [opening], [opening, ending])
+    assert completed == [opening, ending]
+    assert completed[1]["text"] == ending["text"]
+
+
+def test_missing_name_source_also_completes_its_direct_previous_chapter_continuity():
+    action = source(17, "He carried the lantern.", ordinal=3, chapter="three")
+    opening = source(2, "Aster was the name he used.", ordinal=3, chapter="three", continuity_ids=[12])
+    ending = source(12, "The younger child, Neris, crossed the threshold.", ordinal=2, chapter="two")
+    pool = [action, opening, ending]
+    before = copy.deepcopy(pool)
+    selected = [dict(action)]
+    completed = complete_ask_context("What did Aster carry?", selected, pool, ["Aster"])
+    assert completed == [action, opening, ending]
+    assert [item["id"] for item in completed] == [17, 2, 12]
+    assert pool == before and selected == [action]
+
+
+def test_missing_name_continuity_is_transitive_and_recalculates_remaining_name_coverage():
+    action = source(17, "They carried the record.", ordinal=4, chapter="four")
+    opening = source(2, "Aster listened.", ordinal=4, chapter="four", continuity_ids=[12])
+    middle = source(12, "Mara was the youngest child in the household.", ordinal=3, chapter="three",
+                    continuity_ids=[8])
+    ending = source(8, "They joined the household that winter.", ordinal=2, chapter="two")
+    redundant = source(5, "Mara discussed the record for a long time before she carried it into the room.",
+                       ordinal=4, chapter="four")
+    pool = [action, opening, middle, ending, redundant]
+    completed = complete_ask_context("What did Aster and Mara carry?", [action], pool, ["Aster", "Mara"])
+    assert completed == [action, opening, middle, ending]
+    assert redundant not in completed, "continuity already supplied the other missing name"
+    assert all(item == next(candidate for candidate in pool if item["id"] == candidate["id"])
+               for item in completed)
+
+
+def test_missing_name_continuity_chain_keeps_six_source_cap_and_original_selection():
+    action = source(17, "He carried the lantern.", ordinal=6, chapter="six")
+    opening = source(2, "Aster listened.", ordinal=6, chapter="six", continuity_ids=[3])
+    pool = [action, opening]
+    for source_id in range(3, 8):
+        ordinal = 8 - source_id
+        pool.append(source(source_id, f"The household entered section {ordinal}.", ordinal=ordinal,
+                           chapter=f"section{ordinal}",
+                           continuity_ids=[source_id + 1] if source_id < 7 else []))
+    completed = complete_ask_context("What did Aster carry?", [action], pool, ["Aster"])
+    assert len(completed) == 6
+    assert [item["id"] for item in completed] == [17, 2, 3, 4, 5, 6]
+    assert completed[0] == action and len({item["id"] for item in completed}) == 6
+    assert all(item in pool for item in completed)
+
+
+@pytest.mark.parametrize("target_ordinal,target_chapter,refs", [
+    (4, "four", [12]), (3, "other", [12]), (1, "one", [12]),
+    (2, "three", [12]), (2, "two", [99]), (2, "two", [True]),
+    (2, "two", [12, 12]), (2, "two", "12"),
+])
+def test_continuity_never_expands_to_future_same_or_nonadjacent_chapters(target_ordinal, target_chapter, refs):
+    opening = source(7, "He entered.", ordinal=3, chapter="three", continuity_ids=refs)
+    target = source(12, "An unrelated passage.", ordinal=target_ordinal, chapter=target_chapter)
+    with pytest.raises(AskContextError):
+        complete_ask_context("Who entered?", [opening], [opening, target])
+
+
 def test_context_duplicates_self_links_and_cycles_are_bounded_without_repeated_passages():
     first = source(1, "The record was read.", context_ids=[1, 2, 2])
     second = source(2, "Rowan answered.", context_ids=[1, 3])

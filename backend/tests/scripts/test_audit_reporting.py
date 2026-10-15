@@ -85,6 +85,9 @@ def test_completion_and_embedding_failures_are_traced_once_with_safe_types_and_p
     assert completion["status"] == embedding["status"] == "failed"
     assert completion["usage"] is None and embedding["usage"] is None
     assert completion["failure"]["provider_kind"] == "authentication"
+    assert completion["configured_reasoning_effort"] == "medium"
+    assert completion["configured_service_tier"] == "default"
+    assert len(completion["request_sha256"]) == 64
     assert embedding["failure"]["provider_service"] == "embedding"
     assert len(catalog.get_costs("b")) == 2
     assert catalog.get_cost_reservations("b") == []
@@ -106,6 +109,7 @@ def test_success_trace_honors_explicit_cap_and_logs_usage_without_changing_resul
     assert seen == [2048] and result == ({"accepted": True}, {"in": 10, "out": 3})
     assert report["model_calls"][0]["status"] == "succeeded"
     assert report["model_calls"][0]["input_estimate"] > 0
+    assert "configured_reasoning_effort" not in report["model_calls"][0]
 
 
 def test_wrapped_review_failure_preserves_safe_provider_classification_without_messages():

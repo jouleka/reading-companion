@@ -34,6 +34,13 @@ from app.ask import (
     validate_ask_draft,
 )
 from app.ask_context import complete_ask_context
+from app.ask_evidence import (
+    ASK_EVIDENCE_SYSTEM,
+    AskEvidenceError,
+    AskEvidenceReview,
+    complete_evidence_citations,
+    evidence_prompt,
+)
 from app.ask_selection import (
     SOURCE_SELECTION_SYSTEM,
     SourceSelection,
@@ -75,6 +82,7 @@ from app.eval.spoiler_gate.judge import (
 )
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
 from app.llm.retrieval import budgeted_query_embedding
+from app.llm.client import ProviderUnavailable
 from app.reading_assist import (
     CLOSEOUT_SYSTEM,
     SELECTION_SYSTEM,
@@ -369,6 +377,34 @@ def _public_ask_source(source):
     }
 
 
+def _complete_citation_evidence(value, sources, *, catalog, settings, client, book_id,
+                                remember, known_names=()):
+    """Explicit evidence coverage before the fresh, claim-specific semantic review.
+
+    This call runs outside the book lock. It may change only citation IDs, using exact spans of
+    already selected completed sources; it cannot repair an unsupported assertion by changing text.
+    """
+    draft = AskDraft.model_validate(value)
+    if draft.insufficient_evidence or client.provider == "stub":
+        return complete_ask_citations(draft, sources, known_names=known_names)
+    review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources)
+    try:
+        audited = budgeted_completion(
+            catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
+            user=review_prompt, tier="cheap", schema=AskEvidenceReview,
+        )
+    except (CostCeilingExceeded, ProviderUnavailable):
+        raise
+    except Exception:
+        # SDK parse/refusal/truncation failures are unavailable reviews, not draft criticism.
+        # The budget layer already retains their conservative failed-call charge.
+        raise AskEvidenceError(repairable=False) from None
+    remember(audited)
+    return AskDraft.model_validate(complete_evidence_citations(
+        draft.model_dump(mode="json"), sources, audited.value,
+    ))
+
+
 @router.post("/ask")
 def ask_the_book(
     book_id: str,
@@ -483,8 +519,20 @@ def ask_the_book(
             raise HTTPException(429, "book cost ceiling reached") from exc
         remember(generated, provider=client.provider, model=client._model_for("large"))
         try:
-            completed = complete_ask_citations(generated.value, sources, known_names=known_names)
+            completed = _complete_citation_evidence(
+                generated.value, sources, catalog=catalog, settings=settings, client=client,
+                book_id=book_id, known_names=known_names,
+                remember=lambda result: remember(result, provider=client.provider,
+                                                  model=client._model_for("cheap")),
+            )
             draft = validate_ask_draft(completed, sources, known_names=known_names)
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except AskEvidenceError as exc:
+            if not exc.repairable:
+                raise HTTPException(502, "answer evidence review could not be cleared") from exc
+            repair_feedback = list(exc.review_feedback)
+            continue
         except (AskSafetyError, ValueError) as exc:
             repair_feedback = [
                 "The draft was not traceable to its own cited passages or had an invalid citation "
@@ -717,6 +765,7 @@ def chapter_closeout(
             "cost": _ask_cost_payload(calls),
         }
     prompt = chapter_closeout_prompt(body.chapter, sources)
+    repair_feedback = []
     for _attempt in range(2):
         try:
             generated = budgeted_completion(
@@ -726,7 +775,7 @@ def chapter_closeout(
                 book_id,
                 phase="synthesis",
                 system=CLOSEOUT_SYSTEM,
-                user=prompt,
+                user=ask_repair_prompt(prompt, repair_feedback),
                 tier="large",
                 schema=AskDraft,
             )
@@ -734,8 +783,23 @@ def chapter_closeout(
             raise HTTPException(429, "book cost ceiling reached") from exc
         remember(generated, model=client._model_for("large"))
         try:
-            draft = validate_ask_draft(generated.value, sources)
-        except (AskSafetyError, ValueError):
+            completed = _complete_citation_evidence(
+                generated.value, sources, catalog=catalog, settings=settings, client=client,
+                book_id=book_id,
+                remember=lambda result: remember(result, model=client._model_for("cheap")),
+            )
+            draft = validate_ask_draft(completed, sources)
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except AskEvidenceError as exc:
+            if not exc.repairable:
+                raise HTTPException(502, "answer evidence review could not be cleared") from exc
+            repair_feedback = list(exc.review_feedback)
+            continue
+        except (AskSafetyError, ValueError) as exc:
+            repair_feedback = ["Use only complete factual claims supported by their own cited passages."]
+            if isinstance(exc, AskSafetyError):
+                repair_feedback.extend(exc.review_feedback)
             continue
         if draft.insufficient_evidence:
             return {
@@ -785,6 +849,9 @@ def chapter_closeout(
         except JudgeUnavailable:
             continue
         if verdict["references_future"] or verdict["unsupported_claims"]:
+            repair_feedback = verdict["unsupported_claims"] or [
+                "The draft asserted a development not established by its cited passages."
+            ]
             continue
         return {
             "chapter": body.chapter,

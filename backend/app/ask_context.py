@@ -53,7 +53,17 @@ def _validated_pool(selected, candidates):
             if (target["chapter_key"] != source["chapter_key"]
                     or target["ordinal"] != source["ordinal"]):
                 raise _invalid()
-        context[source_id] = references
+        continuity = source.get("continuity_ids", [])
+        if not isinstance(continuity, list) or len(continuity) > 1:
+            raise _invalid()
+        for reference in continuity:
+            if isinstance(reference, bool) or not isinstance(reference, int) or reference not in available:
+                raise _invalid()
+            target = available[reference]
+            if (target["chapter_key"] == source["chapter_key"]
+                    or target["ordinal"] != source["ordinal"] - 1):
+                raise _invalid()
+        context[source_id] = references + continuity
     return canonical, available, context
 
 
@@ -108,6 +118,8 @@ def complete_ask_context(question, selected, candidates, known_names=(), *, allo
     Empty selection remains empty by default. An explicit opt-in may retrieve at most three exact
     windows fully covering at least two proper query-name parts before normal context completion.
     This is retrieval only: all normal answer-generation and claim-review gates remain required.
+    Opening-to-previous-chapter continuity IDs must decrease the ordinal by exactly one and still
+    refer to exact candidates. They are retrieval context, never proof of the same person or topic.
     Malformed context IDs or changed selected evidence fail closed. Metadata hints are followed
     deterministically (including bounded transitive hints), then missing observed query-name parts
     are covered greedily. This is necessary evidence presence, never proof of who spoke or acted.
@@ -143,11 +155,16 @@ def complete_ask_context(question, selected, candidates, known_names=(), *, allo
         return True
 
     index = 0
-    while index < len(result) and len(result) < MAX_SELECTED_SOURCES:
-        source = result[index]
-        for context_id in context[source["id"]]:
-            append(available[context_id])
-        index += 1
+
+    def close_context():
+        nonlocal index
+        while index < len(result) and len(result) < MAX_SELECTED_SOURCES:
+            source = result[index]
+            for context_id in context[source["id"]]:
+                append(available[context_id])
+            index += 1
+
+    close_context()
 
     present = set().union(*(terms[source["id"]] for source in result))
     missing = needed - present
@@ -164,5 +181,9 @@ def complete_ask_context(question, selected, candidates, known_names=(), *, allo
             len(missing & terms[source["id"]]), source["chapter_key"] in chapters, -len(source["text"]),
         ))
         append(best)
-        missing -= terms[best["id"]]
+        # A newly found name can be in a chapter opening whose referent needs an earlier exact
+        # tail. Follow its validated hints too; that context may itself cover another missing name.
+        close_context()
+        present = set().union(*(terms[source["id"]] for source in result))
+        missing = needed - present
     return result

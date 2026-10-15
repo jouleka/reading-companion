@@ -8,13 +8,16 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.ask import AskVerdict
+from app.ask import AskDraft, AskVerdict
+from app.ask_selection import SourceSelection
 from app.catalog.catalog import Catalog
 from app.cost import CostCeilingExceeded, budgeted_completion, estimate_input_tokens, pricing_known, usd_of
 from app.cost.limits import completion_usage, reserved_usd_of
 from app.hosted.provider_runtime import budgeted_hosted_completion
 from app.hosted.tenant.models import OwnerId
 from app.eval.spoiler_gate.judge import JudgeVerdict
+from app.ingest.extraction.schema import Extraction
+from app.ingest.extraction.validation import ExtractionVerdict
 from app.llm.client import LLMClient, ProviderUnavailable
 from app.llm import versioning
 
@@ -55,10 +58,12 @@ def _settings(**overrides):
     })
 
 
-@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-sol"])
+@pytest.mark.parametrize("model,reasoning", [("gpt-6-luna", "medium"), ("gpt-6.1-sol", "low")])
 @pytest.mark.parametrize("tier", ["cheap", "large"])
 @pytest.mark.parametrize("schema", [None, Result])
-def test_native_gpt6_uses_low_reasoning_standard_service_and_one_shared_output_cap(model, tier, schema):
+def test_native_gpt6_uses_model_reasoning_standard_service_and_one_shared_output_cap(
+    model, reasoning, tier, schema,
+):
     requests = []
 
     def handler(request):
@@ -72,7 +77,7 @@ def test_native_gpt6_uses_low_reasoning_standard_service_and_one_shared_output_c
     )
     [request] = requests
     assert request["model"] == model
-    assert request["reasoning_effort"] == "low"
+    assert request["reasoning_effort"] == reasoning
     assert request["service_tier"] == "default"
     assert request["max_completion_tokens"] == 321
     assert "max_tokens" not in request and "tools" not in request
@@ -98,12 +103,12 @@ def test_gpt6_direct_call_still_has_a_bounded_default_output():
 
 @pytest.mark.parametrize("model,schema,reasoning", [
     ("gpt-6-luna", AskVerdict, "medium"),
-    ("gpt-6-luna", JudgeVerdict, "low"),
+    ("gpt-6-luna", JudgeVerdict, "medium"),
     ("gpt-6.1-sol", AskVerdict, "low"),
 ])
 @pytest.mark.parametrize("tier", ["cheap", "large"])
 @pytest.mark.parametrize("cap", [None, 2048, 4096])
-def test_only_exact_native_luna_ask_verdict_uses_medium_with_the_existing_total_cap(
+def test_native_verdicts_keep_model_reasoning_and_the_existing_total_cap(
     model, schema, reasoning, tier, cap,
 ):
     requests = []
@@ -125,6 +130,33 @@ def test_only_exact_native_luna_ask_verdict_uses_medium_with_the_existing_total_
     assert request["response_format"]["json_schema"]["name"] == schema.__name__
     assert value == verdict
     assert usage == {"in": 100, "out": 20}, "reasoning must not be billed twice"
+
+
+@pytest.mark.parametrize("schema,tier,value", [
+    (SourceSelection, "cheap", {"source_ids": [1]}),
+    (Extraction, "cheap", {"chapter_summary": "A quiet section.", "entities": [],
+                           "relationships": [], "events": [], "themes": []}),
+    (ExtractionVerdict, "large", {"references_future": False, "unsupported_claims": [],
+                                 "field_audits": []}),
+    (AskDraft, "large", {"insufficient_evidence": False,
+                         "claims": [{"text": "An exact supported statement.", "citation_ids": [1]}]}),
+])
+def test_luna_selection_extraction_generation_and_memory_review_all_request_medium(schema, tier, value):
+    requests = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        return _response("gpt-6-luna", json.dumps(value))
+
+    result, usage = _client(handler).complete(
+        "Offline wire-format fixture only.", "Source.", tier=tier, schema=schema, max_output_tokens=2048,
+    )
+    [request] = requests
+    assert request["reasoning_effort"] == "medium"
+    assert request["service_tier"] == "default"
+    assert request["max_completion_tokens"] == 2048
+    assert "max_tokens" not in request and "tools" not in request
+    assert result == value and usage == {"in": 100, "out": 20}
 
 
 @pytest.mark.parametrize("model,native", [
@@ -334,8 +366,8 @@ def test_model_change_cannot_append_to_a_preexisting_extractor_pin():
 
 
 @pytest.mark.parametrize("schema,reasoning,requested_cap,settings_cap,effective_cap", [
-    (Result, "low", 777, 1000, 777),
-    (JudgeVerdict, "low", 777, 1000, 777),
+    (Result, "medium", 777, 1000, 777),
+    (JudgeVerdict, "medium", 777, 1000, 777),
     (AskVerdict, "medium", 2048, 4096, 2048),
     (AskVerdict, "medium", 4096, 2048, 2048),
 ])

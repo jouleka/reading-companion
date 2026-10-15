@@ -8,6 +8,7 @@ retrieval, source gates, and citation review. A small sample is evidence, not a 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import runpy
@@ -23,7 +24,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.cost import CostCeilingExceeded, budgeted_completion, estimate_input_tokens
 from app.ingest.extraction.validation import ExtractionGroundingRejected, review_extraction
-from app.llm.client import ProviderUnavailable
+from app.llm.client import ProviderUnavailable, _NATIVE_REASONING_EFFORT
 from app.main import create_app
 
 
@@ -74,6 +75,12 @@ def install_call_recording(provider, report, output_cap):
         record = {"schema": schema.__name__ if schema else None, "tier": tier,
                   "model": provider._model_for(tier), "max_output_tokens": cap,
                   "input_estimate": estimate_input_tokens(system, user, schema), "status": "running"}
+        record["request_sha256"] = hashlib.sha256(json.dumps(
+            {"system": system, "user": user}, ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8")).hexdigest()
+        if getattr(provider, "_is_native_openai", False) and record["model"] in _NATIVE_REASONING_EFFORT:
+            record["configured_reasoning_effort"] = _NATIVE_REASONING_EFFORT[record["model"]]
+            record["configured_service_tier"] = "default"
         report.setdefault("model_calls", []).append(record)
         try:
             value, usage = complete(system, user, tier, schema, cap)

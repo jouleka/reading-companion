@@ -46,7 +46,7 @@ _DEFAULT_MODELS = {
     "stub": {"cheap": "stub-cheap", "large": "stub-large"},
 }
 _OPENAI_DEFAULT_BASE = "https://api.openai.com/v1"
-_LOW_REASONING_MODELS = frozenset({"gpt-6-luna", "gpt-6.1-sol"})
+_NATIVE_REASONING_EFFORT = {"gpt-6-luna": "medium", "gpt-6.1-sol": "low"}
 _ANTHROPIC_RETRY_STATUS = (429, 500, 502, 503, 504)
 
 
@@ -280,18 +280,15 @@ class LLMClient:
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         cap_name = "max_completion_tokens" if self._is_native_openai else "max_tokens"
         cap = ({cap_name: max_output_tokens} if max_output_tokens is not None else {})
-        if self._is_native_openai and model in _LOW_REASONING_MODELS:
-            # These exact models support low (Sol does not support none/minimal). The shared cap
-            # bounds visible output AND reasoning; standard processing matches the pricing table.
-            # Only Luna's claim/attribution verdict gets medium reasoning. Hosted calls use this
-            # same native adapter, so schema policy cannot diverge from the local runtime.
-            reasoning = ("medium" if model == "gpt-6-luna"
-                         and getattr(schema, "__name__", None) == "AskVerdict" else "low")
+        if self._is_native_openai and model in _NATIVE_REASONING_EFFORT:
+            # All native Luna roles use medium; Sol stays low. The shared cap bounds visible
+            # output AND reasoning, and standard processing matches the pricing table. Hosted
+            # calls use this same adapter, independent of tier, schema, or request purpose.
             cap = {"max_completion_tokens": max_output_tokens if max_output_tokens is not None else 4096,
-                   "reasoning_effort": reasoning, "service_tier": "default"}
+                   "reasoning_effort": _NATIVE_REASONING_EFFORT[model], "service_tier": "default"}
         if schema is None:
             resp = self._oai.chat.completions.create(model=model, messages=messages, **cap)
-            if (self._is_native_openai and model in _LOW_REASONING_MODELS
+            if (self._is_native_openai and model in _NATIVE_REASONING_EFFORT
                     and getattr(resp, "service_tier", None) not in (None, "default")):
                 self._record_provider_failure("completion", "unsupported_service_tier")
                 raise ProviderUnavailable("unsupported_service_tier", service="completion")
@@ -303,7 +300,7 @@ class LLMClient:
             parsed = resp.choices[0].message.parsed
             if parsed is None:
                 raise ValueError("OpenAI returned no parsed structured output (refusal or truncation)")
-            if (model in _LOW_REASONING_MODELS
+            if (model in _NATIVE_REASONING_EFFORT
                     and getattr(resp, "service_tier", None) not in (None, "default")):
                 self._record_provider_failure("completion", "unsupported_service_tier")
                 raise ProviderUnavailable("unsupported_service_tier", service="completion")

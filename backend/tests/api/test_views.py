@@ -5,9 +5,11 @@ embeds the query BEFORE entering the per-book lock; catch-me-up is lazy synthesi
 runtime gate with the validity-snapshot cache."""
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from openai import LengthFinishReasonError
 
 from _epub import epub_ncx, three_chapter_book
 from app.config import Settings
@@ -381,6 +383,11 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
                                if "Berenice met Aldric" in source["text"]))
             return {"source_ids": ([] if choice in {"empty", "empty_names"} else [25] if choice == "invalid"
                                    else chosen)}, {"in": 50, "out": 8}
+        if "claim_audits" in fields:
+            assert not app.state.store._lock_for(bid).locked()
+            data = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+            assert all(source["completed_chapter"] <= 2 for source in data["sources"])
+            return _supported_citation_audit(data, chosen), {"in": 40, "out": 20}
         if "claims" in fields:
             assert choice in {"answer", "empty_names", "judge_auth"}
             return {"insufficient_evidence": False, "claims": [{
@@ -399,7 +406,7 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
     monkeypatch.setattr(client, "complete", complete)
     question = "What is recorded here?" if choice == "empty" else "Where did Berenice meet Aldric?"
     response = c.post(f"/api/books/{bid}/ask", json={"question": question})
-    assert len(calls) == (3 if choice in {"answer", "empty_names", "judge_auth"} else 1)
+    assert len(calls) == (4 if choice in {"answer", "empty_names", "judge_auth"} else 1)
     ledger = app.state.catalog.get_costs(bid)
     assert any(row["phase"] == "source-selection" for row in ledger)
     if choice == "judge_auth":
@@ -416,6 +423,108 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
         assert payload["insufficient_evidence"] is (choice == "empty")
         if choice in {"answer", "empty_names"}:
             assert [source["id"] for source in payload["citations"]] == chosen
+            assert sum(row["phase"] == "citation-review" for row in ledger) == 1
+
+
+def _supported_citation_audit(data, ids):
+    """Canned evidence selection for known fixture prose; not a real entailment model."""
+    return {"claim_audits": [
+        {"claim_id": claim["claim_id"], "units": [
+            {"unit_id": unit["unit_id"], "supported": True, "diagnostic": None,
+             "evidence": [{"source_id": source_id, "passage_ids": [
+                 passage["id"] for source in data["sources"] if source["source_id"] == source_id
+                 for passage in source["passages"]]} for source_id in ids]}
+            for unit in claim["units"]]}
+        for claim in data["claims"]]}
+
+
+@pytest.mark.parametrize("review_mode", [
+    "pass", "repair", "missing_audit", "foreign_source", "parse_error", "sdk_truncation",
+    "provider_auth", "reject_in_final_judge",
+])
+@pytest.mark.parametrize("route", ["ask", "chapter-closeout"])
+def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_semantic_review(
+    env, monkeypatch, review_mode, route,
+):
+    c, bid, app, _ = env
+    client = app.state.client
+    monkeypatch.setattr(client, "provider", "openai-compatible")
+    monkeypatch.setattr(client, "cheap_model", "gpt-6-luna")
+    monkeypatch.setattr(client, "large_model", "gpt-6-luna")
+    selected, generated_prompts, evidence_prompts, judged = [], [], [], []
+    if route == "chapter-closeout":
+        selected.append(1)  # The completed second chapter fits in one exact excerpt.
+    diagnostic = "Private criticism: unsupported aside mentioning Corvus."
+
+    def complete(system, user, tier="cheap", schema=None):
+        fields = getattr(schema, "model_fields", {})
+        assert not app.state.store._lock_for(bid).locked()
+        data = json.loads(user.split("(untrusted JSON data):\n", 1)[1]) if "(untrusted JSON data):\n" in user else None
+        if "source_ids" in fields:
+            selected.append(next(source["id"] for source in data["candidates"]
+                                 if "Berenice met Aldric" in source["text"]))
+            return {"source_ids": selected}, {"in": 50, "out": 8}
+        if "claims" in fields:
+            generated_prompts.append(user)
+            return {"insufficient_evidence": False, "claims": [{
+                "text": "Berenice met Aldric at the forge and they spoke.",
+                "citation_ids": selected,
+            }]}, {"in": 30, "out": 15}
+        if "claim_audits" in fields:
+            evidence_prompts.append(user)
+            assert diagnostic not in user
+            if review_mode == "parse_error":
+                raise ValueError("private-canary malformed review")
+            if review_mode == "sdk_truncation":
+                raise LengthFinishReasonError(completion=SimpleNamespace(usage=None))
+            if review_mode == "provider_auth":
+                raise ProviderUnavailable("authentication", service="completion")
+            if review_mode == "missing_audit":
+                return {"claim_audits": []}, {"in": 35, "out": 5}
+            reply = _supported_citation_audit(data, selected)
+            if review_mode == "foreign_source":
+                reply["claim_audits"][0]["units"][0]["evidence"][0]["source_id"] = 99
+            if review_mode == "repair" and len(evidence_prompts) == 1:
+                reply["claim_audits"][0]["units"][0].update(
+                    supported=False, evidence=[], diagnostic=diagnostic,
+                )
+            return reply, {"in": 35, "out": 20}
+        if "references_future" in fields:
+            judged.append(data)
+            assert diagnostic not in user and "Corvus" not in user
+            assert [source["id"] for source in data["claims"][0]["cited_passages"]] == selected
+            return {"references_future": False, "unsupported_claims": (
+                ["The cited evidence does not establish this actor binding."]
+                if review_mode == "reject_in_final_judge" else [])}, {"in": 25, "out": 8}
+        raise AssertionError("unexpected provider call")
+
+    monkeypatch.setattr(client, "complete", complete)
+    payload = ({"chapter": 2} if route == "chapter-closeout" else
+               {"question": "Where did Berenice meet Aldric?", "bookmark": 99})
+    response = c.post(f"/api/books/{bid}/{route}", json=payload)
+    ledger = app.state.catalog.get_costs(bid)
+    assert "Corvus" not in response.text and "private-canary" not in response.text
+    review_rows = [row for row in ledger if row["phase"].startswith("citation-review")]
+    assert all(row["model"] == "gpt-6-luna" for row in review_rows)
+    if review_mode in {"missing_audit", "foreign_source", "parse_error", "sdk_truncation", "provider_auth"}:
+        assert response.status_code == (503 if review_mode == "provider_auth" else 502)
+        assert len(generated_prompts) == len(evidence_prompts) == 1 and not judged
+        if review_mode in {"parse_error", "sdk_truncation", "provider_auth"}:
+            assert review_rows[0]["phase"] == "citation-review-failed-reserved"
+            assert review_rows[0]["usd"] > 0
+            assert app.state.catalog.get_cost_reservations(bid) == []
+    elif review_mode == "reject_in_final_judge":
+        assert response.status_code == 502
+        assert len(generated_prompts) == len(evidence_prompts) == len(judged) == 2
+    else:
+        assert response.status_code == 200, response.text
+        assert response.json()["claims"][0]["citation_ids"] == selected
+        assert len(judged) == 1
+        assert len(generated_prompts) == len(evidence_prompts) == (2 if review_mode == "repair" else 1)
+        if review_mode == "repair":
+            assert diagnostic not in generated_prompts[0] and diagnostic in generated_prompts[1]
+            assert "untrusted criticism, NOT book evidence" in generated_prompts[1]
+    assert len(review_rows) == len(evidence_prompts)
 
 
 def test_selection_actions_use_only_the_visible_selection_and_return_its_anchor(env):
