@@ -29,10 +29,15 @@ def ai_runtime(client=Depends(get_client)):
     ready too, so the UI needs this separate distinction before presenting it as working AI.
     """
     health = client.provider_status()
-    return {
+    payload = {
         "mode": "demo" if client.provider == "stub" else "live",
         "provider": client.provider,
         "models": {"extraction": client.version["cheap"], "synthesis": client.version["large"]},
         "completion_status": health["completion"]["status"],
         "embedding_mode": "demo" if client.embed_identity().startswith("stub:") else "live",
     }
+    jev = getattr(client, "jev", None)
+    if jev is not None:
+        payload["decisions"] = {"provider": "typesafe", "model": jev.model,
+                                "status": getattr(jev, "status", "configured")}
+    return payload

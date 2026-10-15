@@ -83,6 +83,9 @@ from app.eval.spoiler_gate.judge import (
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
 from app.llm.retrieval import budgeted_query_embedding
 from app.llm.client import ProviderUnavailable
+from app.llm.jev import JevUnavailable
+from app.llm.jev_budget import budgeted_jev
+from app.llm import jev_tasks
 from app.reading_assist import (
     CLOSEOUT_SYSTEM,
     SELECTION_SYSTEM,
@@ -378,7 +381,7 @@ def _public_ask_source(source):
 
 
 def _complete_citation_evidence(value, sources, *, catalog, settings, client, book_id,
-                                remember, known_names=(), question=None):
+                                remember, known_names=(), question=None, remember_jev=None):
     """Explicit evidence coverage before the fresh, claim-specific semantic review.
 
     This call runs outside the book lock. It may change only citation IDs, using exact spans of
@@ -388,6 +391,22 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
     if draft.insufficient_evidence or client.provider == "stub":
         return complete_ask_citations(draft, sources, known_names=known_names)
     review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
+    jev = getattr(client, "jev", None)
+    if jev is not None and settings.jev_evidence_enabled:
+        def run(state, questions):
+            result = budgeted_jev(catalog, settings, jev, book_id, phase="jev-citation-review",
+                                  state=state, questions=questions)
+            if remember_jev is not None:
+                remember_jev(result)
+            return result.value
+        try:
+            audit = jev_tasks.evidence(draft.model_dump(mode="json"), sources,
+                                       question=question, run=run, settings=settings)
+            reviewed = complete_evidence_citations(draft.model_dump(mode="json"), sources, audit)
+            return complete_ask_citations(AskDraft.model_validate(reviewed), sources,
+                                          known_names=known_names, include_context=False)
+        except JevUnavailable:
+            pass  # Existing complete positive-evidence audit remains the bounded fallback.
     try:
         audited = budgeted_completion(
             catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
@@ -483,13 +502,30 @@ def ask_the_book(
     if sources and client.provider != "stub":
         candidates = sources
         try:
-            selection = budgeted_completion(
-                catalog, settings, client, book_id, phase="source-selection",
-                system=SOURCE_SELECTION_SYSTEM, user=source_selection_prompt(body.question, sources),
-                tier="cheap", schema=SourceSelection,
-            )
-            remember(selection, provider=client.provider, model=client._model_for("cheap"))
-            sources = validate_selection(selection.value, sources)
+            selected = None
+            jev = getattr(client, "jev", None)
+            if jev is not None and settings.jev_selection_enabled:
+                def select_run(state, questions):
+                    result = budgeted_jev(catalog, settings, jev, book_id,
+                                          phase="jev-source-selection", state=state,
+                                          questions=questions)
+                    remember(result, provider="typesafe", model=jev.model)
+                    return result.value
+                try:
+                    selected = jev_tasks.select(body.question, sources, run=select_run,
+                                                settings=settings)
+                except JevUnavailable:
+                    pass
+            if selected is None:
+                selection = budgeted_completion(
+                    catalog, settings, client, book_id, phase="source-selection",
+                    system=SOURCE_SELECTION_SYSTEM,
+                    user=source_selection_prompt(body.question, sources),
+                    tier="cheap", schema=SourceSelection,
+                )
+                remember(selection, provider=client.provider, model=client._model_for("cheap"))
+                selected = validate_selection(selection.value, sources)
+            sources = selected
             sources = complete_ask_context(body.question, sources, candidates, known_names=known_names,
                                            allow_named_fallback=True)
         except CostCeilingExceeded as exc:
@@ -530,6 +566,8 @@ def ask_the_book(
                 question=body.question,
                 remember=lambda result: remember(result, provider=client.provider,
                                                   model=client._model_for("cheap")),
+                remember_jev=lambda result: remember(result, provider="typesafe",
+                                                      model=client.jev.model),
             )
             # The real-provider helper above completed every positive evidence audit. Lexical
             # overlap is not entailment; supported paraphrases still need the fresh judge below.
@@ -645,9 +683,9 @@ def selection_action(
     }
     calls = []
 
-    def remember(result, *, model):
+    def remember(result, *, model, provider=None):
         calls.append({
-            "provider": client.provider,
+            "provider": provider or client.provider,
             "model": model,
             "input_tokens": int(result.usage.get("in", 0) or 0),
             "output_tokens": int(result.usage.get("out", 0) or 0),
@@ -754,9 +792,9 @@ def chapter_closeout(
     )
     calls = []
 
-    def remember(result, *, model):
+    def remember(result, *, model, provider=None):
         calls.append({
-            "provider": client.provider,
+            "provider": provider or client.provider,
             "model": model,
             "input_tokens": int(result.usage.get("in", 0) or 0),
             "output_tokens": int(result.usage.get("out", 0) or 0),
@@ -796,6 +834,8 @@ def chapter_closeout(
                 generated.value, sources, catalog=catalog, settings=settings, client=client,
                 book_id=book_id,
                 remember=lambda result: remember(result, model=client._model_for("cheap")),
+                remember_jev=lambda result: remember(result, provider="typesafe",
+                                                      model=client.jev.model),
             )
             draft = validate_ask_draft(completed, sources,
                                        defer_lexical_to_judge=client.provider != "stub")
@@ -934,6 +974,24 @@ def _budgeted_runner(catalog, settings, client, book_id, phase):
     return complete
 
 
+def _review_recap(client, text, facts, *, catalog, settings, book_id, phase="judge", tier="large"):
+    jev = getattr(client, "jev", None)
+    if jev is not None and settings.jev_recap_enabled:
+        def run(state, questions):
+            return budgeted_jev(catalog, settings, jev, book_id, phase=f"jev-{phase}",
+                                 state=state, questions=questions).value
+        try:
+            return jev_tasks.recap(text, facts, run=run, settings=settings), {}
+        except JevUnavailable:
+            pass
+    runner = _budgeted_runner(catalog, settings, client, book_id, phase)
+    def complete(system, user, **kwargs):
+        if jev is not None:
+            system += jev_tasks.SUMMARY_GROUNDING_RULES
+        return runner(system, user, **kwargs)
+    return judge_recap(client, text, facts, tier=tier, complete=complete)
+
+
 def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, book_type="novel",
               content_language="und"):
     """LIT-29 'right now' one-liner (option b): its OWN small (cheap-tier) model call, spoiler-gated by
@@ -949,7 +1007,8 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     try:
         now_text, _usage = _budgeted_runner(
             catalog, settings, client, book_id, "now"
-        )(now_system_for(book_type, content_language),
+        )(now_system_for(book_type, content_language) + (
+            jev_tasks.SUMMARY_GROUNDING_RULES if getattr(client, "jev", None) is not None else ""),
           now_prompt(eff, delta, book_type=book_type), tier="cheap")
     except Exception:
         return None                                        # provider error -> no one-liner (fail-safe)
@@ -959,13 +1018,14 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
         except SpoilerGateError:
             return None                                    # spoiler-bearing details stay server-side
     try:                                                   # the judge backstop, OUTSIDE the lock
-        verdict, _judge_usage = judge_recap(
-            client, now_text, facts, tier="cheap",
-            complete=_budgeted_runner(catalog, settings, client, book_id, "now-judge"),
+        verdict, _judge_usage = _review_recap(
+            client, now_text, facts, tier="cheap", catalog=catalog, settings=settings,
+            book_id=book_id, phase="now-judge",
         )
     except (JudgeUnavailable, CostCeilingExceeded):
         return None
-    if verdict["references_future"]:
+    if verdict["references_future"] or (getattr(client, "jev", None) is not None
+                                        and verdict["unsupported_claims"]):
         return None
     return now_text.strip() or None
 
@@ -1005,6 +1065,9 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         book_type = mem.book_profile()["book_type"]
         content_language = mem.content_language()
     synth_model = client.extractor_version("large")
+    if getattr(client, "jev", None) is not None:
+        synth_model += (f":jev-hybrid-recap-v2:{settings.jev_recap_enabled}:{client.jev.model}:"
+                        f"{settings.jev_min_probability}:{settings.jev_min_confidence}")
     incarnation = catalog.get_book(book_id)["incarnation"]
     key = (book_id, incarnation, cache_key(
         book_id,
@@ -1056,6 +1119,8 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             prior_recap = (recaps.get(prior_key) or {}).get("recap")
 
         system = flowing_system_for(book_type, content_language)
+        if getattr(client, "jev", None) is not None:
+            system += jev_tasks.SUMMARY_GROUNDING_RULES
         cumulative_facts = _cumulative_recap_facts(facts)
         full_review_fits = _recap_input_fits(
             settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
@@ -1100,15 +1165,16 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                                      judge_prompt(recap, review_facts), schema=JudgeVerdict):
                 raise HTTPException(429, "recap review exceeds the per-call input ceiling")
             try:
-                verdict, _judge_usage = judge_recap(
-                    client, recap, review_facts,
-                    complete=_budgeted_runner(catalog, settings, client, book_id, "judge"),
+                verdict, _judge_usage = _review_recap(
+                    client, recap, review_facts, catalog=catalog, settings=settings,
+                    book_id=book_id,
                 )
             except CostCeilingExceeded as exc:
                 raise HTTPException(429, "book cost ceiling reached") from exc
             except JudgeUnavailable:
                 continue
-            if verdict["references_future"]:
+            if verdict["references_future"] or (getattr(client, "jev", None) is not None
+                                                and verdict["unsupported_claims"]):
                 continue
             recap_final = recap
             break

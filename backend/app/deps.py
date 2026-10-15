@@ -18,6 +18,17 @@ def build_state(settings: Settings) -> dict:
     without ALLOW_STUB — the D-A7 fail-loud predicate lives in the client's default-deny."""
     os.makedirs(settings.data_dir, exist_ok=True)
     client = LLMClient(env=settings.llm_env(), allow_stub=settings.allow_stub)
+    if settings.jev_enabled:
+        from app.llm.jev import JevClient, JevUnavailable, windows_credential
+
+        if client.provider == "stub":
+            raise JevUnavailable("Jev requires a configured generative provider")
+        key = (settings.typesafe_api_key.get_secret_value() if settings.typesafe_api_key else
+               windows_credential() if settings.jev_windows_credential else None)
+        if not key:
+            raise JevUnavailable("Configure a server-side Jev credential")
+        client.jev = JevClient(api_key=key, model=settings.jev_model,
+                               timeout=settings.jev_timeout_seconds)
     catalog = Catalog(os.path.join(settings.data_dir, "catalog.db"),
                       schema_version_default=migrations.CURRENT_VERSION)
     return {

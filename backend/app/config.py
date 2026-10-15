@@ -31,6 +31,19 @@ class Settings(BaseSettings):
     llm_cheap_model: str | None = None
     llm_large_model: str | None = None
 
+    # Local typed decisions; prose and extraction keep their configured generative provider.
+    jev_enabled: bool = False
+    typesafe_api_key: SecretStr | None = None
+    jev_windows_credential: bool = False
+    jev_model: Literal["jev-1.13.0", "jev-1.14.0"] = "jev-1.13.0"
+    jev_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
+    jev_selection_enabled: bool = True
+    jev_evidence_enabled: bool = True
+    jev_recap_enabled: bool = False  # Experimental: conservative routing added latency in live QA.
+    jev_min_probability: float = Field(default=0.95, ge=0.9, le=1)
+    jev_min_confidence: float = Field(default=0.85, ge=0.8, le=1)
+    recap_prewarm: bool = False
+
     # service
     deployment_mode: Literal["local", "hosted"] = "local"
     data_dir: str = str(Path(__file__).resolve().parents[2] / "data")

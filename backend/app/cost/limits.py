@@ -20,6 +20,8 @@ class CostCeilingExceeded(RuntimeError):
 # Advisory USD pricing already used by the product. Hard token ceilings remain effective for unknown
 # models; unknown pricing intentionally returns zero rather than pretending a current price is known.
 _USD = {
+    "jev-1.13.0": (0.042e-6, 0.0),
+    "jev-1.14.0": (0.042e-6, 0.0),
     # Standard text-token prices checked against official model documentation 2026-10-15.
     # Keep the longer mini name first: identities include the provider and model name.
     "gpt-6-luna": (0.10e-6, 0.50e-6),

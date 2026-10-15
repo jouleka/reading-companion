@@ -403,10 +403,20 @@ def create_app(
                 max_failures=settings.recap_failure_max_entries,
                 max_flights=settings.recap_max_inflight,
             )
+            warmer = None
+            if settings.recap_prewarm:
+                from app.recap_warm import RecapPrewarmer
+                warmer = RecapPrewarmer(app)
+                app.state.worker.on_complete = warmer.notify
+            app.state.recap_warmer = warmer
             try:
                 yield
             finally:
                 app.state.worker.shutdown()
+                if warmer is not None:
+                    await warmer.close()
+                if getattr(state["client"], "jev", None) is not None:
+                    state["client"].jev.close()
                 app.state.store.close()
                 app.state.catalog.close()
         finally:
