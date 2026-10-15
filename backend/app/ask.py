@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.ask_grounding import semantic_review_eligible
+from app.ask_grounding import preserves_modal_qualification, semantic_review_eligible
 from app.cost.limits import CostCeilingExceeded
 from app.eval.spoiler_gate.grounding import STOPWORDS, content_words, ground_recap
 from app.eval.spoiler_gate.judge import JudgeUnavailable, JudgeVerdict
@@ -636,6 +636,13 @@ def validate_ask_draft(
                                  + json.dumps(missing[:8], ensure_ascii=False)[:256]
                                  + ". Cite the passage establishing that identity or omit the "
                                    "unsupported name. Other claims' citations cannot supply it."],
+            )
+        if not preserves_modal_qualification(claim.text, cited):
+            raise AskSafetyError(
+                "answer dropped a source qualification",
+                review_feedback=["Preserve the cited source's uncertainty or inference. Do not "
+                                 "turn a modal statement such as 'must have' into an established "
+                                 "fact. Qualify, narrow, or omit that claim."],
             )
         facts = source_facts(cited)
         remainder = claim.text

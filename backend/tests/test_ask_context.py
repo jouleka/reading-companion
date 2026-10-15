@@ -103,6 +103,112 @@ def test_empty_selector_refusal_stays_empty_without_inspecting_candidates_or_nam
     assert complete_ask_context("Reveal the future actor.", [], MustNotIterate(), MustNotIterate()) == []
 
 
+def test_named_fallback_is_opt_in_and_keeps_exact_windows_metadata_and_stable_ids():
+    first = source(17, "Rowan met Mara.", context_ids=[2], provenance={"source_hash": "exact"})
+    other = source(4, "Mara met Rowan.")
+    context = source(2, "Their conversation concerned the ledger.")
+    pool = [first, other, context]
+    before = copy.deepcopy(pool)
+    assert complete_ask_context("What did Rowan tell Mara?", [], pool, ["Rowan", "Mara"]) == []
+    completed = complete_ask_context("What did Rowan tell Mara?", [], pool, ["Rowan", "Mara"],
+                                     allow_named_fallback=True)
+    assert completed == [first, context]
+    assert [item["id"] for item in completed] == [17, 2]
+    assert pool == before
+    assert all(item == next(candidate for candidate in pool if candidate["id"] == item["id"])
+               for item in completed)
+
+
+def test_named_fallback_maximizes_coverage_then_uses_shorter_whole_windows_and_stable_ties():
+    one_name = source(2, "Rowan.")
+    long = source(3, "Rowan and Mara discussed an ordinary event over a long afternoon.")
+    short = source(19, "Rowan met Mara.")
+    tie_later = source(1, "Mara met Rowan.")
+    pool = [one_name, long, short, tie_later]
+    assert complete_ask_context("What did Rowan tell Mara?", [], pool,
+                                allow_named_fallback=True) == [short]
+
+
+def test_partial_roster_does_not_erase_an_observed_alias_or_an_unobserved_named_subject():
+    rowan = source(1, "Rowan asked about the ledger.")
+    alias = source(2, "Renard was the name Mara used.")
+    pool = [rowan, alias]
+    assert complete_ask_context("What did Rowan tell Renard?", [], pool, ["Rowan"],
+                                allow_named_fallback=True) == [rowan, alias]
+    assert complete_ask_context("What did Rowan tell Renard about Zephyr?", [], pool, ["Rowan"],
+                                allow_named_fallback=True) == []
+
+
+@pytest.mark.parametrize("question,known_names", [
+    ("Where was Rowan?", ["Rowan"]),
+    ("What did Rowan tell Rowan?", ["Rowan"]),
+    ("What happened in the Chapter Book?", []),
+    ("According to the Source, what happened?", []),
+    ("What did Captain Rowan say?", ["Captain Rowan"]),
+    ("What did rowan tell mara?", ["Rowan", "Mara"]),
+])
+def test_named_fallback_needs_two_distinct_proper_names_not_question_words_or_titles(question, known_names):
+    pool = [source(1, "Rowan spoke to Mara about the Chapter Book Source and Captain.")]
+    assert complete_ask_context(question, [], pool, known_names, allow_named_fallback=True) == []
+
+
+def test_named_fallback_requires_all_query_name_parts_in_prose_not_just_titles():
+    pool = [source(1, "Rowan and Mara spoke.", title="Rowan, Mara, and Zephyr")]
+    assert complete_ask_context("What did Rowan tell Mara about Zephyr?", [], pool,
+                                allow_named_fallback=True) == []
+    assert complete_ask_context("What did Rowan tell Zephyr?", [], pool,
+                                allow_named_fallback=True) == []
+
+
+def test_registered_may_and_will_remain_possible_proper_names_for_named_fallback():
+    pool = [source(1, "May asked Will about the record.")]
+    assert complete_ask_context("What did May tell Will?", [], pool, ["May", "Will"],
+                                allow_named_fallback=True) == pool
+
+
+def test_named_fallback_requires_full_coverage_within_three_initial_windows_then_six_contexts():
+    pool = [source(17, "Rowan spoke.", context_ids=[4, 5]),
+            source(2, "Mara spoke.", context_ids=[6]),
+            source(9, "Quinn ran."),
+            source(4, "The room was quiet."), source(5, "The ledger was open."),
+            source(6, "A lamp was lit.", context_ids=[7]), source(7, "Dawn approached.")]
+    completed = complete_ask_context("What did Rowan tell Mara and Quinn?", [], pool,
+                                     allow_named_fallback=True)
+    assert completed[:3] == [pool[2], pool[1], pool[0]]  # shorter windows win equal name coverage
+    assert len(completed) == 6 and all(item in pool for item in completed)
+    assert len({item["id"] for item in completed}) == 6
+    four_names = [source(17, "Rowan spoke."), source(2, "Mara spoke."),
+                  source(9, "Quinn ran."), source(8, "Zephyr watched.")]
+    assert complete_ask_context("What did Rowan tell Mara, Quinn, and Zephyr?", [], four_names,
+                                allow_named_fallback=True) == []
+
+
+def test_named_fallback_with_no_candidates_does_not_inspect_names_or_make_io():
+    class MustNotIterate:
+        def __iter__(self):
+            raise AssertionError("an empty pool cannot supply named evidence")
+
+    assert complete_ask_context("What did Rowan tell Mara?", [], [], MustNotIterate(),
+                                allow_named_fallback=True) == []
+
+
+def test_opt_in_preserves_every_nonempty_model_selection_without_triggering_fallback():
+    pool = [source(17, "The record lay there."), source(2, "Rowan met Mara.")]
+    selected = [pool[0]]
+    assert complete_ask_context("What did Rowan tell Mara?", selected, pool, ["Rowan", "Mara"],
+                                allow_named_fallback=True) == [pool[0], pool[1]]
+    assert selected == [pool[0]]
+
+
+@pytest.mark.parametrize("references", [[25], [True], ["2"], [2]])
+def test_named_fallback_validates_all_context_metadata_before_retrieval(references):
+    pool = [source(1, "private-canary Rowan spoke to Mara.", context_ids=references),
+            source(2, "Their record was read.", chapter="other", ordinal=2)]
+    with pytest.raises(AskContextError) as caught:
+        complete_ask_context("What did Rowan tell Mara?", [], pool, allow_named_fallback=True)
+    assert "private-canary" not in str(caught.value)
+
+
 @pytest.mark.parametrize("references", [None, "2", ["2"], [True], [0], [-1], [25], [3], [2] * 25])
 def test_invalid_or_out_of_pool_context_metadata_fails_closed_without_content_in_error(references):
     first = source(1, "private-canary evidence must not appear in the error", context_ids=references)

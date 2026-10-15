@@ -62,12 +62,19 @@ it does not migrate the hosted PostgreSQL source model.
 Real-provider Ask chooses up to six exact passages from at most 24 verified completed-source
 candidates using one budgeted cheap-role selection call. Independent semantic hits, lexical matches,
 nearby dialogue and named attribution remain separate candidates. Deterministic context completion
-retains the selected passages and adds existing context within the same six-source cap. Each claim
+retains the selected passages and adds existing context within the same six-source cap.
+When selection is valid but empty, the API may recover up to three exact candidate windows covering
+every proper query-name part (at least two); it never treats this coverage as an answer clearance.
+Each claim
 can explicitly acquire missing selected context or name evidence within its three-citation cap;
 its text does not change. The mandatory independent judge sees exactly the resulting own citations.
 Name presence and context hints do not establish an alias, speaker, or fact by themselves. Invalid
 selection, missing identity, unsupported facts and unavailable review withhold the answer. Typed
 provider authentication/availability failures stop without purchasing another synthesis attempt.
+Narrow identity, exact-speech and family paraphrases may reach semantic review when lexical wording
+differs. They do not bypass it. A separate necessary check rejects unqualified assertions of a
+predicate found only in modal-perfect form in its own citations, such as changing "must have" into
+a fact; other qualifications and subject bindings still depend on semantic review.
 The offline stub keeps deterministic retrieval and never runs the paid selector.
 
 ## Provider status and live acceptance sample

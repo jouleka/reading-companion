@@ -357,7 +357,7 @@ def test_ask_retry_uses_bounded_private_feedback_but_fresh_judge_sees_only_evide
     assert "Corvus" not in response.text
 
 
-@pytest.mark.parametrize("choice", ["answer", "empty", "invalid", "judge_auth"])
+@pytest.mark.parametrize("choice", ["answer", "empty", "empty_names", "invalid", "judge_auth"])
 def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_review(
     env, monkeypatch, choice,
 ):
@@ -379,16 +379,16 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
                        for source in data["candidates"])
             chosen.append(next(source["id"] for source in data["candidates"]
                                if "Berenice met Aldric" in source["text"]))
-            return {"source_ids": ([] if choice == "empty" else [25] if choice == "invalid"
+            return {"source_ids": ([] if choice in {"empty", "empty_names"} else [25] if choice == "invalid"
                                    else chosen)}, {"in": 50, "out": 8}
         if "claims" in fields:
-            assert choice in {"answer", "judge_auth"}
+            assert choice in {"answer", "empty_names", "judge_auth"}
             return {"insufficient_evidence": False, "claims": [{
                 "text": "Berenice met Aldric at the forge and they spoke.",
                 "citation_ids": chosen,
             }]}, {"in": 30, "out": 12}
         if "references_future" in fields:
-            assert choice in {"answer", "judge_auth"}
+            assert choice in {"answer", "empty_names", "judge_auth"}
             data = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
             assert [source["id"] for source in data["claims"][0]["cited_passages"]] == chosen
             if choice == "judge_auth":
@@ -397,8 +397,9 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
         raise AssertionError("unexpected provider call")
 
     monkeypatch.setattr(client, "complete", complete)
-    response = c.post(f"/api/books/{bid}/ask", json={"question": "Where did Berenice meet Aldric?"})
-    assert len(calls) == (3 if choice in {"answer", "judge_auth"} else 1)
+    question = "What is recorded here?" if choice == "empty" else "Where did Berenice meet Aldric?"
+    response = c.post(f"/api/books/{bid}/ask", json={"question": question})
+    assert len(calls) == (3 if choice in {"answer", "empty_names", "judge_auth"} else 1)
     ledger = app.state.catalog.get_costs(bid)
     assert any(row["phase"] == "source-selection" for row in ledger)
     if choice == "judge_auth":
@@ -413,7 +414,7 @@ def test_real_provider_source_selection_is_budgeted_and_cannot_bypass_evidence_r
         assert response.status_code == 200, response.text
         payload = response.json()
         assert payload["insufficient_evidence"] is (choice == "empty")
-        if choice == "answer":
+        if choice in {"answer", "empty_names"}:
             assert [source["id"] for source in payload["citations"]] == chosen
 
 

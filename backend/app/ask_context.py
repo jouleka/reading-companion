@@ -10,6 +10,7 @@ from collections.abc import Iterable
 
 from app.ask_selection import MAX_SELECTED_SOURCES, MAX_SOURCE_CANDIDATES, SourceSelectionError, validate_selection
 from app.eval.spoiler_gate.grounding import STOPWORDS
+from app.ingest.extraction.resolve import ROLE_NOUNS
 from app.unicode_text import normalize_text, proper_words, word_tokens
 
 
@@ -56,7 +57,7 @@ def _validated_pool(selected, candidates):
     return canonical, available, context
 
 
-def _query_names(question, known_names, observed):
+def _query_parts(question, known_names):
     if not isinstance(question, str) or not 2 <= len(question) <= 500 or not question.strip():
         raise _invalid()
     if isinstance(known_names, (str, bytes)) or not isinstance(known_names, Iterable):
@@ -66,27 +67,69 @@ def _query_names(question, known_names, observed):
     except TypeError as exc:
         raise _invalid() from exc
     proper = {normalize_text(word.text) for word in proper_words(question) if len(word.text) >= 2}
+    return proper, visible
+
+
+def _query_names(question, known_names, observed):
+    proper, visible = _query_parts(question, known_names)
     # Registered names such as May/Will must not disappear as modal stopwords. The fallback has no
     # identity roster, so remove ordinary question/discourse words before checking observed text.
     return ((proper & visible) if visible else (proper - _QUESTION_WORDS)) & observed
 
 
-def complete_ask_context(question, selected, candidates, known_names=()):
+def _named_fallback(question, known_names, available, terms):
+    proper, visible = _query_parts(question, known_names)
+    # A partial identity roster must not silently erase an absent query name. Registered May/Will
+    # remain possible names, while question words, roles, and honorifics cannot meet the two-part
+    # minimum. Every required part must occur in quoted prose, never only in a chapter title.
+    needed = ((proper - _QUESTION_WORDS) | (proper & visible & {"may", "will"})) - ROLE_NOUNS - {"grand"}
+    observed = set().union(*terms.values())
+    if len(needed & observed) < 2 or not needed <= observed:
+        return []
+    result, seen_evidence, missing = [], set(), set(needed)
+    while missing and len(result) < 3:
+        options = [source for source in available.values()
+                   if missing & terms[source["id"]]
+                   and (source["chapter_key"], source["ordinal"], source["text"]) not in seen_evidence]
+        if not options:
+            return []
+        # max keeps the earlier candidate for an exact tie; shorter whole windows reduce the
+        # later prompt without altering a byte or changing the candidate's stable source ID.
+        best = max(options, key=lambda source: (len(missing & terms[source["id"]]), -len(source["text"])))
+        result.append(dict(best))
+        seen_evidence.add((best["chapter_key"], best["ordinal"], best["text"]))
+        missing -= terms[best["id"]]
+    return [] if missing else result
+
+
+def complete_ask_context(question, selected, candidates, known_names=(), *, allow_named_fallback=False):
     """Append exact existing context within six sources, preserving every initial selection.
 
-    Empty selection remains empty; this cannot turn a selector refusal into an answer attempt.
+    Empty selection remains empty by default. An explicit opt-in may retrieve at most three exact
+    windows fully covering at least two proper query-name parts before normal context completion.
+    This is retrieval only: all normal answer-generation and claim-review gates remain required.
     Malformed context IDs or changed selected evidence fail closed. Metadata hints are followed
     deterministically (including bounded transitive hints), then missing observed query-name parts
     are covered greedily. This is necessary evidence presence, never proof of who spoke or acted.
     """
     if not isinstance(selected, (list, tuple)) or len(selected) > MAX_SELECTED_SOURCES:
         raise _invalid()
-    if not selected:
+    if not isinstance(allow_named_fallback, bool):
+        raise _invalid()
+    if not selected and not allow_named_fallback:
         return []
     result, available, context = _validated_pool(selected, candidates)
+    if not available:
+        return []
     terms = {source_id: set(word_tokens(source["text"])) for source_id, source in available.items()}
-    observed = set().union(*terms.values())
-    needed = _query_names(question, known_names, observed)
+    if not result:
+        result = _named_fallback(question, known_names, available, terms)
+        if not result:
+            return []
+        needed = set()  # The fallback already covered every required name part, without truncation.
+    else:
+        observed = set().union(*terms.values())
+        needed = _query_names(question, known_names, observed)
     seen = {source["id"] for source in result}
     evidence = {(source["chapter_key"], source["ordinal"], source["text"]) for source in result}
 

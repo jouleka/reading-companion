@@ -449,7 +449,8 @@ def ask_the_book(
             )
             remember(selection, provider=client.provider, model=client._model_for("cheap"))
             sources = validate_selection(selection.value, sources)
-            sources = complete_ask_context(body.question, sources, candidates, known_names=known_names)
+            sources = complete_ask_context(body.question, sources, candidates, known_names=known_names,
+                                           allow_named_fallback=True)
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
         except (SourceSelectionError, ValueError) as exc:
