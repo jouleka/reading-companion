@@ -175,6 +175,32 @@ def test_semantic_review_continuation_hints_cannot_borrow_another_claims_source(
     assert [source["id"] for source in data["claims"][1]["cited_passages"]] == [2]
 
 
+def test_same_chapter_generation_and_review_order_does_not_add_an_uncited_intermediate():
+    sources = [dict(SOURCES[0], ordinal=7, chapter_key="seven", source_offset=2000,
+                    text="I struck him three times."),
+               dict(SOURCES[1], ordinal=7, chapter_key="seven", source_offset=1000,
+                    text="Mara told Rowan her account of the attack."),
+               dict(SOURCES[0], id=3, ordinal=7, chapter_key="seven", source_offset=1500,
+                    text="Then Quentin began speaking about a different victim.")]
+    draft = AskDraft(insufficient_evidence=False, claims=[
+        {"text":"Mara struck Rowan three times.", "citation_ids":[1, 2]},
+    ])
+    prompt = ask_prompt("What did Mara say?", sources)
+    assert prompt.index(sources[1]["text"]) < prompt.index(sources[2]["text"]) < prompt.index(sources[0]["text"])
+    own = _judge_data(ask_judge_prompt(draft, sources))["claims"][0]
+    assert [source["id"] for source in own["cited_passages"]] == [2, 1]
+    assert [source["text"] for source in own["cited_passages"]] == [sources[1]["text"], sources[0]["text"]]
+    assert own["narrative_continuations"] == []  # Ordering never manufactures an identity bridge.
+
+    def reject_missing_binding(system, user, **_kwargs):
+        data = _judge_data(user)
+        assert [source["id"] for source in data["claims"][0]["cited_passages"]] == [2, 1]
+        return {"references_future":False, "unsupported_claims":[data["claims"][0]["claim"]]}, {}
+
+    verdict, _usage = judge_ask_draft(None, draft, sources, complete=reject_missing_binding)
+    assert verdict["unsupported_claims"] == [draft.claims[0].text]
+
+
 def test_audited_lexical_deferral_is_not_truth_clearance_and_keeps_names_qualifications_and_shape():
     sources = [dict(SOURCES[0], text="Berenice spoke. The notes were uninjured. Aldric might have left.")]
     raw = {"insufficient_evidence":False, "claims":[{

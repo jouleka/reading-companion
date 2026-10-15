@@ -154,14 +154,27 @@ def complete_ask_context(question, selected, candidates, known_names=(), *, allo
         evidence.add(key)
         return True
 
-    index = 0
+    index = continuity_index = 0
+
+    def close_continuity():
+        nonlocal continuity_index
+        while continuity_index < len(result) and len(result) < MAX_SELECTED_SOURCES:
+            source = result[continuity_index]
+            for context_id in source.get("continuity_ids", []):
+                append(available[context_id])
+            continuity_index += 1
 
     def close_context():
         nonlocal index
+        # An earlier selector choice's ordinary neighbors must not crowd out the previous
+        # chapter tail needed by a later selected opening. Resolve those bounded dependencies
+        # across the whole current selection before spending spare slots on nearby prose.
+        close_continuity()
         while index < len(result) and len(result) < MAX_SELECTED_SOURCES:
             source = result[index]
             for context_id in context[source["id"]]:
                 append(available[context_id])
+                close_continuity()
             index += 1
 
     close_context()

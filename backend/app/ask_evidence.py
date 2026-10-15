@@ -134,6 +134,14 @@ def _invalid(reason: str) -> AskEvidenceError:
     return AskEvidenceError(review_feedback=(reason,), repairable=False)
 
 
+def source_order(source) -> tuple[int, int]:
+    """Order exact excerpts by server-recorded location, never by a claimed identity."""
+    offset = source.get("source_offset", 0)
+    if type(offset) is not int or offset < 0:
+        raise _invalid("Source ordering locations are invalid.")
+    return source["ordinal"], offset
+
+
 def narrative_continuations(sources) -> list[dict]:
     """Project only retained previous-chapter location hints; never infer a factual relation."""
     available = {source["id"]: source for source in sources}
@@ -195,8 +203,9 @@ def _request(draft, sources):
         ]})
     if length > 4000:
         raise _invalid("Evidence review answer exceeds the bounded response size.")
+    ordered = sorted(zip(sources, numbered, strict=True), key=lambda pair: source_order(pair[0]))
     return {"claims": claims,
-            "sources": sorted(numbered, key=lambda source: source["completed_chapter"]),
+            "sources": [numbered_source for _source, numbered_source in ordered],
             "narrative_continuations": narrative_continuations(sources)}, available
 
 

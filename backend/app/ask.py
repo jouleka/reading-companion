@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.ask_evidence import narrative_continuations
+from app.ask_evidence import narrative_continuations, source_order
 from app.ask_grounding import preserves_modal_qualification, semantic_review_eligible
 from app.cost.limits import CostCeilingExceeded
 from app.eval.spoiler_gate.grounding import STOPWORDS, content_words, ground_recap
@@ -183,7 +183,7 @@ def ask_judge_prompt(draft: AskDraft, sources: list[dict[str, Any]], *, question
                 {"id": int(source["id"]), "completed_chapter": int(source["ordinal"]),
                  "chapter_title": str(source.get("title", "")),
                  "text": str(source["text"])}
-                for source in sorted(cited, key=lambda source: source["ordinal"])
+                for source in sorted(cited, key=source_order)
             ],
         })
     data = {"claims": claims}
@@ -514,6 +514,8 @@ def retrieve_ask_sources(
     result = [dict(source, id=index + 1) for index, (_start, _end, source)
               in enumerate(selected)]
     if candidate_pool:
+        for (start, _end, _source), output in zip(selected, result, strict=True):
+            output["source_offset"] = start
         contexts = {key_of(item) for _rank, item in context_candidates}
         referents = {key_of(item) for _rank, item in referent_candidates}
         retained = {(source["chapter_key"], source["text"]): output["id"]
@@ -603,7 +605,7 @@ def retrieve_ask_sources(
 
 def ask_prompt(question: str, sources: list[dict[str, Any]]) -> str:
     blocks = []
-    for source in sources:
+    for source in sorted(sources, key=source_order):
         text = " ".join(str(source.get("text", "")).split())
         blocks.append(
             f"SOURCE [{int(source['id'])}] — completed chapter {int(source['ordinal'])}\n"

@@ -41,6 +41,37 @@ def test_explicit_previous_chapter_continuity_preserves_exact_body_text_and_boun
     assert completed[1]["text"] == ending["text"]
 
 
+def test_busy_selection_keeps_later_openings_referent_before_earlier_choices_neighbors():
+    school = source(1, "Wren attended the academy.", ordinal=3, chapter="three", context_ids=[8, 9])
+    opening = source(2, "He was called Wren by his brothers.", ordinal=3, chapter="three",
+                     context_ids=[10], continuity_ids=[12])
+    family = source(3, "Rowan had two elder brothers.")
+    background = source(4, "The family lived near the harbor.")
+    ending = source(12, "The younger son, Rowan, entered the garden.", ordinal=2, chapter="two")
+    neighbors = [source(i, f"The academy passage continued at {i}.", ordinal=3, chapter="three")
+                 for i in (8, 9, 10)]
+    selected = [school, opening, family, background]
+    pool = selected + neighbors + [ending]
+    before = copy.deepcopy(pool)
+    completed = complete_ask_context("Who was called Wren and who were his brothers?", selected, pool)
+    assert completed[:4] == selected and len(completed) == 6
+    assert ending in completed, "the body-text identity bridge cannot lose its slot to school details"
+    assert all(item in pool for item in completed) and pool == before
+
+
+def test_busy_selection_reserves_bounded_transitive_continuity_before_optional_neighbors():
+    first = source(1, "The room was quiet.", ordinal=4, chapter="four", context_ids=[7, 8])
+    opening = source(2, "He used the name Wren.", ordinal=4, chapter="four", continuity_ids=[5])
+    selected = [first, opening, source(3, "The family returned."), source(4, "The ledger was open.")]
+    middle = source(5, "The younger son continued his account.", ordinal=3, chapter="three",
+                    continuity_ids=[6])
+    tail = source(6, "Rowan was the younger son.", ordinal=2, chapter="two")
+    pool = selected + [middle, tail, source(7, "Dawn approached.", ordinal=4, chapter="four"),
+                       source(8, "A lamp was lit.", ordinal=4, chapter="four")]
+    completed = complete_ask_context("Who used the name Wren?", selected, pool)
+    assert completed == selected + [middle, tail]
+
+
 def test_missing_name_source_also_completes_its_direct_previous_chapter_continuity():
     action = source(17, "He carried the lantern.", ordinal=3, chapter="three")
     opening = source(2, "Aster was the name he used.", ordinal=3, chapter="three", continuity_ids=[12])

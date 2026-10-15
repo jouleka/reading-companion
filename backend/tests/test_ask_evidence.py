@@ -140,6 +140,27 @@ def test_review_preserves_question_context_and_only_retained_continuation_bodies
     assert _payload(_draft("Ren loved music.", ids=(2,)), sources)["narrative_continuations"] == []
 
 
+def test_review_reads_scrambled_same_chapter_body_chain_in_exact_source_order_without_rewriting():
+    sources = [dict(_source(4, "I struck him three times.", 7), source_offset=2000),
+               dict(_source(17, "Mara finished telling her account.", 7), source_offset=3000),
+               dict(_source(22, "Mara told Rowan about the attack on Quinn.", 7), source_offset=1000)]
+    before = copy.deepcopy(sources)
+    payload = _payload(_draft("Mara struck Quinn three times.", ids=(4, 17, 22)), sources)
+    assert [source["source_id"] for source in payload["sources"]] == [22, 4, 17]
+    assert ["".join(part["text"] for part in source["passages"]) for source in payload["sources"]] == [
+        sources[2]["text"], sources[0]["text"], sources[1]["text"],
+    ]
+    assert sources == before
+
+
+@pytest.mark.parametrize("offset", [True, -1, "12", None])
+def test_review_rejects_malformed_source_order_locations_without_paid_repair(offset):
+    sources = [dict(_source(1, "Mara arrived."), source_offset=offset)]
+    with pytest.raises(AskEvidenceError) as caught:
+        _payload(_draft("Mara arrived."), sources)
+    assert not caught.value.repairable
+
+
 @pytest.mark.parametrize("references", [[True], [1, 1], "1", [3]])
 def test_review_rejects_malformed_or_nonadjacent_retained_continuity_metadata(references):
     sources = [dict(_source(1, "A prior chapter.", 3), chapter_key="three"),

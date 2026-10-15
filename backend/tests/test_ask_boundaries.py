@@ -27,6 +27,10 @@ def _assert_exact_pool(sources, raw, ordinals, bookmark):
         assert source["ordinal"] == ordinals[source["chapter_key"]] <= bookmark
         assert source["href"] == f"{source['chapter_key']}.xhtml"
         assert source["title"] == f"Section {source['chapter_key']}"
+        assert type(source["source_offset"]) is int and source["source_offset"] >= 0
+        normalized = normalize_source(raw[source["chapter_key"]])
+        start = source["source_offset"]
+        assert normalized[start:start + len(source["text"])] == source["text"]
         for context_id in source["context_ids"]:
             assert context_id != source["id"]
             assert by_id[context_id]["chapter_key"] == source["chapter_key"]
