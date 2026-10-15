@@ -734,9 +734,17 @@ def complete_ask_citations(draft, sources, *, known_names=()):
 
 def validate_ask_draft(
     draft: AskDraft | dict[str, Any], sources: list[dict[str, Any]],
-    *, known_names: Iterable[str] = (),
+    *, known_names: Iterable[str] = (), defer_lexical_to_judge: bool = False,
 ) -> AskDraft:
-    """Require valid citations and lexical traceability against each claim's cited passages."""
+    """Require valid own citations, observed names and source qualifications.
+
+    Unreviewed/stub callers retain lexical gating. A real-provider caller may defer word-overlap
+    rejection ONLY after a complete positive-evidence audit and must still run the independent
+    own-citation semantic judge before publishing. Deferral never clears truth or skips those
+    other necessary checks. The API does not accept this internal dispatch option from a client.
+    """
+    if type(defer_lexical_to_judge) is not bool:
+        raise AskSafetyError("invalid answer review policy")
     value = draft if isinstance(draft, AskDraft) else AskDraft.model_validate(draft)
     available = {int(source["id"]): source for source in sources}
     if value.insufficient_evidence:
@@ -770,6 +778,8 @@ def validate_ask_draft(
                                  "turn a modal statement such as 'must have' into an established "
                                  "fact. Qualify, narrow, or omit that claim."],
             )
+        if defer_lexical_to_judge:
+            continue
         facts = source_facts(cited)
         remainder = claim.text
         reviewable = semantic_review_eligible(claim.text, cited)

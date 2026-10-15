@@ -441,6 +441,7 @@ def _supported_citation_audit(data, ids):
 @pytest.mark.parametrize("review_mode", [
     "pass", "repair", "missing_audit", "foreign_source", "parse_error", "sdk_truncation",
     "provider_auth", "reject_in_final_judge",
+    "faithful_paraphrase", "wrong_unseen_action",
 ])
 @pytest.mark.parametrize("route", ["ask", "chapter-closeout"])
 def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_semantic_review(
@@ -466,8 +467,11 @@ def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_
             return {"source_ids": selected}, {"in": 50, "out": 8}
         if "claims" in fields:
             generated_prompts.append(user)
+            text = ("Berenice and Aldric were not silent." if review_mode == "faithful_paraphrase" else
+                    "Berenice burgled the forge." if review_mode == "wrong_unseen_action" else
+                    "Berenice met Aldric at the forge and they spoke.")
             return {"insufficient_evidence": False, "claims": [{
-                "text": "Berenice met Aldric at the forge and they spoke.",
+                "text": text,
                 "citation_ids": selected,
             }]}, {"in": 30, "out": 15}
         if "claim_audits" in fields:
@@ -497,7 +501,7 @@ def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_
             assert [source["id"] for source in data["claims"][0]["cited_passages"]] == selected
             return {"references_future": False, "unsupported_claims": (
                 ["The cited evidence does not establish this actor binding."]
-                if review_mode == "reject_in_final_judge" else [])}, {"in": 25, "out": 8}
+                if review_mode in {"reject_in_final_judge", "wrong_unseen_action"} else [])}, {"in": 25, "out": 8}
         raise AssertionError("unexpected provider call")
 
     monkeypatch.setattr(client, "complete", complete)
@@ -515,7 +519,7 @@ def test_explicit_citation_review_is_budgeted_fail_closed_and_followed_by_fresh_
             assert review_rows[0]["phase"] == "citation-review-failed-reserved"
             assert review_rows[0]["usd"] > 0
             assert app.state.catalog.get_cost_reservations(bid) == []
-    elif review_mode == "reject_in_final_judge":
+    elif review_mode in {"reject_in_final_judge", "wrong_unseen_action"}:
         assert response.status_code == 502
         assert len(generated_prompts) == len(evidence_prompts) == len(judged) == 2
     else:

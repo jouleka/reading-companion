@@ -175,6 +175,23 @@ def test_semantic_review_continuation_hints_cannot_borrow_another_claims_source(
     assert [source["id"] for source in data["claims"][1]["cited_passages"]] == [2]
 
 
+def test_audited_lexical_deferral_is_not_truth_clearance_and_keeps_names_qualifications_and_shape():
+    sources = [dict(SOURCES[0], text="Berenice spoke. The notes were uninjured. Aldric might have left.")]
+    raw = {"insufficient_evidence":False, "claims":[{
+        "text":"They were not destroyed.", "citation_ids":[1],
+    }]}
+    with pytest.raises(AskSafetyError):
+        validate_ask_draft(raw, sources)  # The offline/unreviewed policy remains conservative.
+    assert validate_ask_draft(raw, sources, defer_lexical_to_judge=True).claims[0].text == raw["claims"][0]["text"]
+    for text in ("Corvus spoke.", "Aldric left."):
+        with pytest.raises(AskSafetyError):
+            validate_ask_draft({"insufficient_evidence":False,"claims":[{
+                "text":text,"citation_ids":[1],
+            }]}, sources, known_names=["Corvus"], defer_lexical_to_judge=True)
+    with pytest.raises(AskSafetyError):
+        validate_ask_draft(raw, sources, defer_lexical_to_judge="true")
+
+
 @pytest.mark.parametrize("verdict", [
     {"references_future": False},
     {"references_future": "false", "unsupported_claims": []},

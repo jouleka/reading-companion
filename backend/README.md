@@ -77,6 +77,10 @@ fallible semantic judgments; complete reference coverage alone does not establis
 The evidence audit sees the untrusted reader question for contextual bindings, never as proof of a
 premise. Sources are displayed in chapter order. Retained chapter-tail/opening location hints help
 both reviewers inspect narrative continuity; the body text still has to establish the asserted link.
+After complete positive evidence coverage, real-provider Ask and closeout defer low word-overlap
+paraphrases to the mandatory fresh semantic judge. For example, "uninjured" can support "not
+destroyed" without sharing a stem. Citation integrity, own-name checks, modal qualifications and
+completed-source/event-binding gates still apply. Stub and unreviewed paths retain lexical checks.
 Name presence and context hints do not establish an alias, speaker, or fact by themselves. Invalid
 selection, missing identity, unsupported facts and unavailable review withhold the answer. Typed
 provider authentication/availability failures stop without purchasing another synthesis attempt.

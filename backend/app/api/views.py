@@ -526,7 +526,10 @@ def ask_the_book(
                 remember=lambda result: remember(result, provider=client.provider,
                                                   model=client._model_for("cheap")),
             )
-            draft = validate_ask_draft(completed, sources, known_names=known_names)
+            # The real-provider helper above completed every positive evidence audit. Lexical
+            # overlap is not entailment; supported paraphrases still need the fresh judge below.
+            draft = validate_ask_draft(completed, sources, known_names=known_names,
+                                       defer_lexical_to_judge=client.provider != "stub")
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
         except AskEvidenceError as exc:
@@ -789,7 +792,8 @@ def chapter_closeout(
                 book_id=book_id,
                 remember=lambda result: remember(result, model=client._model_for("cheap")),
             )
-            draft = validate_ask_draft(completed, sources)
+            draft = validate_ask_draft(completed, sources,
+                                       defer_lexical_to_judge=client.provider != "stub")
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
         except AskEvidenceError as exc:
