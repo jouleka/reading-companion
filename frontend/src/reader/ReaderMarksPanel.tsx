@@ -1,5 +1,13 @@
-import { type FormEvent, useId, useRef, useState } from "react";
-import type { HighlightMark, ReaderMark, ReaderMarkAnchor, SelectionAction } from "../api";
+import { type FormEvent, useEffect, useState } from "react";
+import type {
+  HighlightMark,
+  ReaderMark,
+  ReaderMarkAnchor,
+  SelectionAction,
+} from "../api";
+import { Icon } from "../ui/Icon";
+import { Button } from "../ui/Button";
+import { useReaderPopover } from "../ui/useReaderPopover";
 
 export type ReaderSelection = { anchor: ReaderMarkAnchor; text: string };
 
@@ -30,52 +38,82 @@ export function ReaderMarks({
   onDelete: (mark: ReaderMark) => void;
   onClearSelection: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const { open, closing, id, triggerRef, panelRef, toggle, close } =
+    useReaderPopover();
   const [note, setNote] = useState("");
   const [label, setLabel] = useState("");
-  const id = useId();
-  const opener = useRef<HTMLButtonElement>(null);
-  const close = () => {
-    setOpen(false);
-    opener.current?.focus();
-  };
+  const busy = /^(saving|deleting)\b/.test(status);
+
+  // A failed request leaves the selection and draft intact. The reader clears the selection
+  // only after a note is saved, so dismissing it is also the natural end of this draft.
+  useEffect(() => {
+    if (!selection) setNote("");
+  }, [selection]);
+  useEffect(() => {
+    if (status === "bookmark saved" || status === "bookmark queued for sync")
+      setLabel("");
+  }, [status]);
   const saveNote = (event: FormEvent) => {
     event.preventDefault();
     if (!note.trim()) return;
     onAnnotate(note.trim());
-    setNote("");
   };
   const saveBookmark = (event: FormEvent) => {
     event.preventDefault();
     if (!currentAnchor) return;
     onBookmark(label.trim());
-    setLabel("");
   };
 
   return (
     <div className="reader-marks">
       <button
-        ref={opener}
+        ref={triggerRef}
         type="button"
-        className="plain smallcaps marks-trigger"
-        aria-expanded={open}
+        className="plain reader-tool marks-trigger"
+        aria-label="notes"
+        aria-expanded={open && !closing}
         aria-controls={id}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggle}
       >
-        notes
+        <Icon name="bookmark" />
+        <span>Notes</span>
       </button>
       {selection && (
         <section className="selection-actions" aria-label="Selection actions">
           <q>{selection.text}</q>
-          <div className="selection-ai-actions" aria-label="Understand this passage">
-            <button type="button" onClick={() => onAssist("explain")}>explain</button>
-            <button type="button" onClick={() => onAssist("define")}>define</button>
-            <button type="button" onClick={() => onAssist("translate")}>translate to English</button>
+          <div
+            className="selection-ai-actions"
+            aria-label="Understand this passage"
+          >
+            <Button
+              icon="sparkle"
+              disabled={busy}
+              onClick={() => onAssist("explain")}
+            >
+              explain
+            </Button>
+            <Button disabled={busy} onClick={() => onAssist("define")}>
+              define
+            </Button>
+            <Button disabled={busy} onClick={() => onAssist("translate")}>
+              translate to English
+            </Button>
           </div>
-          <div className="selection-highlight-actions" aria-label="Highlight color">
+          <div
+            className="selection-highlight-actions"
+            aria-label="Highlight color"
+          >
             {(["yellow", "green", "blue", "pink"] as const).map((color) => (
-              <button key={color} type="button" onClick={() => onHighlight(color)}>
-                <span className={`highlight-swatch ${color}`} aria-hidden="true" />
+              <button
+                key={color}
+                type="button"
+                disabled={busy}
+                onClick={() => onHighlight(color)}
+              >
+                <span
+                  className={`highlight-swatch ${color}`}
+                  aria-hidden="true"
+                />
                 <span className="sr-only">{color} highlight</span>
               </button>
             ))}
@@ -88,21 +126,49 @@ export function ReaderMarks({
               maxLength={10000}
               onChange={(event) => setNote(event.currentTarget.value)}
             />
-            <button type="submit" disabled={!note.trim()}>save note</button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!note.trim() || busy}
+            >
+              save note
+            </Button>
           </form>
-          <button type="button" className="plain" onClick={onClearSelection}>dismiss</button>
+          {!open && (
+            <p className="marks-status" role="status" aria-live="polite">
+              {status}
+            </p>
+          )}
+          <Button
+            variant="ghost"
+            className="selection-dismiss"
+            disabled={busy}
+            onClick={onClearSelection}
+          >
+            <Icon name="close" size={16} /> dismiss
+          </Button>
         </section>
       )}
       {open && (
         <section
           id={id}
-          className="marks-panel"
+          className="reader-popover marks-panel"
+          data-closing={closing || undefined}
+          aria-hidden={closing || undefined}
           aria-label="Highlights, notes, and bookmarks"
-          onKeyDown={(event) => { if (event.key === "Escape") close(); }}
+          tabIndex={-1}
+          ref={panelRef}
         >
-          <header>
+          <header className="reader-panel-heading">
             <h2>Your marks</h2>
-            <button type="button" className="plain" onClick={close}>close</button>
+            <Button
+              variant="ghost"
+              className="icon-button"
+              aria-label="Close notes"
+              onClick={() => close()}
+            >
+              <Icon name="close" />
+            </Button>
           </header>
           <form className="bookmark-form" onSubmit={saveBookmark}>
             <label htmlFor={`${id}-label`}>Bookmark this page</label>
@@ -114,37 +180,74 @@ export function ReaderMarks({
                 placeholder="Optional label"
                 onChange={(event) => setLabel(event.currentTarget.value)}
               />
-              <button type="submit" disabled={!currentAnchor}>bookmark</button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!currentAnchor || busy}
+              >
+                bookmark
+              </Button>
             </div>
           </form>
-          <p className="marks-status" role="status" aria-live="polite">{status}</p>
+          <p className="marks-status" role="status" aria-live="polite">
+            {status}
+          </p>
           {marks.length ? (
             <ol className="marks-list">
               {marks.map((mark) => (
                 <li key={`${mark.kind}-${mark.id}`}>
-                  <button type="button" className="plain mark-location" onClick={() => onNavigate(mark)}>
-                    <span className="smallcaps">{mark.kind} · chapter {mark.anchor.atom}</span>
-                    {mark.pending && <span className="smallcaps">queued for sync</span>}
-                    <span>{mark.kind === "highlight"
-                      ? mark.selected_text
-                      : mark.kind === "annotation" ? mark.body : mark.label || "Bookmarked page"}</span>
-                  </button>
                   <button
                     type="button"
-                    className="plain mark-delete"
+                    className="plain mark-location"
+                    onClick={() => {
+                      onNavigate(mark);
+                      close();
+                    }}
+                  >
+                    <span className="smallcaps">
+                      {mark.kind} · chapter {mark.anchor.atom}
+                    </span>
+                    {mark.pending && (
+                      <span className="smallcaps">queued for sync</span>
+                    )}
+                    <span>
+                      {mark.kind === "highlight"
+                        ? mark.selected_text
+                        : mark.kind === "annotation"
+                          ? mark.body
+                          : mark.label || "Bookmarked page"}
+                    </span>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    className="mark-delete"
                     aria-label={`Delete ${mark.kind}`}
+                    disabled={busy}
                     onClick={() => onDelete(mark)}
                   >
                     delete
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ol>
-          ) : <p className="quiet">No marks in the pages available to this reading pass.</p>}
-          <a className="plain marks-export" href={exportUrl} download="litlet-reader-marks.json">
-            export marks
+          ) : (
+            <p className="quiet">
+              No marks in the pages available to this reading pass.
+            </p>
+          )}
+          <a
+            className="plain marks-export"
+            href={exportUrl}
+            download="litlet-reader-marks.json"
+          >
+            <Icon name="download" size={16} /> export marks
           </a>
         </section>
+      )}
+      {!open && !selection && status && (
+        <p className="reader-feedback" role="status" aria-live="polite">
+          {status}
+        </p>
       )}
     </div>
   );

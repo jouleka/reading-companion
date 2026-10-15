@@ -1,4 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
+import { Button } from "../ui/Button";
+import { keepTabFocusInside } from "./focusTrap";
+import { isolateReaderDialog } from "./JumpNote";
 
 /** Destructive-reading-state confirmation. Memory is retained; only the visible frontier rewinds. */
 export function StartOverNote({
@@ -14,65 +17,79 @@ export function StartOverNote({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(
+    document.activeElement as HTMLElement | null,
+  );
+  const busyRef = useRef(busy);
+  const onCancelRef = useRef(onCancel);
+  busyRef.current = busy;
+  onCancelRef.current = onCancel;
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    if (busy) rootRef.current?.focus();
+    const restoreBackground = rootRef.current
+      ? isolateReaderDialog(rootRef.current)
+      : () => {};
+    if (busyRef.current) rootRef.current?.focus();
     else cancelRef.current?.focus();
 
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) {
+      if (event.key === "Escape") {
         event.preventDefault();
-        onCancel();
+        if (!busyRef.current) onCancelRef.current();
         return;
       }
-      if (event.key !== "Tab") return;
-      const buttons = Array.from(
-        rootRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
-      );
-      if (buttons.length === 0) {
+      if (event.key === "Tab" && busyRef.current) {
         event.preventDefault();
         rootRef.current?.focus();
         return;
       }
-      event.preventDefault();
-      const active = document.activeElement;
-      const first = buttons[0];
-      const last = buttons[buttons.length - 1];
-      if (event.shiftKey) (active === first ? last : first).focus();
-      else (active === last ? first : last).focus();
+      keepTabFocusInside(rootRef.current, event);
     };
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      restoreBackground();
+      const trigger = triggerRef.current;
       if (trigger && document.contains(trigger)) trigger.focus();
       else document.getElementById("main")?.focus();
     };
-  }, [busy, onCancel]);
+  }, []);
+
+  useEffect(() => {
+    if (busy) rootRef.current?.focus();
+    else if (rootRef.current?.contains(document.activeElement))
+      cancelRef.current?.focus();
+  }, [busy]);
 
   return (
     <div
       className="start-over-note"
       role="alertdialog"
-      aria-labelledby="start-over-title"
-      aria-describedby="start-over-description"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       aria-busy={busy}
       tabIndex={-1}
       ref={rootRef}
     >
-      <strong id="start-over-title">Start a new reading pass?</strong>
-      <span id="start-over-description">
-        The companion will return to nothing read and reveal your existing memory again as you
-        progress. The book, extracted notes, receipts, and costs stay intact.
-      </span>
+      <div className="confirmation-copy">
+        <strong id={titleId}>Start a new reading pass?</strong>
+        <p id={descriptionId}>
+          The companion will return to nothing read and reveal your saved memory
+          as you read again. Your book, saved notes, and past AI costs stay
+          intact.
+        </p>
+      </div>
       {error && <span role="alert">{error}</span>}
-      <div className="start-over-actions">
-        <button className="plain smallcaps" disabled={busy} onClick={onConfirm}>
-          {busy ? "starting…" : "start again"}
-        </button>
-        <button className="plain smallcaps" ref={cancelRef} disabled={busy} onClick={onCancel}>
+      <div className="confirmation-actions start-over-actions">
+        <Button ref={cancelRef} disabled={busy} onClick={onCancel}>
           keep my place
-        </button>
+        </Button>
+        <Button variant="danger" disabled={busy} onClick={onConfirm}>
+          {busy ? "starting…" : "start again"}
+        </Button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-const SHELL_CACHE = "litlet-shell-v1";
+const SHELL_CACHE = "litlet-shell-v2";
 const OWNER_CACHE_PREFIX = "litlet-reader-owner-";
 const SHELL_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/litlet-icon.svg"];
 let activeOwner = null;

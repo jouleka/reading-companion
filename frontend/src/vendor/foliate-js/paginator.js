@@ -207,6 +207,23 @@ const setStylesImportant = (el, styles) => {
     for (const [k, v] of Object.entries(styles)) style.setProperty(k, v, 'important')
 }
 
+// EPUB chapters may be XHTML documents without a head. In an XML document,
+// createElement('style') also produces an inert element outside the XHTML namespace.
+export const createReaderStylesheets = doc => {
+    const namespace = 'http://www.w3.org/1999/xhtml'
+    let head = doc.head
+    if (!head) {
+        head = doc.createElementNS(namespace, 'head')
+        // Keep every existing child's CFI index stable, including saved bookmarks.
+        doc.documentElement.append(head)
+    }
+    const before = doc.createElementNS(namespace, 'style')
+    const after = doc.createElementNS(namespace, 'style')
+    head.prepend(before)
+    head.append(after)
+    return [before, after]
+}
+
 class View {
     #observer = new ResizeObserver(() => this.expand())
     #element = document.createElement('div')
@@ -975,13 +992,7 @@ export class Paginator extends HTMLElement {
         if (src) {
             const view = this.#createView()
             const afterLoad = doc => {
-                if (doc.head) {
-                    const $styleBefore = doc.createElement('style')
-                    doc.head.prepend($styleBefore)
-                    const $style = doc.createElement('style')
-                    doc.head.append($style)
-                    this.#styleMap.set(doc, [$styleBefore, $style])
-                }
+                this.#styleMap.set(doc, createReaderStylesheets(doc))
                 onLoad?.({ doc, index })
             }
             const beforeRender = this.#beforeRender.bind(this)
@@ -1109,11 +1120,16 @@ export class Paginator extends HTMLElement {
         } else $style.textContent = styles
 
         // NOTE: needs `requestAnimationFrame` in Chromium
-        requestAnimationFrame(() =>
-            this.#background.style.background = getBackground(this.#view.document))
+        const view = this.#view
+        requestAnimationFrame(() => {
+            if (this.#view === view && view?.document)
+                this.#background.style.background = getBackground(view.document)
+        })
 
         // needed because the resize observer doesn't work in Firefox
-        this.#view?.document?.fonts?.ready?.then(() => this.#view.expand())
+        view?.document?.fonts?.ready?.then(() => {
+            if (this.#view === view) view.expand()
+        })
     }
     focusView() {
         this.#view.document.defaultView.focus()

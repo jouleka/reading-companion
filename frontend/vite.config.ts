@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
 import { defineConfig } from "vitest/config";
 
 const securityHeaders = {
@@ -24,17 +25,50 @@ const securityHeaders = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
+// React Refresh injects a small inline preamble in development. Permit only its exact bytes;
+// the production/preview policy remains script-src 'self', including for EPUB content.
+const refreshHash = createHash("sha256")
+  .update(react.preambleCode.replace("__BASE__", "/"))
+  .digest("base64");
+const developmentHeaders = {
+  ...securityHeaders,
+  "Content-Security-Policy": securityHeaders["Content-Security-Policy"].replace(
+    "script-src 'self'",
+    `script-src 'self' 'sha256-${refreshHash}'`,
+  ),
+};
+
 // The backend (FastAPI, ADR 0007 D-A11) serves /api; the dev server proxies so the reader fetches
 // EPUB bytes + position/view routes same-origin.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "development-offline-reset",
+      apply: "serve",
+      configureServer(server) {
+        // An older production worker may already control this origin. Replace it with a worker
+        // that intercepts nothing and unregisters itself; dev modules must always reach Vite.
+        server.middlewares.use("/sw.js", (_request, response) => {
+          response.setHeader("Content-Type", "application/javascript");
+          response.setHeader("Cache-Control", "no-store");
+          response.end(`
+            self.addEventListener("install", () => self.skipWaiting());
+            self.addEventListener("activate", (event) => {
+              event.waitUntil(self.clients.claim().then(() => self.registration.unregister()));
+            });
+          `);
+        });
+      },
+    },
+  ],
   build: {
     // Foliate's PDF adapter loads its bundled layer CSS at module initialization.
     target: "es2022",
   },
   server: {
     port: 5173,
-    headers: securityHeaders,
+    headers: developmentHeaders,
     proxy: {
       "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
     },

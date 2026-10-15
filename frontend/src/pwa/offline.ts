@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { Position, ReaderMark } from "../api";
 
 const ACTIVE_OWNER_KEY = "litlet.offline.owner";
@@ -6,10 +7,15 @@ const OUTBOX_PREFIX = "litlet.offline.outbox:";
 const CACHE_PREFIX = "litlet-reader-owner-";
 const LOCAL_OWNER = "local";
 const MAX_OUTBOX_MUTATIONS = 1000;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type OfflineUser = { id: string; display_name: string; email?: string };
-export type OfflineSession = { user: OfflineUser; expires_at: string; offline?: boolean };
+export type OfflineSession = {
+  user: OfflineUser;
+  expires_at: string;
+  offline?: boolean;
+};
 
 type PositionMutation = {
   id: string;
@@ -56,23 +62,53 @@ export function activeOfflineOwner(): string {
   return validOwner(value) ? value : LOCAL_OWNER;
 }
 
+export function offlineOwnerCacheName(owner = activeOfflineOwner()): string {
+  return `${CACHE_PREFIX}${owner}`;
+}
+
+/** Check downloaded reader files without creating a cache or fetching any book content. */
+export async function isBookSavedOffline(
+  bookId: string,
+  owner = activeOfflineOwner(),
+): Promise<boolean> {
+  if (!("caches" in globalThis)) return false;
+  try {
+    const options = { cacheName: offlineOwnerCacheName(owner) };
+    const [manifest, epub] = await Promise.all([
+      caches.match(`/api/books/${bookId}/manifest`, options),
+      caches.match(`/api/books/${bookId}/epub`, options),
+    ]);
+    return Boolean(manifest?.ok && epub?.ok);
+  } catch {
+    return false;
+  }
+}
+
 function outboxKey(owner = activeOfflineOwner()): string {
   return `${OUTBOX_PREFIX}${owner}`;
 }
 
 function readOutbox(owner = activeOfflineOwner()): OfflineMutation[] {
   try {
-    const value = JSON.parse(storage()?.getItem(outboxKey(owner)) ?? "[]") as unknown;
+    const value = JSON.parse(
+      storage()?.getItem(outboxKey(owner)) ?? "[]",
+    ) as unknown;
     if (!Array.isArray(value)) return [];
-    return value.filter((item): item is OfflineMutation => (
-      item != null && typeof item === "object" && (item as OfflineMutation).owner === owner
-    ));
+    return value.filter(
+      (item): item is OfflineMutation =>
+        item != null &&
+        typeof item === "object" &&
+        (item as OfflineMutation).owner === owner,
+    );
   } catch {
     return [];
   }
 }
 
-function writeOutbox(items: OfflineMutation[], owner = activeOfflineOwner()): void {
+function writeOutbox(
+  items: OfflineMutation[],
+  owner = activeOfflineOwner(),
+): void {
   const target = storage();
   if (!target) return;
   if (items.length) target.setItem(outboxKey(owner), JSON.stringify(items));
@@ -80,28 +116,36 @@ function writeOutbox(items: OfflineMutation[], owner = activeOfflineOwner()): vo
 }
 
 function upsert(item: OfflineMutation): void {
-  const items = readOutbox(item.owner).filter((candidate) => candidate.id !== item.id);
-  if (items.length >= MAX_OUTBOX_MUTATIONS) throw new Error("the offline sync queue is full");
+  const items = readOutbox(item.owner).filter(
+    (candidate) => candidate.id !== item.id,
+  );
+  if (items.length >= MAX_OUTBOX_MUTATIONS)
+    throw new Error("the offline sync queue is full");
   items.push(item);
   writeOutbox(items, item.owner);
 }
 
 function csrfToken(): string | null {
-  const entry = document.cookie.split(";").map((item) => item.trim()).find(
-    (item) => item.startsWith("__Host-litlet-csrf="),
-  );
+  const entry = document.cookie
+    .split(";")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith("__Host-litlet-csrf="));
   if (!entry) return null;
   const value = entry.slice(entry.indexOf("=") + 1);
   return value ? decodeURIComponent(value) : null;
 }
 
 function postToWorker(message: Record<string, unknown>): void {
+  if (import.meta.env.DEV) return;
   if (!("serviceWorker" in navigator)) return;
   const worker = navigator.serviceWorker.controller;
   if (worker) worker.postMessage(message);
-  else void navigator.serviceWorker.ready.then((registration) => {
-    registration.active?.postMessage(message);
-  }).catch(() => {});
+  else
+    void navigator.serviceWorker.ready
+      .then((registration) => {
+        registration.active?.postMessage(message);
+      })
+      .catch(() => {});
 }
 
 function dispatchSync(detail: Record<string, unknown>): void {
@@ -111,9 +155,11 @@ function dispatchSync(detail: Record<string, unknown>): void {
 async function deleteOwnerCaches(owner: string): Promise<void> {
   if (!("caches" in globalThis)) return;
   const names = await caches.keys();
-  await Promise.all(names.filter((name) => name === `${CACHE_PREFIX}${owner}`).map(
-    (name) => caches.delete(name),
-  ));
+  await Promise.all(
+    names
+      .filter((name) => name === offlineOwnerCacheName(owner))
+      .map((name) => caches.delete(name)),
+  );
 }
 
 function clearReaderStorage(): void {
@@ -125,20 +171,26 @@ function clearReaderStorage(): void {
     "litlet.reader-preferences:",
     "litlet.position.",
   ];
-  const keys = Array.from({ length: target.length }, (_, index) => target.key(index)).filter(
-    (key): key is string => key != null,
-  );
-  for (const key of keys) if (prefixes.some((prefix) => key.startsWith(prefix))) target.removeItem(key);
+  const keys = Array.from({ length: target.length }, (_, index) =>
+    target.key(index),
+  ).filter((key): key is string => key != null);
+  for (const key of keys)
+    if (prefixes.some((prefix) => key.startsWith(prefix)))
+      target.removeItem(key);
 }
 
-export async function purgeOfflineTenant(owner = activeOfflineOwner()): Promise<void> {
+export async function purgeOfflineTenant(
+  owner = activeOfflineOwner(),
+): Promise<void> {
   const target = storage();
   target?.removeItem(outboxKey(owner));
+  target?.removeItem(`litlet.library-recent:${owner}`);
   target?.removeItem(SESSION_KEY);
   clearReaderStorage();
   postToWorker({ type: "PURGE_OWNER", owner });
   await deleteOwnerCaches(owner);
-  if (target?.getItem(ACTIVE_OWNER_KEY) === owner) target.removeItem(ACTIVE_OWNER_KEY);
+  if (target?.getItem(ACTIVE_OWNER_KEY) === owner)
+    target.removeItem(ACTIVE_OWNER_KEY);
 }
 
 async function setOwner(owner: string): Promise<void> {
@@ -149,24 +201,42 @@ async function setOwner(owner: string): Promise<void> {
   postToWorker({ type: "SET_OWNER", owner: normalized });
 }
 
-export async function initializeOfflineSupport(): Promise<OfflineSession | null | undefined> {
-  if ("serviceWorker" in navigator) {
-    await navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
+export async function initializeOfflineSupport(): Promise<
+  OfflineSession | null | undefined
+> {
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    await navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .catch(() => undefined);
   }
   let session: OfflineSession | null | undefined;
+  const sessionController = new AbortController();
+  const sessionTimeout = globalThis.setTimeout(
+    () => sessionController.abort(),
+    8_000,
+  );
   try {
-    const response = await fetch("/api/auth/session", { cache: "no-store" });
+    const response = await fetch("/api/auth/session", {
+      cache: "no-store",
+      signal: sessionController.signal,
+    });
     if (response.ok) {
-      session = await response.json() as OfflineSession;
+      session = (await response.json()) as OfflineSession;
       if (!validOwner(session.user.id) || session.user.id === LOCAL_OWNER) {
         await purgeOfflineTenant();
         return null;
       }
       await setOwner(session.user.id);
-      storage()?.setItem(SESSION_KEY, JSON.stringify({
-        user: { id: session.user.id, display_name: session.user.display_name },
-        expires_at: session.expires_at,
-      }));
+      storage()?.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          user: {
+            id: session.user.id,
+            display_name: session.user.display_name,
+          },
+          expires_at: session.expires_at,
+        }),
+      );
     } else if (response.status === 404) {
       await setOwner(LOCAL_OWNER);
       session = undefined;
@@ -179,7 +249,9 @@ export async function initializeOfflineSupport(): Promise<OfflineSession | null 
   } catch {
     const saved = storage()?.getItem(SESSION_KEY);
     try {
-      session = saved ? { ...(JSON.parse(saved) as OfflineSession), offline: true } : undefined;
+      session = saved
+        ? { ...(JSON.parse(saved) as OfflineSession), offline: true }
+        : undefined;
       const expiry = session ? Date.parse(session.expires_at) : Number.NaN;
       if (session && (!Number.isFinite(expiry) || expiry <= Date.now())) {
         await purgeOfflineTenant();
@@ -189,9 +261,13 @@ export async function initializeOfflineSupport(): Promise<OfflineSession | null 
       session = undefined;
     }
     postToWorker({ type: "SET_OWNER", owner: activeOfflineOwner() });
+  } finally {
+    globalThis.clearTimeout(sessionTimeout);
   }
   if (!listenersInstalled) {
-    globalThis.addEventListener("online", () => { void flushOfflineMutations(); });
+    globalThis.addEventListener("online", () => {
+      void flushOfflineMutations();
+    });
     listenersInstalled = true;
   }
   if (navigator.onLine) void flushOfflineMutations();
@@ -212,18 +288,24 @@ export async function cacheBookForOffline(bookId: string): Promise<void> {
   if (!manifest?.ok || !epub?.ok || !("caches" in globalThis)) {
     throw new Error("the book could not be saved for offline reading");
   }
-  const cache = await caches.open(`${CACHE_PREFIX}${activeOfflineOwner()}`);
+  const cache = await caches.open(offlineOwnerCacheName());
   try {
-    await Promise.all(results.map(async (result, index) => {
-      if (result.status === "fulfilled" && result.value.ok) {
-        await cache.put(paths[index], result.value.clone());
-      }
-    }));
+    await Promise.all(
+      results.map(async (result, index) => {
+        if (result.status === "fulfilled" && result.value.ok) {
+          await cache.put(paths[index], result.value.clone());
+        }
+      }),
+    );
   } catch {
-    throw new Error("the browser did not have enough storage to save this book offline");
+    throw new Error(
+      "the browser did not have enough storage to save this book offline",
+    );
   }
-  if (!await cache.match(paths[0]) || !await cache.match(paths[1])) {
-    throw new Error("the browser did not have enough storage to save this book offline");
+  if (!(await cache.match(paths[0])) || !(await cache.match(paths[1]))) {
+    throw new Error(
+      "the browser did not have enough storage to save this book offline",
+    );
   }
 }
 
@@ -258,9 +340,12 @@ export function queuePosition(
   } as Position;
 }
 
-export function pendingPosition(bookId: string): Record<string, unknown> | null {
+export function pendingPosition(
+  bookId: string,
+): Record<string, unknown> | null {
   const item = readOutbox().find(
-    (candidate): candidate is PositionMutation => candidate.kind === "position" && candidate.bookId === bookId,
+    (candidate): candidate is PositionMutation =>
+      candidate.kind === "position" && candidate.bookId === bookId,
   );
   return item?.body ?? null;
 }
@@ -293,9 +378,17 @@ export function queueMarkUpdate(
   body: Record<string, unknown>,
 ): ReaderMark {
   const owner = activeOfflineOwner();
-  const optimisticMark = { ...mark, ...body, pending: true, updated_at: new Date().toISOString() } as ReaderMark;
+  const optimisticMark = {
+    ...mark,
+    ...body,
+    pending: true,
+    updated_at: new Date().toISOString(),
+  } as ReaderMark;
   const items = readOutbox(owner);
-  const create = items.find((item) => item.kind === "mark-create" && item.optimisticMark?.id === mark.id);
+  const create = items.find(
+    (item) =>
+      item.kind === "mark-create" && item.optimisticMark?.id === mark.id,
+  );
   if (create?.kind === "mark-create") {
     create.body = { ...create.body, ...body };
     create.optimisticMark = optimisticMark;
@@ -320,15 +413,20 @@ export function queueMarkDelete(bookId: string, mark: ReaderMark): void {
   const owner = activeOfflineOwner();
   const items = readOutbox(owner);
   const withoutCreate = items.filter(
-    (item) => !(item.kind === "mark-create" && item.optimisticMark?.id === mark.id),
+    (item) =>
+      !(item.kind === "mark-create" && item.optimisticMark?.id === mark.id),
   );
   if (withoutCreate.length !== items.length) {
     writeOutbox(withoutCreate, owner);
     return;
   }
-  writeOutbox(withoutCreate.filter(
-    (item) => !(item.kind === "mark-update" && item.optimisticMark?.id === mark.id),
-  ), owner);
+  writeOutbox(
+    withoutCreate.filter(
+      (item) =>
+        !(item.kind === "mark-update" && item.optimisticMark?.id === mark.id),
+    ),
+    owner,
+  );
   upsert({
     id: `mark:delete:${mark.kind}:${mark.id}`,
     kind: "mark-delete",
@@ -341,11 +439,17 @@ export function queueMarkDelete(bookId: string, mark: ReaderMark): void {
   });
 }
 
-export function applyPendingMarks(bookId: string, serverMarks: ReaderMark[]): ReaderMark[] {
+export function applyPendingMarks(
+  bookId: string,
+  serverMarks: ReaderMark[],
+): ReaderMark[] {
   let result = [...serverMarks];
-  const items = readOutbox().filter(
-    (item): item is MarkMutation => item.kind !== "position" && item.bookId === bookId,
-  ).sort((left, right) => left.createdAt - right.createdAt);
+  const items = readOutbox()
+    .filter(
+      (item): item is MarkMutation =>
+        item.kind !== "position" && item.bookId === bookId,
+    )
+    .sort((left, right) => left.createdAt - right.createdAt);
   for (const item of items) {
     if (item.kind === "mark-delete") {
       const id = item.id.split(":").at(-1);
@@ -359,7 +463,10 @@ export function applyPendingMarks(bookId: string, serverMarks: ReaderMark[]): Re
 }
 
 function removeMutation(id: string, owner: string): void {
-  writeOutbox(readOutbox(owner).filter((item) => item.id !== id), owner);
+  writeOutbox(
+    readOutbox(owner).filter((item) => item.id !== id),
+    owner,
+  );
 }
 
 export async function flushOfflineMutations(): Promise<void> {
@@ -386,14 +493,28 @@ export async function flushOfflineMutations(): Promise<void> {
           keepalive: true,
         });
         if (response.ok) {
-          const value = response.status === 204 ? null : await response.json().catch(() => null);
+          const value =
+            response.status === 204
+              ? null
+              : await response.json().catch(() => null);
           removeMutation(item.id, owner);
-          dispatchSync({ kind: item.kind, bookId: item.bookId, optimisticMark: item.kind === "position" ? null : item.optimisticMark, value });
+          dispatchSync({
+            kind: item.kind,
+            bookId: item.bookId,
+            optimisticMark:
+              item.kind === "position" ? null : item.optimisticMark,
+            value,
+          });
           continue;
         }
         if ([400, 404, 409, 410, 422].includes(response.status)) {
           removeMutation(item.id, owner);
-          dispatchSync({ kind: item.kind, bookId: item.bookId, failed: true, status: response.status });
+          dispatchSync({
+            kind: item.kind,
+            bookId: item.bookId,
+            failed: true,
+            status: response.status,
+          });
           continue;
         }
         break;
@@ -401,6 +522,8 @@ export async function flushOfflineMutations(): Promise<void> {
         break;
       }
     }
-  })().finally(() => { flushPromise = null; });
+  })().finally(() => {
+    flushPromise = null;
+  });
   return flushPromise;
 }

@@ -6,6 +6,8 @@
  * LIT-15 scrubber can walk it back through time; the server still clamps to the high-water. */
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api, type BookType, type CatchMeUp as CMU } from "../api";
+import { Button } from "../ui/Button";
+import { useDialogMotion } from "../ui/useDialogMotion";
 import { presentationFor } from "./bookProfile";
 import { keepTabFocusInside } from "./focusTrap";
 import { NameCard } from "./NameCard";
@@ -30,23 +32,29 @@ export function CatchMeUp({
   welcomeBackChapter?: number | null;
   onClose: () => void;
 }) {
+  const { closing, requestClose } = useDialogMotion(onClose);
   const [cmu, setCmu] = useState<CMU | null>(null);
   const [err, setErr] = useState<unknown>(null);
+  const [retry, setRetry] = useState(0);
   // LIT-30: the open name card (a clicked chip), anchored to it. While a card is open it owns the
   // keyboard; the hero yields (below) so its own Escape/Tab-trap take over.
-  const [card, setCard] = useState<{ entityId: number; anchorRect: DOMRect | null } | null>(null);
+  const [card, setCard] = useState<{
+    entityId: number;
+    anchorRect: DOMRect | null;
+  } | null>(null);
   const cardRef = useRef(card);
   cardRef.current = card;
   const rootRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const onCloseRef = useRef(requestClose);
+  onCloseRef.current = requestClose;
   // capture the opener SYNCHRONOUSLY at render — before ReaderPage's modal-inert can steal its focus
   // (the opener sits in the .companion that inerts on open) — so the hero's close restores focus to the
   // opener, not <body> (a11y pass-2, WCAG 2.4.3; the same fix as the NameCard trigger capture).
   const heroTriggerRef = useRef<HTMLElement | null>(null);
-  if (heroTriggerRef.current === null) heroTriggerRef.current = document.activeElement as HTMLElement | null;
+  if (heroTriggerRef.current === null)
+    heroTriggerRef.current = document.activeElement as HTMLElement | null;
 
   // while a name card is open, mark the hero content inert so the two modals don't coexist — the card
   // is the sole active surface (a11y review: tighten the nested aria-modal). Mirrors the LIT-16 pattern
@@ -96,7 +104,7 @@ export function CatchMeUp({
     return () => {
       dead = true;
     };
-  }, [bookId, bookmark]);
+  }, [bookId, bookmark, retry]);
 
   const paras = (cmu?.recap ?? "").split(/\n+/).filter(Boolean);
   const cast = cmu?.cast ?? []; // bookmark-bounded; wrapNames wraps ONLY these, never a future name
@@ -111,25 +119,43 @@ export function CatchMeUp({
     welcomeBackChapter != null
       ? `Welcome back — you left off in ${presentation.unit} ${roman(welcomeBackChapter)}. ${presentation.recapLink}.`
       : presentation.recapLink;
-  const showPeopleStats = cmu != null && (
-    presentation.peopleMode === "primary" || cmu.cast_size > 0 || cmu.open_threads > 0
-  );
+  const showPeopleStats =
+    cmu != null &&
+    (presentation.peopleMode === "primary" ||
+      cmu.cast_size > 0 ||
+      cmu.open_threads > 0);
 
   return (
-    <div className="hero-scrim" role="dialog" aria-modal="true" aria-label={dialogLabel} ref={rootRef}>
+    <div
+      className="hero-scrim"
+      data-closing={closing || undefined}
+      role="dialog"
+      aria-modal="true"
+      aria-label={dialogLabel}
+      ref={rootRef}
+    >
       <article className="hero-page" ref={articleRef}>
         <div className="hero-ribbon" aria-hidden="true" />
         <header className="hero-head">
-          <span className="smallcaps hero-eyebrow">{presentation.recapLink}</span>
-          <button className="plain smallcaps hero-close" ref={closeRef} onClick={onClose}>
-            close the book ✕
-          </button>
+          <span className="smallcaps hero-eyebrow">
+            {presentation.recapLink}
+          </span>
+          <Button
+            variant="ghost"
+            icon="close"
+            className="hero-close"
+            ref={closeRef}
+            onClick={requestClose}
+          >
+            Close
+          </Button>
         </header>
         {welcomeBackChapter != null && (
           // visual reinforcement only — the SR announcement rides the dialog's accessible name (above)
           <div className="welcome-back">
-            <span className="smallcaps">welcome back</span> — you left off in {presentation.unit}{" "}
-            {roman(welcomeBackChapter)}. Here is {presentation.recapLink}.
+            <span className="smallcaps">welcome back</span> — you left off in{" "}
+            {presentation.unit} {roman(welcomeBackChapter)}. Here is{" "}
+            {presentation.recapLink}.
           </div>
         )}
         <div className="hero-asof">
@@ -138,13 +164,38 @@ export function CatchMeUp({
             : `as of ${presentation.unit} ${roman(asOf)} · ${asOf} of ${totalAtoms}`}
         </div>
 
+        <div
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {cmu
+            ? empty
+              ? "No reading memory is available yet."
+              : "Your recap is ready."
+            : ""}
+        </div>
         {err ? (
-          <p className="quiet hero-quiet">{recapFailureMessage(err, "hero")}</p>
+          <div className="codex-state" role="alert">
+            <p className="quiet hero-quiet">
+              {recapFailureMessage(err, "hero")}
+            </p>
+            <Button
+              icon="refresh"
+              onClick={() => setRetry((value) => value + 1)}
+            >
+              Try recap again
+            </Button>
+          </div>
         ) : cmu == null ? (
-          <p className="quiet hero-quiet">Gathering the memory…</p>
+          <p className="quiet hero-quiet" role="status">
+            Gathering the memory…
+          </p>
         ) : empty ? (
           <p className="quiet hero-quiet">
-            Finish a {presentation.unit} and {presentation.recapLink} will gather here.
+            Finish a {presentation.unit} and {presentation.recapLink} will
+            gather here.
           </p>
         ) : (
           <div className="hero-body">
@@ -160,7 +211,10 @@ export function CatchMeUp({
                         className="name-chip"
                         data-entity-id={seg.entityId}
                         onClick={(e) =>
-                          setCard({ entityId: seg.entityId!, anchorRect: e.currentTarget.getBoundingClientRect() })
+                          setCard({
+                            entityId: seg.entityId!,
+                            anchorRect: e.currentTarget.getBoundingClientRect(),
+                          })
                         }
                       >
                         {seg.text}
@@ -172,18 +226,27 @@ export function CatchMeUp({
                 </p>
               ))}
             </div>
-            {showPeopleStats && <aside className="hero-facts" aria-label={
-              bookType === "novel" ? "the cast and threads so far" : "people and connections so far"
-            }>
-              <div className="stat-line">
-                <span className="smallcaps">{presentation.peopleLabel}</span>
-                <span className="n">{cmu.cast_size}</span>
-              </div>
-              <div className="stat-line">
-                <span className="smallcaps">{presentation.connectionsLabel}</span>
-                <span className="n">{cmu.open_threads}</span>
-              </div>
-            </aside>}
+            {showPeopleStats && (
+              <aside
+                className="hero-facts"
+                aria-label={
+                  bookType === "novel"
+                    ? "the cast and threads so far"
+                    : "people and connections so far"
+                }
+              >
+                <div className="stat-line">
+                  <span className="smallcaps">{presentation.peopleLabel}</span>
+                  <span className="n">{cmu.cast_size}</span>
+                </div>
+                <div className="stat-line">
+                  <span className="smallcaps">
+                    {presentation.connectionsLabel}
+                  </span>
+                  <span className="n">{cmu.open_threads}</span>
+                </div>
+              </aside>
+            )}
           </div>
         )}
       </article>
@@ -194,7 +257,12 @@ export function CatchMeUp({
           bookmark={bookmark}
           anchorRect={card.anchorRect}
           onClose={closeCard}
-          onNavigate={(id) => setCard((c) => ({ entityId: id, anchorRect: c?.anchorRect ?? null }))}
+          onNavigate={(id) =>
+            setCard((c) => ({
+              entityId: id,
+              anchorRect: c?.anchorRect ?? null,
+            }))
+          }
         />
       )}
     </div>

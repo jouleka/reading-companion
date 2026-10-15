@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   DEFAULT_READER_PREFERENCES,
   buildBookStyles,
+  bindReaderMotion,
   normalizeReaderPreferences,
   readerLayoutAttributes,
   READER_THEME_COLORS,
@@ -12,12 +13,18 @@ afterEach(() => vi.useRealTimers());
 
 describe("reader typography presets", () => {
   const luminance = (hex: string) => {
-    const channels = hex.match(/[0-9a-f]{2}/gi)!.map((value) => parseInt(value, 16) / 255)
-      .map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    const channels = hex
+      .match(/[0-9a-f]{2}/gi)!
+      .map((value) => parseInt(value, 16) / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+      );
     return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
   };
   const contrast = (a: string, b: string) => {
-    const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    const [lighter, darker] = [luminance(a), luminance(b)].sort(
+      (x, y) => y - x,
+    );
     return (lighter + 0.05) / (darker + 0.05);
   };
 
@@ -34,11 +41,13 @@ describe("reader typography presets", () => {
   });
 
   test("rejects unknown cached values instead of injecting arbitrary CSS", () => {
-    expect(normalizeReaderPreferences({
-      ...DEFAULT_READER_PREFERENCES,
-      theme: "url(javascript:bad)",
-      font_size: 9000,
-    })).toEqual(DEFAULT_READER_PREFERENCES);
+    expect(
+      normalizeReaderPreferences({
+        ...DEFAULT_READER_PREFERENCES,
+        theme: "url(javascript:bad)",
+        font_size: 9000,
+      }),
+    ).toEqual(DEFAULT_READER_PREFERENCES);
   });
 
   test("maps presets to bounded book CSS and paginator attributes", () => {
@@ -55,7 +64,7 @@ describe("reader typography presets", () => {
     expect(css).toContain("font-size: 125%");
     expect(css).toContain("line-height: 1.8");
     expect(css).toContain("system-ui");
-    expect(css).toContain("#17191c");
+    expect(css).toContain(READER_THEME_COLORS.night.background);
     expect(css).not.toContain("javascript");
     expect(readerLayoutAttributes(preferences)).toEqual({
       "max-inline-size": "560px",
@@ -66,8 +75,42 @@ describe("reader typography presets", () => {
 
   test("every fixed theme clears WCAG AA for body text and links", () => {
     for (const colors of Object.values(READER_THEME_COLORS)) {
-      expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(colors.link, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(colors.text, colors.background)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(contrast(colors.link, colors.background)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+  });
+
+  test("page motion follows the OS preference and releases its listener", () => {
+    const renderer = document.createElement("div");
+    let notify: (() => void) | undefined;
+    const media = {
+      matches: false,
+      addEventListener: vi.fn((_type: string, listener: () => void) => {
+        notify = listener;
+      }),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => media),
+    );
+    try {
+      const dispose = bindReaderMotion(renderer);
+      expect(renderer.hasAttribute("animated")).toBe(true);
+      media.matches = true;
+      notify?.();
+      expect(renderer.hasAttribute("animated")).toBe(false);
+      media.matches = false;
+      notify?.();
+      expect(renderer.hasAttribute("animated")).toBe(true);
+      dispose();
+      expect(media.removeEventListener).toHaveBeenCalledWith("change", notify);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
@@ -76,13 +119,17 @@ describe("reader typography presets", () => {
     const saved: string[] = [];
     let fail = true;
     const statuses: string[] = [];
-    const saver = new ReaderPreferenceSaver(async (preferences) => {
-      if (fail) {
-        fail = false;
-        throw new TypeError("offline");
-      }
-      saved.push(preferences.theme);
-    }, 20, (status) => statuses.push(status));
+    const saver = new ReaderPreferenceSaver(
+      async (preferences) => {
+        if (fail) {
+          fail = false;
+          throw new TypeError("offline");
+        }
+        saved.push(preferences.theme);
+      },
+      20,
+      (status) => statuses.push(status),
+    );
     saver.schedule({ ...DEFAULT_READER_PREFERENCES, theme: "sepia" });
     saver.schedule({ ...DEFAULT_READER_PREFERENCES, theme: "night" });
     await vi.advanceTimersByTimeAsync(20);

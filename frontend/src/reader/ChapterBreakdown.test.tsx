@@ -13,34 +13,72 @@ const cast: CastMember[] = [
   { name: "Mitya", entity_id: 2 },
 ];
 const chapters: ChapterNote[] = [
-  { chapter_key: "c1", revealed_at: 1, title: "The Elder", summary: "Fyodor arrives.",
-    new_characters: [{ entity_id: 1, name: "Fyodor" }], events: ["Fyodor buys the estate."] },
-  { chapter_key: "c2", revealed_at: 2, title: "The Sons", summary: "Mitya returns to Fyodor.",
-    new_characters: [{ entity_id: 2, name: "Mitya" }], events: ["Mitya quarrels with Fyodor."] },
+  {
+    chapter_key: "c1",
+    revealed_at: 1,
+    title: "The Elder",
+    summary: "Fyodor arrives.",
+    new_characters: [{ entity_id: 1, name: "Fyodor" }],
+    events: ["Fyodor buys the estate."],
+  },
+  {
+    chapter_key: "c2",
+    revealed_at: 2,
+    title: "The Sons",
+    summary: "Mitya returns to Fyodor.",
+    new_characters: [{ entity_id: 2, name: "Mitya" }],
+    events: ["Mitya quarrels with Fyodor."],
+  },
 ];
 
 describe("ChapterBreakdown", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   test("opens only the current chapter by default; clicking another re-times and moves disclosure", () => {
     const onSelect = vi.fn();
-    render(<ChapterBreakdown chapters={chapters} cast={cast} currentChapter={2}
-                             scrollTo={null} onSelectChapter={onSelect} onOpenCard={() => {}} />);
-    expect(screen.getByText(/quarrels with/)).toBeTruthy();   // ch2 event
+    render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={null}
+        onSelectChapter={onSelect}
+        onOpenCard={() => {}}
+      />,
+    );
+    expect(screen.getByText(/quarrels with/)).toBeTruthy(); // ch2 event
     expect(screen.queryByText(/buys the estate/)).toBeNull(); // ch1 is collapsed
     fireEvent.click(screen.getByRole("button", { name: /The Elder/ }));
     expect(onSelect).toHaveBeenCalledWith(1);
     expect(screen.getByText(/buys the estate/)).toBeTruthy();
     expect(screen.queryByText(/quarrels with/)).toBeNull();
-    expect(screen.getByRole("button", { name: /The Elder/ }).getAttribute("aria-expanded")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: /The Elder/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   test("searches already-read chapter titles and summaries without expanding every result", () => {
-    render(<ChapterBreakdown chapters={chapters} cast={cast} currentChapter={2}
-                             scrollTo={null} onSelectChapter={() => {}} onOpenCard={() => {}} />);
-    fireEvent.change(screen.getByRole("searchbox", { name: /find a chapter/i }), {
-      target: { value: "Elder" },
-    });
+    render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={null}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: /find a chapter/i }),
+      {
+        target: { value: "Elder" },
+      },
+    );
     expect(screen.getByRole("button", { name: /The Elder/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /The Sons/ })).toBeNull();
     expect(screen.queryByText(/buys the estate/)).toBeNull();
@@ -48,9 +86,21 @@ describe("ChapterBreakdown", () => {
 
   test("the current chapter is marked; names are chips that open cards", () => {
     const onOpenCard = vi.fn();
-    render(<ChapterBreakdown chapters={chapters} cast={cast} currentChapter={2}
-                             scrollTo={null} onSelectChapter={() => {}} onOpenCard={onOpenCard} />);
-    expect(screen.getByRole("button", { name: /The Sons/ }).getAttribute("aria-current")).toBe("true");
+    render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={null}
+        onSelectChapter={() => {}}
+        onOpenCard={onOpenCard}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /The Sons/ })
+        .getAttribute("aria-current"),
+    ).toBe("true");
     // a name-chip (in the summary / event / "new here" line) opens the card (LIT-30 mechanism, reused)
     fireEvent.click(screen.getAllByRole("button", { name: "Fyodor" })[0]);
     expect(onOpenCard).toHaveBeenCalledWith(1, expect.anything());
@@ -58,25 +108,113 @@ describe("ChapterBreakdown", () => {
 
   test("replays a jump to the same chapter when it is explicitly requested again", () => {
     const scrollIntoView = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
     const { rerender } = render(
-      <ChapterBreakdown chapters={chapters} cast={cast} currentChapter={2}
-                        scrollTo={{ chapter: 1, requestId: 1 } as never}
-                        onSelectChapter={() => {}} onOpenCard={() => {}} />,
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={{ chapter: 1, requestId: 1 } as never}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     rerender(
-      <ChapterBreakdown chapters={chapters} cast={cast} currentChapter={2}
-                        scrollTo={{ chapter: 1, requestId: 2 } as never}
-                        onSelectChapter={() => {}} onOpenCard={() => {}} />,
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={{ chapter: 1, requestId: 2 } as never}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(2);
   });
 
+  test("clears a filter and expands the citation before scrolling its newly rendered target", () => {
+    const scrollIntoView = vi.fn(function (this: HTMLElement) {
+      expect(this.textContent).toContain("The Elder");
+      expect(this.textContent).toContain("buys the estate");
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const { rerender } = render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={null}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: /find a chapter/i }),
+      { target: { value: "Sons" } },
+    );
+    expect(screen.queryByRole("button", { name: /The Elder/ })).toBeNull();
+    rerender(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={{ chapter: 1, requestId: 1 }}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
+    );
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        screen.getByRole("searchbox", {
+          name: /find a chapter/i,
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("");
+  });
+
+  test("respects reduced motion for explicit chapter jumps", () => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={2}
+        scrollTo={{ chapter: 1, requestId: 1 }}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
+    );
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: "center",
+      behavior: "auto",
+    });
+  });
+
   test("no axe violations", async () => {
-    const { container } = render(<ChapterBreakdown chapters={chapters} cast={cast} currentChapter={1}
-                             scrollTo={null} onSelectChapter={() => {}} onOpenCard={() => {}} />);
+    const { container } = render(
+      <ChapterBreakdown
+        chapters={chapters}
+        cast={cast}
+        currentChapter={1}
+        scrollTo={null}
+        onSelectChapter={() => {}}
+        onOpenCard={() => {}}
+      />,
+    );
     expect(await axeAA(container)).toHaveNoViolations();
   });
 });
