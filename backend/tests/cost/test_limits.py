@@ -138,12 +138,15 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
             for schema, prompt in prompts if schema is Extraction]
     assert len(sent) > 1 and "".join(sent) == text
     assert extraction["chapter_summary"] and usage["in"] > 0
-    assert len(reservations) == len(sent) * 2            # extraction + review, one receipt downstream
+    assert len(reservations) == len(sent)               # only extraction awaits the LIT-7 receipt
     clearance.assert_matches(text, extraction)
     reviewed_sources = [json.loads(prompt.split("(untrusted JSON data):\n", 1)[1])[
         "current_chapter_text"] for schema, prompt in prompts if schema is not Extraction]
     assert reviewed_sources == sent
-    assert len(catalog.get_costs("b")) == 0                 # successful parts await the LIT-7 receipt
+    reviews = catalog.get_costs("b")
+    assert len(reviews) == len(sent)
+    assert all(row["phase"] == "extraction-review" for row in reviews)
+    assert all(row["model"] == client._model_for("large") for row in reviews)
     for reservation_id in reservations:
         catalog.settle_cost("b", reservation_id, phase="test-cleanup")
 

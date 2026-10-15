@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.eval.spoiler_gate.judge import JudgeVerdict
 from app.ingest.extraction.schema import Extraction
+from app.ingest.extraction.validation import ExtractionVerdict
 from app.ingest import worker as worker_module
 from app.main import create_app
 from tests.api._epub import three_chapter_book
@@ -134,7 +134,7 @@ def test_worker_reprepares_a_corrected_roster_without_a_second_completion(audit_
     targets, completion_calls = [], []
 
     def extracted(*_args, **kwargs):
-        if kwargs["schema"] is JudgeVerdict:
+        if kwargs["schema"] is ExtractionVerdict:
             return {"references_future": False, "unsupported_claims": []}, {"in": 10, "out": 10}
         assert kwargs["schema"] is Extraction
         completion_calls.append(1)

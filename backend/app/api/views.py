@@ -11,7 +11,7 @@ LOCK DISCIPLINE (D-A3): the search-query embedding and the recap synthesis LLM c
 CATCH-ME-UP is lazy synthesis (D5) behind the LIT-8 runtime gate: supplied-facts -> large-tier recap
 -> ``assert_recap_safe`` (one regenerate on rejection, then a GENERIC 502 — the error channel must
 never carry the rejected recap or a future name). Cached in-process by the full Inv-7 key
-(book, catalog incarnation, bookmark, validity_snapshot, pinned synth model, prompt version,
+(book, catalog incarnation, bookmark, validity_snapshot, current synth model, prompt version,
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -32,7 +32,7 @@ from app.ask import (
     validate_ask_draft,
 )
 
-from app.cost import CostCeilingExceeded, budgeted_completion, pricing_known
+from app.cost import CostCeilingExceeded, budgeted_completion, estimate_input_tokens, pricing_known
 from app.deps import (
     book_lifecycle,
     get_catalog,
@@ -56,7 +56,13 @@ from app.eval.spoiler_gate import (
     synth_prompt,
     validity_snapshot,
 )
-from app.eval.spoiler_gate.judge import JudgeUnavailable, judge_recap
+from app.eval.spoiler_gate.judge import (
+    JUDGE_SYSTEM,
+    JudgeUnavailable,
+    JudgeVerdict,
+    judge_prompt,
+    judge_recap,
+)
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
 from app.llm.retrieval import budgeted_query_embedding
 from app.reading_assist import (
@@ -196,6 +202,11 @@ def graph(book_id: str, bookmark: int | None = _BM, catalog=Depends(get_catalog)
             chars.append(character)
         rels = [dict(r) for r in v.relationships()]
         chars, rels = _coalesce_honorific_characters(chars, rels)
+        # This endpoint is the people graph. Other visible entity types remain available through
+        # cards/timeline, but every returned graph edge must resolve to a returned character.
+        character_ids = {row["entity_id"] for row in chars}
+        rels = [row for row in rels if row["src_entity"] in character_ids
+                and row["dst_entity"] in character_ids]
     return {"as_of_chapter": eff, "characters": chars, "relationships": rels}
 
 
@@ -805,6 +816,9 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     runs under it. Returns the one-liner text or None."""
     if not delta["chapter_summaries"]:
         return None                                        # nothing newly completed to describe
+    if not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                             judge_prompt("", facts), schema=JudgeVerdict):
+        return None                                        # cannot review even the shortest output
     try:
         now_text, _usage = _budgeted_runner(
             catalog, settings, client, book_id, "now"
@@ -829,6 +843,21 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     return now_text.strip() or None
 
 
+def _recap_input_fits(settings, client, system, user, *, schema=None):
+    """Preflight only input shape; the budgeted runner still atomically admits book-level spend."""
+    peak_input = estimate_input_tokens(system, user, schema)
+    if (schema is not None and client.provider == "openai-compatible"
+            and not getattr(client, "_is_native_openai", False)):
+        peak_input += settings.cost_max_output_tokens_per_call + 512
+    return peak_input <= settings.cost_max_input_tokens_per_call
+
+
+def _cumulative_recap_facts(facts):
+    """Exactly the evidence synth_prompt supplies, with no additional event history in review."""
+    return {"characters": facts["characters"], "chapter_summaries": facts["chapter_summaries"],
+            "events": facts["events"][:20]}
+
+
 @router.get("/catch-me-up")
 def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 catalog=Depends(get_catalog), store=Depends(get_store),
@@ -846,10 +875,9 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         cmu = mem.view(eff).catch_me_up()
         facts = supplied_facts(mem, eff)
         snap = validity_snapshot(mem, eff)
-        pinned = mem.pinned_identity() or {}
         book_type = mem.book_profile()["book_type"]
         content_language = mem.content_language()
-    synth_model = pinned.get("synth_model") or client._model_for("large")
+    synth_model = client.extractor_version("large")
     incarnation = catalog.get_book(book_id)["incarnation"]
     key = (book_id, incarnation, cache_key(
         book_id,
@@ -900,20 +928,34 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             ))
             prior_recap = (recaps.get(prior_key) or {}).get("recap")
 
+        system = flowing_system_for(book_type, content_language)
+        cumulative_facts = _cumulative_recap_facts(facts)
+        full_review_fits = _recap_input_fits(
+            settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
+        )
         recap_final = None
         for attempt in range(2):
             # attempt 0: EVOLVE from recap(N-1) + the delta (non-repetitive). If it fails the gate,
             # attempt 1 falls back to the cumulative synthesis — proven grounded, so the reader still
             # gets a recap rather than a 502. The evolve is the optimization; the cumulative is the
             # safety net. BOTH run under FLOWING_SYSTEM (the anti-foreshadow contract stays intact).
-            if prior_recap and attempt == 0:
-                prompt = evolve_prompt(eff, prior_recap, delta, book_type=book_type)
+            if prior_recap and attempt == 0 and full_review_fits:
+                evolved = evolve_prompt(eff, prior_recap, delta, book_type=book_type)
             else:
-                prompt = synth_prompt(eff, facts, book_type=book_type)
+                evolved = None
+            if evolved is not None and _recap_input_fits(settings, client, system, evolved):
+                prompt, review_facts = evolved, facts
+            else:
+                prompt = synth_prompt(eff, cumulative_facts, book_type=book_type)
+                review_facts = cumulative_facts
+            if (not _recap_input_fits(settings, client, system, prompt)
+                    or not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                                            judge_prompt("", review_facts), schema=JudgeVerdict)):
+                raise HTTPException(429, "recap evidence exceeds the per-call input ceiling")
             try:
                 recap, _usage = _budgeted_runner(
                     catalog, settings, client, book_id, "synthesis"
-                )(flowing_system_for(book_type, content_language), prompt, tier="large")
+                )(system, prompt, tier="large")
             except CostCeilingExceeded as exc:
                 raise HTTPException(429, "book cost ceiling reached") from exc
             with store.book(book_id) as mem:
@@ -927,9 +969,12 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             # name, no modal). references_future is a HARD reject; a judge outage fails CLOSED (no
             # verdict = unsafe) — both regenerate, then a generic 502. Soft unsupported_claims stay
             # server-side (reader-data-only). The judge sees only the bookmark-bounded facts + the recap.
+            if not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                                     judge_prompt(recap, review_facts), schema=JudgeVerdict):
+                raise HTTPException(429, "recap review exceeds the per-call input ceiling")
             try:
                 verdict, _judge_usage = judge_recap(
-                    client, recap, facts,
+                    client, recap, review_facts,
                     complete=_budgeted_runner(catalog, settings, client, book_id, "judge"),
                 )
             except CostCeilingExceeded as exc:

@@ -1164,8 +1164,9 @@ def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path
         position = {"cfi": "x", "offset": _mlen(settings, bid, 0) + 2}
         c.put(f"/api/books/{bid}/position", json=position)
         state = c.get(f"/api/books/{bid}/ingest").json()
-        assert seen["extract"] == 1
-        assert seen["review"] == (0 if case == "absent_name" else 1)
+        attempts = 1 if case == "supported" else 2
+        assert seen["extract"] == attempts
+        assert seen["review"] == (0 if case == "absent_name" else attempts)
         if not heal["value"]:
             assert state["status"] == "error" and state["ingest_progress"] == 0
             assert "Corvus" not in state["error"]
@@ -1175,7 +1176,7 @@ def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path
             assert app.state.catalog.get_cost_reservations(bid) == []
             failed_costs = app.state.catalog.get_costs(bid)
             assert sum(row["input_tokens"] for row in failed_costs) == (
-                19 if case == "absent_name" else 42
+                (19 if case == "absent_name" else 42) * attempts
             )
             heal["value"] = True
             c.put(f"/api/books/{bid}/position", json=position)
@@ -1184,7 +1185,7 @@ def test_chapter_grounding_review_blocks_unproved_memory_and_can_resume(tmp_path
         assert app.state.catalog.get_cost_reservations(bid) == []
         costs = [row for row in app.state.catalog.get_costs(bid) if row["phase"] == "extraction"]
         assert len(costs) == 1
-        assert costs[0]["input_tokens"] == 42 and costs[0]["output_tokens"] == 16
+        assert costs[0]["input_tokens"] == 19 and costs[0]["output_tokens"] == 11
         with app.state.store.book(bid) as mem:
             assert len(mem._audit_all("ingested_chapters")) == 1
             assert mem.view(1).timeline()[0]["summary"] == "Berenice received a copper lantern from Aldric."
@@ -1218,7 +1219,8 @@ def test_catalog_progress_failure_after_memory_commit_resumes_without_duplicates
             for table in ("chapters", "raw_chapters", "entities", "events", "chunks")
         }
     assert before["chapters"] == 1 and before["raw_chapters"] == 1
-    assert len(catalog.get_costs(bid)) == 0
+    reviews_before = catalog.get_costs(bid)
+    assert len(reviews_before) == 1 and reviews_before[0]["phase"] == "extraction-review"
 
     import app.ingest.worker as worker_mod
 
@@ -1239,7 +1241,9 @@ def test_catalog_progress_failure_after_memory_commit_resumes_without_duplicates
             for table in ("chapters", "raw_chapters", "entities", "events", "chunks")
         }
     assert after == before
-    assert len(catalog.get_costs(bid)) == 1
+    costs_after = catalog.get_costs(bid)
+    assert costs_after[:1] == reviews_before
+    assert len(costs_after) == 2 and costs_after[-1]["phase"] == "extraction"
 
 
 def test_raised_target_during_the_exit_window_is_never_lost():

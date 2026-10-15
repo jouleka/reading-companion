@@ -67,6 +67,41 @@ def test_graph_coalesces_legacy_honorific_duplicates_without_losing_relationship
                for edge in graph["relationships"])
 
 
+def test_graph_is_closed_over_characters_without_removing_noncharacter_evidence(env):
+    c, bid, app, _ = env
+    with app.state.store.book(bid) as mem:
+        mara = mem.add_entity("Mara", "character", revealed_at=1)
+        jonas = mem.add_entity("Jonas", "character", revealed_at=1)
+        key = mem.add_entity("brass key", "object", revealed_at=1)
+        person_edge = mem.add_edge(jonas, mara, "social", "lends the brass key", revealed_at=1)
+        object_edge = mem.add_edge(mara, key, "other", "puts in a red tin", revealed_at=1)
+        event_id = mem.add_event(
+            "Mara puts the brass key in a red tin.", revealed_at=1, order_idx=99,
+            participants=[(mara, "actor"), (key, "object")],
+        )
+
+    graph = c.get(f"/api/books/{bid}/graph", params={"bookmark": 1}).json()
+    character_ids = {row["entity_id"] for row in graph["characters"]}
+    assert key not in character_ids
+    assert all(edge["src_entity"] in character_ids and edge["dst_entity"] in character_ids
+               for edge in graph["relationships"])
+    assert person_edge in {row["edge_id"] for row in graph["relationships"]}
+    assert object_edge not in {row["edge_id"] for row in graph["relationships"]}
+
+    person_card = c.get(f"/api/books/{bid}/character/{mara}", params={"bookmark": 1}).json()
+    assert any(tie["entity_id"] == key and tie["name"] == "brass key"
+               for tie in person_card["ties"])
+    object_card = c.get(f"/api/books/{bid}/character/{key}", params={"bookmark": 1}).json()
+    assert object_card["name"] == "brass key" and object_card["type"] == "object"
+    assert any(tie["entity_id"] == mara and tie["name"] == "Mara"
+               for tie in object_card["ties"])
+    timeline = c.get(f"/api/books/{bid}/timeline", params={"bookmark": 1}).json()
+    event = next(row for row in timeline["events"] if row["event_id"] == event_id)
+    assert event["participants"] == ["Mara", "brass key"]
+    with app.state.store.book(bid) as mem:
+        assert object_edge in {row["edge_id"] for row in mem.view(1).relationships()}
+
+
 def test_graph_includes_only_bookmark_visible_aliases(env):
     c, bid, app, _ = env
     with app.state.store.book(bid) as mem:

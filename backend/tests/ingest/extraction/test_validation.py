@@ -3,12 +3,16 @@ from copy import deepcopy
 import json
 
 import pytest
+from openai.lib._pydantic import to_strict_json_schema
+from pydantic import ValidationError
 
 from app.ingest.extraction.pipeline import content_hash_of, ingest_chapter, prepare_chapter
 from app.ingest.extraction.prompts import extract_system_for, extract_user_prompt
 from app.ingest.extraction.schema import Extraction
 from app.ingest.extraction.validation import (
+    ExtractionGroundingRejected,
     ExtractionSafetyError,
+    ExtractionVerdict,
     assert_observed_entity_names,
     merge_reviewed_extractions,
     review_extraction,
@@ -17,7 +21,8 @@ from app.llm.client import LLMClient
 from app.memory.store import Store
 
 
-TEXT = "Aldric handed the copper lantern to Berenice. He stayed at the forge."
+TEXT = ("Aldric and Berenice were colleagues. Aldric handed the copper lantern to Berenice. "
+        "He stayed at the forge.")
 EXTRACTION = {
     "chapter_summary": "Berenice received a copper lantern from Aldric, who remained at the forge.",
     "entities": [
@@ -26,8 +31,8 @@ EXTRACTION = {
         {"canonical_name": "Berenice", "type": "character", "aliases": [],
          "matched_roster": False, "state": "has the copper lantern"},
     ],
-    "relationships": [{"src": "Aldric", "dst": "Berenice", "rel_type": "other",
-                       "label": "gave a copper lantern to"}],
+    "relationships": [{"src": "Aldric", "dst": "Berenice", "rel_type": "social",
+                       "label": "colleague of"}],
     "events": [{"summary": "Berenice received the lantern from Aldric.",
                 "participants": ["Aldric", "Berenice"]}],
     "themes": [{"name": "giving", "description": "Aldric gives Berenice a lantern."}],
@@ -41,10 +46,13 @@ def _cleared(*_args, **_kwargs):
 def test_absent_new_name_is_rejected_before_any_review_or_memory_write(tmp_path):
     extraction = deepcopy(EXTRACTION)
     calls = []
-    with pytest.raises(ExtractionSafetyError, match="unobserved"):
+    with pytest.raises(ExtractionGroundingRejected, match="unobserved") as rejected:
         review_extraction("Aldric walked alone by the river.", extraction, [],
                           complete=lambda *_a, **_k: calls.append(True))
     assert calls == []
+    assert rejected.value.repair_feedback
+    assert "Berenice" not in str(rejected.value) + repr(rejected.value)
+    assert all("Berenice" not in item for item in rejected.value.repair_feedback)
     store = Store(data_dir=str(tmp_path))
     try:
         client = LLMClient(provider="stub", allow_stub=True, env={})
@@ -84,6 +92,64 @@ def test_semantic_rejection_of_roles_negation_and_false_aliases_fails_the_whole_
     assert len(observed) == 1
 
 
+def test_concealment_theme_is_reviewed_as_an_assertion_and_rejection_withholds_clearance():
+    """Live counterexample: a reviewer approved 'hidden' although the source only said 'placed'.
+
+    This pins the evidence/policy and enforcement, not a fake claim that a mock measures live NLI.
+    """
+    text = "Mara placed the brass key inside a red tin beneath the kitchen sink. The door stayed shut."
+    value = {
+        "chapter_summary": "Mara placed a brass key in a red tin.",
+        "entities": [{"canonical_name": "Mara", "type": "character", "aliases": [],
+                      "matched_roster": False, "state": None}],
+        "relationships": [], "events": [],
+        "themes": [{"name": "Secrecy and concealment",
+                    "description": "The brass key is hidden inside a tin beneath the kitchen sink."}],
+    }
+    seen = []
+
+    def reviewer(system, user, **_kwargs):
+        seen.append(json.loads(user.split("(untrusted JSON data):\n", 1)[1]))
+        assert "Inspect theme names and descriptions as assertions" in system
+        assert "does not establish that it was hidden" in system
+        assert "harmless atmosphere" in system
+        return {"references_future": False, "unsupported_claims": [
+            "Placement and a shut door do not establish concealment or secret intent.",
+        ]}, {"in": 10, "out": 5}
+
+    with pytest.raises(ExtractionSafetyError, match="could not be grounded"):
+        review_extraction(text, value, [], complete=reviewer)
+    assert seen[0]["extraction"]["themes"] == value["themes"]
+    assert seen[0]["current_chapter_text"] == text
+
+
+def test_explicit_time_scoped_states_and_direct_consequences_are_valid_review_evidence():
+    text = "Mara placed the key inside the tin. The door stayed shut that evening."
+    value = {
+        "chapter_summary": "Mara placed the key in the tin, and the door stayed shut that evening.",
+        "entities": [
+            {"canonical_name": "tin", "type": "object", "aliases": [],
+             "matched_roster": False, "state": "Contains the key at that point."},
+            {"canonical_name": "door", "type": "object", "aliases": [],
+             "matched_roster": False, "state": "Stayed shut that evening."},
+        ],
+        "relationships": [], "events": [],
+        "themes": [{"name": "keys and containers", "description": "A key is placed in a tin."}],
+    }
+
+    def reviewer(system, user, **_kwargs):
+        payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+        assert payload["current_chapter_text"] == text
+        assert payload["extraction"] == value
+        assert "not claims of timeless persistence" in system
+        assert "do not require evidence of persistence beyond the stated time" in system
+        assert "a reasonable taxonomy or field choice alone are not unsupported facts" in system
+        return _cleared()
+
+    clearance = review_extraction(text, value, [], complete=reviewer)
+    clearance.assert_matches(text, value)
+
+
 def test_supported_paraphrase_pronoun_states_and_whole_extraction_reach_the_reviewer():
     seen = []
 
@@ -91,7 +157,7 @@ def test_supported_paraphrase_pronoun_states_and_whole_extraction_reach_the_revi
         data = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
         seen.append(data)
         assert "pronouns" in system and "negation" in system
-        assert kwargs["tier"] == "cheap"
+        assert kwargs["tier"] == "large"
         assert data["extraction"] == EXTRACTION
         return _cleared()
 
@@ -108,7 +174,7 @@ def test_native_observed_alias_and_prior_roster_coreference_are_allowed():
     }]
     extraction["relationships"] = extraction["events"] = extraction["themes"] = []
     extraction["chapter_summary"] = "Alexey is at the monastery."
-    native = "Алёша был в монастыре."
+    native = "Алексей Карамазов, по прозвищу Алёша, был в монастыре."
     review_extraction(native, extraction, [], complete=_cleared).assert_matches(native, extraction)
 
     roster = [{"entity_id": 7, "canonical_name": "Alexey Karamazov", "type": "character",
@@ -119,6 +185,31 @@ def test_native_observed_alias_and_prior_roster_coreference_are_allowed():
                       complete=_cleared)
 
 
+def test_observed_nickname_does_not_establish_an_unprovided_formal_identity():
+    text = "Alyosha arrived at the monastery."
+    extraction = {
+        "chapter_summary": "Alyosha arrived at the monastery.",
+        "entities": [{"canonical_name": "Alexey Fyodorovitch Karamazov", "type": "character",
+                      "aliases": ["Alyosha"], "matched_roster": False, "state": None}],
+        "relationships": [], "events": [], "themes": [],
+    }
+    # The alias grounds an observed surface, not its proposed full-name equivalence. That requires
+    # semantic/source evidence; a famous-book association alone must never count as that evidence.
+    assert_observed_entity_names(text, extraction, [])
+
+    def reviewer(_system, user, **_kwargs):
+        data = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+        assert data["current_chapter_text"] == text
+        assert data["prior_visible_identities"] == []
+        assert data["extraction"]["entities"][0]["canonical_name"] not in text
+        return {"references_future": False, "unsupported_claims": [
+            "The source does not establish this formal name for Alyosha.",
+        ]}, {"in": 10}
+
+    with pytest.raises(ExtractionSafetyError, match="could not be grounded"):
+        review_extraction(text, extraction, [], complete=reviewer)
+
+
 @pytest.mark.parametrize("verdict", [
     {"references_future": False},
     {"references_future": False, "unsupported_claims": "none"},
@@ -127,6 +218,62 @@ def test_native_observed_alias_and_prior_roster_coreference_are_allowed():
 def test_missing_or_malformed_review_is_not_a_clearance(verdict):
     with pytest.raises(ExtractionSafetyError, match="unavailable or invalid"):
         review_extraction(TEXT, EXTRACTION, [], complete=lambda *_a, **_k: (verdict, {}))
+
+
+def test_extraction_verdict_is_provider_visible_strict_and_keeps_required_two_field_shape():
+    schema = ExtractionVerdict.model_json_schema()
+    assert schema == to_strict_json_schema(ExtractionVerdict)
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == set(schema["required"]) == {
+        "references_future", "unsupported_claims",
+    }
+    description = schema["properties"]["unsupported_claims"]["description"]
+    assert "ONLY actual propositions asserted by the candidate" in description
+    assert "supported-but cautions" in description
+    assert "hypothetical stronger meanings" in description
+    assert "invented reading" in description
+    assert ExtractionVerdict.model_validate({
+        "references_future": False, "unsupported_claims": [],
+    }, strict=True).unsupported_claims == []
+    with pytest.raises(ValidationError):
+        ExtractionVerdict.model_validate({"references_future": False})
+    with pytest.raises(ValidationError):
+        ExtractionVerdict.model_validate({
+            "references_future": False, "unsupported_claims": [], "editorial_notes": [],
+        })
+
+
+def test_grounding_repair_diagnostics_are_private_immutable_and_bounded():
+    diagnostics = [f"private-claim-{index}: " + "x" * 400 for index in range(9)]
+    error = ExtractionGroundingRejected("generic grounding rejection", feedback=diagnostics)
+    assert isinstance(error.repair_feedback, tuple)
+    assert 1 <= len(error.repair_feedback) <= 4
+    assert sum(map(len, error.repair_feedback)) == 1024
+    assert error.args == ("generic grounding rejection",)
+    assert str(error) == "generic grounding rejection"
+    assert repr(error) == "ExtractionGroundingRejected('generic grounding rejection')"
+    assert "private-claim" not in str(error) + repr(error)
+    four = ExtractionGroundingRejected("generic", feedback=[str(index) for index in range(8)])
+    assert four.repair_feedback == ("0", "1", "2", "3")
+
+
+def test_rejecting_verdict_carries_specific_feedback_without_public_claim_leak():
+    secret = "A private invented future event that must not appear in a reader-facing error."
+    schemas = []
+
+    def reviewer(_system, _user, *, tier, schema):
+        schemas.append(schema)
+        assert tier == "large"
+        return {"references_future": True, "unsupported_claims": [secret]}, {"in": 10}
+
+    with pytest.raises(ExtractionGroundingRejected) as rejected:
+        review_extraction(TEXT, EXTRACTION, [], complete=reviewer)
+    error = rejected.value
+    assert schemas == [ExtractionVerdict]
+    assert secret in error.repair_feedback
+    assert "plot development not established" in error.repair_feedback[0]
+    assert secret not in str(error) + repr(error)
+    assert str(error) == "extraction could not be grounded in its chapter"
 
 
 def test_provider_review_failure_is_closed_and_does_not_expose_provider_text():

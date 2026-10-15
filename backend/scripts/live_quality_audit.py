@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import runpy
 import sys
 import tempfile
@@ -86,7 +87,7 @@ def run(settings, report):
             "openai_base_url": "https://api.openai.com/v1",
             "embed_provider": "openai-compatible", "embed_base_url": "https://api.openai.com/v1",
             "embed_api_key": None, "embed_model": "text-embedding-3-small",
-            "cost_max_usd_per_book": 1.0, "frontend_dist_dir": None,
+            "cost_max_usd_per_book": report["per_book_ceiling_usd"], "frontend_dist_dir": None,
             "trusted_hosts": "testserver", "cost_max_output_tokens_per_call": 2048,
         })
         app = create_app(local, ingest_executor=InlineExecutor())
@@ -97,6 +98,21 @@ def run(settings, report):
             provider.max_retries = 0
             provider._oai = provider._oai.with_options(max_retries=0)
             provider._embed_oai = provider._embed_oai.with_options(max_retries=0)
+            complete = provider.complete
+
+            def observed_complete(system, user, tier="cheap", schema=None, max_output_tokens=None):
+                started = time.perf_counter()
+                value, usage = complete(system, user, tier, schema, max_output_tokens)
+                # This harness only imports its own synthetic fixture. Retain structured model
+                # outputs for manual inspection, including the reviewer that rejected ingestion.
+                report.setdefault("model_calls", []).append({
+                    "schema": schema.__name__ if schema else None,
+                    "tier": tier, "seconds": round(time.perf_counter() - started, 3),
+                    "usage": usage, "response": value,
+                })
+                return value, usage
+
+            provider.complete = observed_complete
             imported = client.post("/api/books", files={
                 "file": ("acceptance.epub", fixture(), "application/epub+zip"),
             })
@@ -121,6 +137,7 @@ def run(settings, report):
                 "seconds": round(time.perf_counter() - start, 3),
                 "http_status": position.status_code, "status": ingest.get("status"),
                 "completed_chapters": ingest.get("ingest_progress"),
+                "error": ingest.get("error"),
             }
             if (position.status_code != 200 or ingest.get("status") not in ("done", "idle")
                     or ingest.get("ingest_progress") != 2):
@@ -166,10 +183,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="Allow paid synthetic OpenAI calls")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--budget-usd", type=float, default=1.0,
+                        help="Application reservation ceiling for this sample, at most $1")
     args = parser.parse_args()
+    if not math.isfinite(args.budget_usd) or not 0 < args.budget_usd <= 1:
+        parser.error("--budget-usd must be greater than zero and at most 1")
     settings = Settings()
     report = {
-        "status": "pending", "live_calls_made": False, "per_book_ceiling_usd": 1.0,
+        "status": "pending", "live_calls_made": False, "per_book_ceiling_usd": args.budget_usd,
         "models": {"extraction": settings.llm_cheap_model, "synthesis": settings.llm_large_model},
         "scope": "Synthetic text only. No user book is loaded or sent. Five cases are not a reliability estimate.",
         "cases": [],

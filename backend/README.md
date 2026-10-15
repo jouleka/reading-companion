@@ -47,35 +47,63 @@ verification/backfill is O(N) when a book handle opens.
 It distinguishes the offline demo from a configured provider and a provider that has completed a
 successful request. `/api/health/ready` alone is not evidence of answer correctness.
 
-New local extraction requires a deterministic observed-name check and one budgeted cheap-tier
-semantic review per extracted part. Review sees only that part and the prior visible identity roster;
-unsupported or unavailable review rejects the whole chapter before memory writes. A clearance binds
-the exact source and extraction through preparation and commit. This increases extraction latency
-and cost, and a reviewer can still make mistakes. Existing completion receipts remain unchanged.
+New local extraction requires a deterministic observed-name check and a budgeted large-tier semantic
+review per extracted part. Review sees only that part and the prior visible identity roster. A
+grounding rejection permits one conservative regeneration of the entire chapter with the identical
+source and roster plus capped private diagnostics, followed by the full checks again. Diagnostics
+are untrusted criticism rather than evidence; the new review sees only the new candidate, current
+source, and prior roster. Unavailable/invalid review and budget failures
+do not trigger this repair. A second rejection blocks ingestion before any chapter memory writes.
+Every pass reserves and settles its own calls; rejected-pass spend remains in the cost ledger. This
+bound applies to one extraction operation; a new enqueue can start another operation. A clearance
+binds the exact source and extraction through preparation and commit. Review can still falsely
+approve an invented fact or reject a supported paraphrase. Large-tier review costs more; the same
+per-book reservations and token limits apply. Existing completion receipts remain unchanged.
+
+Prompts and provider-visible schema descriptions favor significant entities and supported latest
+states, put one-off actions in events, and reserve relationships for enduring ties. Review accepts
+direct consequences at the stated time without assuming future persistence; inferred secrecy,
+motives, symbolism, and unprovided duration still require textual support.
 
 The opt-in synthetic OpenAI sample uses normal import, ingestion and Ask routes against disposable
-data. Configure the ignored `.env` with `OPENAI_API_KEY`, `LLM_CHEAP_MODEL=gpt-5.4-mini`, and
+data. Configure the ignored `.env` with `OPENAI_API_KEY`, `LLM_CHEAP_MODEL=gpt-5.4`, and
 `LLM_LARGE_MODEL=gpt-5.4`, then run from `backend`:
 
 ```bash
 # Preflight only: no provider calls.
 uv run python scripts/live_quality_audit.py --output /path/to/acceptance.json
 # Explicitly allow the small paid sample.
-uv run python scripts/live_quality_audit.py --run --output /path/to/acceptance.json
+uv run python scripts/live_quality_audit.py --run --budget-usd 1 --output /path/to/acceptance.json
 ```
 
 The harness fixes the native OpenAI endpoint and `text-embedding-3-small`, disables SDK automatic
 retries, requires exactly priced completion models, and applies a $1 per-book application reservation
-limit. It sends synthetic prose only. The report keeps claims, citations, latency, cost and a small
-memory sample for manual inspection; term checks are triage, not a correctness score. Provider
+limit (lower it with `--budget-usd` when repeating a sample). It sends synthetic prose only. The report
+keeps structured extraction/reviewer outputs, claims, citations, latency, cost and a small memory
+sample for manual inspection, including a rejected ingestion. Term checks are triage, not a
+correctness score. Separate runs have separate books, so callers must track their combined spend. Provider
 billing remains authoritative. The normal application dollar ceiling uses an advisory known-model
 price table; hard token limits still apply when model pricing is unknown.
+
+The local quality profile uses `gpt-5.4` for both roles. In the small audit fixture, the mini extractor
+repeatedly introduced unsupported state and participant details, while review also produced false
+rejections. The full-model run completed ingestion and five Ask cases, but manual inspection still
+found an unsupported location implication in one summary. These are calibration observations, not a
+model accuracy estimate. The harness also permits `gpt-5.4-mini` for explicit comparisons.
 
 Changing a book's extraction or embedding space now fails with `model_migration_required` rather
 than mixing incompatible facts or vectors. Reading and existing memory remain available. Restore
 the original configuration or perform an explicit migration; changing synthesis models alone is
 allowed. Local API requests also enforce browser Origin/Fetch Metadata checks, so development proxies
 must preserve the browser Host as the committed Vite configuration does.
+
+Recaps preflight both synthesis and review input minima before provider work. Cumulative review uses
+the same characters, chapter summaries and first 20 events that cumulative synthesis receives. If
+full-history review cannot fit, a warm request uses cumulative synthesis rather than an unreviewable
+evolve call. Full-memory deterministic checks remain unchanged. Evidence that cannot fit either
+minimum, or an actual recap that pushes review over its limit, remains blocked without truncation or
+a limit increase. An optional now-line is skipped when its full-facts review is already impossible.
+Recap cache keys follow the actual configured synthesis provider/model, not the book's original pin.
 
 ## Hosted PostgreSQL foundation (LIT-38)
 
