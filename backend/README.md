@@ -41,6 +41,155 @@ A missing, partial, or mismatched configured vec0 schema fails startup rather th
 back. Version 0.1.9 scans within its metadata filter; no sublinear-search claim is made. Index
 verification/backfill is O(N) when a book handle opens.
 
+Local schema v7 indexes every normalized source window (1500 characters with 250-character overlap)
+for newly ingested chapters. A chapter title gives embedding context; the cited excerpt remains an
+exact normalized source slice. Existing prefix-only indexes remain readable, with full completed-text
+lexical fallback. To upgrade an old local book's semantic recall, stop the server and run an explicit
+capped embedding-only backfill:
+
+```bash
+uv run python -m app.retrieval_index backfill --data-dir /absolute/path/to/data \
+  --book-id bk0123456789ab --through 96 --max-additional-usd 0.10 --report /path/to/index-report.json
+```
+
+Backfill clamps to the actual completed frontier, checks the pinned embedding space, stages paid
+batches, and publishes a whole chapter atomically. It preserves memory facts, completion receipts,
+reading state, model pins and historical spend. Staged vectors can resume without another provider
+call; a paid batch missing its staged result requires explicit recovery rather than an automatic
+repurchase. Ask does not perform a hidden paid backfill. This index upgrade supports local SQLite;
+it does not migrate the hosted PostgreSQL source model.
+
+Real-provider Ask chooses up to six exact passages from at most 24 verified completed-source
+candidates using one budgeted cheap-role selection call. Independent semantic hits, lexical matches,
+nearby dialogue and named attribution remain separate candidates. The strongest lexical anchors
+retain adjacent prose even without question-word overlap; chapter openings may retain an exact
+immediately preceding chapter tail for narrative continuity. Deterministic context completion
+retains the selected passages and adds existing context within the same six-source cap.
+When selection is valid but empty, the API may recover up to three exact candidate windows covering
+every proper query-name part (at least two); it never treats this coverage as an answer clearance.
+Each real-provider claim receives a budgeted positive-evidence audit of every immutable text segment,
+with its whole meaning visible. The audit must explicitly reference exact numbered spans in the final
+selected sources. Those commitments become the claim's own citations, within its three-source cap;
+its text does not change. Incomplete or invalid audits withhold. A valid unsupported audit permits one
+bounded regeneration using private, capped criticism. The mandatory independent judge then sees
+exactly the resulting own citations, without that criticism or the audit's approval. These are
+fallible semantic judgments; complete reference coverage alone does not establish factual truth.
+The evidence audit sees the untrusted reader question for contextual bindings, never as proof of a
+premise. Sources are displayed in chapter order. Retained chapter-tail/opening location hints help
+both reviewers inspect narrative continuity; the body text still has to establish the asserted link.
+After complete positive evidence coverage, real-provider Ask and closeout defer low word-overlap
+paraphrases to the mandatory fresh semantic judge. For example, "uninjured" can support "not
+destroyed" without sharing a stem. Citation integrity, own-name checks, modal qualifications and
+completed-source/event-binding gates still apply. Stub and unreviewed paths retain lexical checks.
+Name presence and context hints do not establish an alias, speaker, or fact by themselves. Invalid
+selection, missing identity, unsupported facts and unavailable review withhold the answer. Typed
+provider authentication/availability failures stop without purchasing another synthesis attempt.
+Narrow identity, exact-speech and family paraphrases may reach semantic review when lexical wording
+differs. They do not bypass it. A separate necessary check rejects unqualified assertions of a
+predicate found only in modal-perfect form in its own citations, such as changing "must have" into
+a fact; other qualifications and subject bindings still depend on semantic review.
+The offline stub keeps deterministic retrieval and never runs the paid selector.
+
+## Provider status and live acceptance sample
+
+`GET /api/health/ai` describes the local runtime without probing the provider or returning secrets.
+It distinguishes the offline demo from a configured provider and a provider that has completed a
+successful request. `/api/health/ready` alone is not evidence of answer correctness.
+
+New local extraction requires a deterministic observed-name check and a budgeted large-tier semantic
+review per extracted part. Review sees only that part and the prior visible identity roster. Each
+semantic field is split deterministically into exact input segments, including joining words and
+modifiers. The model must return every field and segment ID in order with its source IDs and support
+decision; it cannot choose which text to omit or rewrite. Missing fields or segments, out-of-scope
+evidence IDs, and states justified only by the identity roster fail closed. This checks
+audit integrity, not the truth of the model's entailment decision. A
+grounding rejection permits one conservative regeneration of the entire chapter with the identical
+source and roster plus capped private diagnostics, followed by the full checks again. Diagnostics
+are untrusted criticism rather than evidence; the new review sees only the new candidate, current
+source, and prior roster. Unavailable/invalid review and budget failures
+do not trigger this repair. A second rejection blocks ingestion before any chapter memory writes.
+Every pass reserves and settles its own calls; rejected-pass spend remains in the cost ledger. This
+bound applies to one extraction operation; a new enqueue can start another operation. A clearance
+binds the exact source and extraction through preparation and commit. Review can still falsely
+approve an invented fact or reject a supported paraphrase. Review adds a budgeted model call; the same
+per-book reservations and token limits apply. Existing completion receipts remain unchanged.
+
+Prompts and provider-visible schema descriptions favor significant entities and supported latest
+states, put one-off actions in events, and reserve relationships for enduring ties. Review accepts
+direct consequences at the stated time without assuming future persistence; inferred secrecy,
+motives, symbolism, and unprovided duration still require textual support.
+
+The opt-in synthetic OpenAI sample uses normal import, ingestion and Ask routes against disposable
+data. Configure the ignored `.env` with `OPENAI_API_KEY`, then run from `backend`. Select the
+lightweight model explicitly:
+
+```bash
+# Preflight only: no provider calls.
+uv run python scripts/live_quality_audit.py --output /path/to/acceptance.json
+# Explicitly allow the small paid sample.
+uv run python scripts/live_quality_audit.py --run --model gpt-6-luna --budget-usd 0.25 --output /path/to/acceptance.json
+```
+
+The harness fixes the native OpenAI endpoint and `text-embedding-3-small`, disables SDK automatic
+retries, requires exactly priced completion models, and applies a $1 per-book application reservation
+limit (lower it with `--budget-usd` when repeating a sample). It sends synthetic prose only. The report
+keeps structured extraction/reviewer outputs, claims, citations, latency, cost and a small memory
+sample for manual inspection, including a rejected ingestion. Four direct review challenges exercise
+unsupported location/time/cause attachments and a supported co-location counterpart before the five
+Ask cases. Term checks are triage, not a
+correctness score. Separate runs have separate books, so callers must track their combined spend. Provider
+billing remains authoritative. The normal application dollar ceiling uses an advisory known-model
+price table; hard token limits still apply when model pricing is unknown.
+
+For a lightweight local profile set both `LLM_CHEAP_MODEL=gpt-6-luna` and
+`LLM_LARGE_MODEL=gpt-6-luna` in `.env`. These are role names; setting both uses Luna for extraction,
+memory review, synthesis, and answer review. Every exact native Luna completion uses medium
+reasoning, including source selection, extraction, generation, and reviews. Native `gpt-6.1-sol`
+uses low reasoning. Both use Standard processing and the configured output cap, including reasoning.
+The per-call and per-book budget guarantees remain in force. No model fallback is configured.
+Standard API prices checked on 2026-10-15 are $0.10 input/$0.50 output per million tokens for Luna,
+and $2/$10 for `gpt-6.1-sol`; cache-write, cache-read and long-context rates differ. See
+[the official model documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
+
+Earlier calibration used `gpt-5.4` for both roles. In that small fixture, the mini extractor
+repeatedly introduced unsupported state and participant details, while review also produced false
+rejections. The full-model run completed ingestion and five Ask cases, but manual inspection still
+found an unsupported location implication in one summary. These are calibration observations, not a
+model accuracy estimate. The field-evidence contract above and the direct review challenges were
+added after that run. The harness also permits `gpt-6.1-sol`, `gpt-5.4`, and `gpt-5.4-mini` for explicit
+comparisons.
+
+For an existing book, author gold questions from the exact imported chapter ordinals before looking
+at model responses. A JSON document with `cases` entries containing `id`, `bookmark`, `question`, and
+`expected` (`answer` or `refuse`) can be tested on a disposable SQLite snapshot:
+
+```bash
+uv run python scripts/live_book_audit.py --run --model gpt-6-luna --budget-usd 0.25 \
+  --data-dir /absolute/path/to/data --book-id bk0123456789ab \
+  --cases /path/to/preauthored-cases.json --output /path/to/book-audit.json
+```
+
+This keeps the source book, model pins, completion receipts, reading position and historical ledger
+unchanged. Only the temporary copy receives simulated chapter frontiers and incremental spend.
+`requested_bookmark` can exceed a case's actual `bookmark` to test the server clamp. Gold answers are
+audit-only and never enter the model prompt. Reports retain exact retrieved passages, including on
+refusals, so inspect both source exposure and each claim's own cited evidence manually. Reports can
+contain spoilers up to their labeled chapter limits. This does not rebuild historical extraction.
+
+Changing a book's extraction or embedding space now fails with `model_migration_required` rather
+than mixing incompatible facts or vectors. Reading and existing memory remain available. Restore
+the original configuration or perform an explicit migration; changing synthesis models alone is
+allowed. Local API requests also enforce browser Origin/Fetch Metadata checks, so development proxies
+must preserve the browser Host as the committed Vite configuration does.
+
+Recaps preflight both synthesis and review input minima before provider work. Cumulative review uses
+the same characters, chapter summaries and first 20 events that cumulative synthesis receives. If
+full-history review cannot fit, a warm request uses cumulative synthesis rather than an unreviewable
+evolve call. Full-memory deterministic checks remain unchanged. Evidence that cannot fit either
+minimum, or an actual recap that pushes review over its limit, remains blocked without truncation or
+a limit increase. An optional now-line is skipped when its full-facts review is already impossible.
+Recap cache keys follow the actual configured synthesis provider/model, not the book's original pin.
+
 ## Hosted PostgreSQL foundation (LIT-38)
 
 `app/hosted/schema/` is a separate, dormant hosted migration stream. It does not alter local
@@ -279,8 +428,10 @@ cd backend
 .venv/bin/python -m app.cost reconcile --data-dir /absolute/path/to/data --book-id bk0123456789ab
 ```
 
-Backup refuses a book with outstanding reservations. USD pricing is advisory and currently recognized
-for the configured GPT-4o family; an unknown model is still hard-bounded by input/output tokens. See
+Backup refuses a book with outstanding reservations. Advisory USD pricing recognizes GPT-4o,
+GPT-4o mini, GPT-5.4, GPT-5.4 mini, and the exact `gpt-6-luna` and `gpt-6.1-sol` IDs. GPT-6 reservations include the
+worst-case cache-write premium; settlement uses validated cache read/write usage, and output includes
+reasoning tokens. An unknown model is still hard-bounded by input/output tokens. See
 [`../docs/adr/0010-cost-ceilings-and-huge-chapters.md`](../docs/adr/0010-cost-ceilings-and-huge-chapters.md).
 
 ## Backup, verify, and restore (LIT-24)

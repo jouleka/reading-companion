@@ -1451,6 +1451,69 @@ class PostgresTenantRepository:
             ) if bookmark > 0 else []
         return {"as_of_chapter": bookmark, "items": items}
 
+    @staticmethod
+    async def _carry_later_replacement_dependencies(
+        conn, owner_id, book_id, incarnation, source_id, target_id, bookmark
+    ):
+        """Preserve retained later facts for a one-for-one correction without surfacing them."""
+        scope = (owner_id.value, book_id, incarnation)
+        await conn.execute(
+            """INSERT INTO public.aliases
+                 (owner_id,book_id,book_incarnation,entity_id,source_chapter_id,surface_form,
+                  revealed_at,invalid_at)
+               SELECT owner_id,book_id,book_incarnation,%s,source_chapter_id,surface_form,
+                      revealed_at,invalid_at
+               FROM public.aliases
+               WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s AND entity_id=%s
+                 AND revealed_at>%s AND retracted_at IS NULL""",
+            (target_id, *scope, source_id, bookmark),
+        )
+        await conn.execute(
+            """INSERT INTO public.edges
+                 (owner_id,book_id,book_incarnation,source_chapter_id,src_entity_id,dst_entity_id,
+                  relationship_type,label,revealed_at,invalid_at,schema_version,extractor_version)
+               SELECT owner_id,book_id,book_incarnation,source_chapter_id,
+                      CASE WHEN src_entity_id=%s THEN %s ELSE src_entity_id END,
+                      CASE WHEN dst_entity_id=%s THEN %s ELSE dst_entity_id END,
+                      relationship_type,label,revealed_at,invalid_at,1,'lit59-reader-correction'
+               FROM public.edges
+               WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s
+                 AND (src_entity_id=%s OR dst_entity_id=%s) AND revealed_at>%s
+                 AND retracted_at IS NULL""",
+            (source_id, target_id, source_id, target_id, *scope, source_id, source_id, bookmark),
+        )
+        await conn.execute(
+            """INSERT INTO public.entity_state
+                 (owner_id,book_id,book_incarnation,entity_id,source_chapter_id,status,
+                  revealed_at,invalid_at,schema_version,extractor_version)
+               SELECT owner_id,book_id,book_incarnation,%s,source_chapter_id,status,
+                      revealed_at,invalid_at,1,'lit59-reader-correction'
+               FROM public.entity_state
+               WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s AND entity_id=%s
+                 AND revealed_at>%s AND retracted_at IS NULL""",
+            (target_id, *scope, source_id, bookmark),
+        )
+        await conn.execute(
+            """INSERT INTO public.event_participants
+                 (owner_id,book_id,book_incarnation,event_id,entity_id,source_chapter_id,role,
+                  revealed_at,invalid_at)
+               SELECT participant.owner_id,participant.book_id,participant.book_incarnation,
+                      participant.event_id,%s,participant.source_chapter_id,participant.role,
+                      GREATEST(participant.revealed_at,%s),participant.invalid_at
+               FROM public.event_participants AS participant
+               JOIN public.events AS event
+                 ON (event.owner_id,event.book_id,event.book_incarnation,event.id)
+                  =(participant.owner_id,participant.book_id,participant.book_incarnation,
+                    participant.event_id)
+               WHERE participant.owner_id=%s AND participant.book_id=%s
+                 AND participant.book_incarnation=%s AND participant.entity_id=%s
+                 AND (participant.revealed_at>%s OR event.revealed_at>%s)
+                 AND participant.retracted_at IS NULL AND event.retracted_at IS NULL
+                 AND (participant.invalid_at IS NULL OR participant.invalid_at>%s)
+                 AND (event.invalid_at IS NULL OR event.invalid_at>%s)""",
+            (target_id, bookmark, *scope, source_id, bookmark, bookmark, bookmark, bookmark),
+        )
+
     async def replace_memory_entity(
         self,
         owner_id: OwnerId,
@@ -1524,7 +1587,7 @@ class PostgresTenantRepository:
 
             aliases = await (
                 await conn.execute(
-                    """SELECT surface_form FROM public.aliases
+                    """SELECT surface_form,invalid_at FROM public.aliases
                        WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s AND entity_id=%s
                          AND revealed_at<=%s AND retracted_at IS NULL
                          AND (invalid_at IS NULL OR invalid_at>%s) ORDER BY id""",
@@ -1560,7 +1623,7 @@ class PostgresTenantRepository:
             participants = await (
                 await conn.execute(
                     """
-                    SELECT participant.event_id,participant.role
+                    SELECT participant.event_id,participant.role,participant.invalid_at
                     FROM public.event_participants AS participant
                     JOIN public.events AS event
                       ON (event.owner_id,event.book_id,event.book_incarnation,event.id)
@@ -1580,7 +1643,7 @@ class PostgresTenantRepository:
             state = await (
                 await conn.execute(
                     """
-                    SELECT status FROM public.entity_state
+                    SELECT status,invalid_at FROM public.entity_state
                     WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s AND entity_id=%s
                       AND revealed_at<=%s AND retracted_at IS NULL
                       AND (invalid_at IS NULL OR invalid_at>%s)
@@ -1602,29 +1665,31 @@ class PostgresTenantRepository:
                  source["entity_type"], bookmark),
             )
             seen = {canonical_name.casefold()}
-            for alias in [source["canonical_name"], *(row["surface_form"] for row in aliases)]:
-                if alias.casefold() in seen:
+            alias_rows = [{"surface_form": source["canonical_name"], "invalid_at": None}, *aliases]
+            for alias in alias_rows:
+                if alias["surface_form"].casefold() in seen:
                     continue
-                seen.add(alias.casefold())
+                seen.add(alias["surface_form"].casefold())
                 await conn.execute(
                     """
                     INSERT INTO public.aliases
                       (owner_id,book_id,book_incarnation,entity_id,source_chapter_id,surface_form,
-                       revealed_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                       revealed_at,invalid_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                     """,
-                    (*params, target_id, scope["source_chapter_id"], alias, bookmark),
+                    (*params, target_id, scope["source_chapter_id"], alias["surface_form"],
+                     bookmark, alias["invalid_at"]),
                 )
             if state is not None:
                 await conn.execute(
                     """
                     INSERT INTO public.entity_state
                       (owner_id,book_id,book_incarnation,entity_id,source_chapter_id,status,
-                       revealed_at,schema_version,extractor_version)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,1,'lit59-reader-correction')
+                       revealed_at,invalid_at,schema_version,extractor_version)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,1,'lit59-reader-correction')
                     """,
                     (*params, target_id, scope["source_chapter_id"],
-                     psycopg.types.json.Jsonb(state["status"]), bookmark),
+                     psycopg.types.json.Jsonb(state["status"]), bookmark, state["invalid_at"]),
                 )
             for edge in edges:
                 await conn.execute(
@@ -1645,12 +1710,16 @@ class PostgresTenantRepository:
                     """
                     INSERT INTO public.event_participants
                       (owner_id,book_id,book_incarnation,event_id,entity_id,source_chapter_id,role,
-                       revealed_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                       revealed_at,invalid_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     """,
                     (*params, participant["event_id"], target_id,
-                     scope["source_chapter_id"], participant["role"], bookmark),
+                     scope["source_chapter_id"], participant["role"], bookmark,
+                     participant["invalid_at"]),
                 )
+            await self._carry_later_replacement_dependencies(
+                conn, owner_id, book_id, incarnation, source_entity_id, target_id, bookmark
+            )
             await conn.execute(
                 """UPDATE public.entities SET invalid_at=%s
                    WHERE owner_id=%s AND book_id=%s AND book_incarnation=%s AND id=%s""",

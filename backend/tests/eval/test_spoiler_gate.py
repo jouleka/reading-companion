@@ -789,7 +789,7 @@ def test_replace_state_does_not_churn_earlier_snapshots(gate):
     the NEW chapter's ordinal; entity_state.invalid_at is never surfaced by any view read, so hashing
     the raw future value churned every earlier bookmark's cache key on every ingest (a paid
     re-synthesis per chapter). A future-dated invalid_at on a non-surfaced table must NOT flip an
-    earlier snapshot; edges KEEP the raw value (relationships() returns invalid_at)."""
+    earlier snapshot. Future relationship expiry is also hidden from reader-facing views."""
     store, _, _ = gate
     with store.book(BOOK_ID) as mem:
         aly = next(c["entity_id"] for c in mem.view(1).characters())
@@ -798,12 +798,12 @@ def test_replace_state_does_not_churn_earlier_snapshots(gate):
         mem.replace_state(sid, at=5, status={"note": "advanced later"})   # what ingest of ch5 does
         after = validity_snapshot(mem, 2)
         assert before == after, "a future-dated state supersession must not churn bm=2's cache key"
-        # edges: the raw invalid_at IS view-surfaced -> a future-dated end still flips (kept behavior)
+        # An unseen relationship expiry must neither leak nor repurchase an earlier recap.
         edge = next(r for r in mem._audit_all("edges")
                     if r["revealed_at"] <= 2 and r["invalid_at"] is None and r["retracted_at"] is None)
         b2 = validity_snapshot(mem, 2)
         mem.end_edge(edge["edge_id"], at=50)
-        assert validity_snapshot(mem, 2) != b2, "edges surface invalid_at -> must still flip"
+        assert validity_snapshot(mem, 2) == b2, "future relationship expiry is hidden at bm=2"
 
 
 def test_validity_snapshot_and_cache_key_reject_bool_bookmark(gate):
@@ -861,11 +861,11 @@ def test_reveal_correctness_flags_a_stamp_below_all_prose(tmp_path):
     from app.llm.client import LLMClient
     from app.ingest.extraction.pipeline import all_entities, ingest_chapter, prepare_chapter
     from app.memory.store import Store
-    ex_empty = {"chapter_summary": "s", "entities": [], "relationships": [], "events": [], "themes": []}
-    ex2 = {"chapter_summary": "s", "entities": [
+    ex_empty = {"chapter_summary": "", "entities": [], "relationships": [], "events": [], "themes": []}
+    ex2 = {"chapter_summary": "Hero Prime walked.", "entities": [
         {"canonical_name": "Hero Prime", "type": "character", "aliases": [],
          "matched_roster": False, "state": None}], "relationships": [], "events": [], "themes": []}
-    store, client = Store(data_dir=str(tmp_path)), LLMClient(provider="stub", allow_stub=True)
+    store, client = Store(data_dir=str(tmp_path)), LLMClient(provider="stub", allow_stub=True, env={})
     ch1 = {"ordinal": 1, "key": "g:c1", "title": "C1", "text": ""}
     ch2 = {"ordinal": 2, "key": "g:c2", "title": "C2", "text": "Hero Prime walked."}
     prepared1 = prepare_chapter(ch1, ex_empty, client, roster=[])

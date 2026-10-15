@@ -31,6 +31,25 @@ SAFE_SWAP_MATRIX = {
 }
 
 CANARY_COSINE_MIN = 0.999   # below this, the embedder's space changed -> FORCE_RE_EMBED
+EMBED_CANARY_TEXT = "__lit20_embed_canary__"
+
+
+class ModelMigrationRequired(RuntimeError):
+    """A configured model cannot safely extend or query an existing book's model space."""
+
+    def __init__(self, decisions):
+        self.decisions = tuple(decisions)
+        super().__init__(self.public_detail()["message"])
+
+    def public_detail(self) -> dict[str, str]:
+        return {
+            "code": "model_migration_required",
+            "message": (
+                "This book's AI memory uses different model settings. Restore the previous "
+                "settings or explicitly rebuild its AI memory before continuing. Reading "
+                "and existing memory remain available."
+            ),
+        }
 
 
 def current_identity(client, embed_call=None):
@@ -40,7 +59,7 @@ def current_identity(client, embed_call=None):
     pinned columns, so it slots straight into ``MemoryDB.pin_models(**identity)``."""
     v = client.version            # {provider, cheap, large, embed=full embed identity}
     embed_call = embed_call or client.embed
-    canary = embed_call(["__lit20_embed_canary__"])[0][0]
+    canary = embed_call([EMBED_CANARY_TEXT])[0][0]
     return {"extractor_model": f"{v['provider']}:{v['cheap']}",
             "synth_model": f"{v['provider']}:{v['large']}",
             "embed_model": v["embed"], "embed_dim": len(canary),
@@ -48,12 +67,49 @@ def current_identity(client, embed_call=None):
 
 
 def _cos(a, b):
-    if not a or not b or len(a) != len(b):
+    try:
+        if not a or not b or len(a) != len(b):
+            return 0.0
+        a, b = [float(x) for x in a], [float(x) for x in b]
+        if not all(math.isfinite(x) for x in (*a, *b)):
+            return 0.0
+        na, nb = math.hypot(*a), math.hypot(*b)
+        if not na or not nb or not math.isfinite(na) or not math.isfinite(nb):
+            return 0.0
+        return sum((x / na) * (y / nb) for x, y in zip(a, b))
+    except (TypeError, ValueError, OverflowError):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    return dot / (na * nb) if na and nb else 0.0
+
+
+def _has_pin(pinned):
+    return bool(pinned and any(pinned.get(key) is not None for key in (
+        "extractor_model", "embed_model", "embed_dim", "embed_canary"
+    )))
+
+
+def assert_compatible_config(pinned, client, *, check_extractor=True):
+    """Reject a known configuration change before any paid IO; synthesis may change freely."""
+    if not _has_pin(pinned):
+        return
+    decisions = []
+    if check_extractor and pinned.get("extractor_model") != client.extractor_version("cheap"):
+        decisions.append(("extractor_model", FORCE_RE_EXTRACT))
+    if pinned.get("embed_model") != client.embed_identity():
+        decisions.append(("embed_model", FORCE_RE_EMBED))
+    if decisions:
+        raise ModelMigrationRequired(decisions)
+
+
+def assert_compatible_identity(pinned, current, *, check_extractor=True):
+    """Fence a prepared embedding space at use/commit time, including same-name canary drift."""
+    if not _has_pin(pinned):
+        return
+    decisions = [
+        (component, decision) for component, decision in safe_swap(pinned, current)
+        if decision != OK and (check_extractor or component == "embed_model")
+    ]
+    if decisions:
+        raise ModelMigrationRequired(decisions)
 
 
 def safe_swap(pinned, current):

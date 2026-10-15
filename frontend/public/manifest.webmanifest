@@ -7,8 +7,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f6f1e7",
-  "theme_color": "#7d2a26",
+  "background_color": "#f8f9f7",
+  "theme_color": "#52644b",
   "categories": ["books", "education", "productivity"],
   "icons": [
     {

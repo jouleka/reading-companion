@@ -37,14 +37,20 @@ const ALLOWED = {
 } as const;
 
 export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
-  if (!value || typeof value !== "object") return { ...DEFAULT_READER_PREFERENCES };
+  if (!value || typeof value !== "object")
+    return { ...DEFAULT_READER_PREFERENCES };
   const input = value as Record<string, unknown>;
-  const normalized = { ...DEFAULT_READER_PREFERENCES } as Record<string, unknown>;
+  const normalized = { ...DEFAULT_READER_PREFERENCES } as Record<
+    string,
+    unknown
+  >;
   for (const [key, values] of Object.entries(ALLOWED)) {
-    if (typeof input[key] === "string" && values.has(input[key] as never)) normalized[key] = input[key];
+    if (typeof input[key] === "string" && values.has(input[key] as never))
+      normalized[key] = input[key];
   }
   normalized.preference_version =
-    Number.isSafeInteger(input.preference_version) && Number(input.preference_version) >= 0
+    Number.isSafeInteger(input.preference_version) &&
+    Number(input.preference_version) >= 0
       ? Number(input.preference_version)
       : 0;
   return normalized as ReaderPreferences;
@@ -67,9 +73,24 @@ const TYPEFACE: Record<TypefacePreset, string | null> = {
   sans: 'system-ui, -apple-system, "Segoe UI", sans-serif',
 };
 export const READER_THEME_COLORS = {
-  paper: { background: "#f6f1e7", text: "#211d17", link: "#7d2a26", scheme: "light" },
-  sepia: { background: "#f3e4c4", text: "#34261b", link: "#7a2b22", scheme: "light" },
-  night: { background: "#17191c", text: "#e8e4dc", link: "#efb47a", scheme: "dark" },
+  paper: {
+    background: "#ffffff",
+    text: "#242824",
+    link: "#52644b",
+    scheme: "light",
+  },
+  sepia: {
+    background: "#f3e4c4",
+    text: "#34261b",
+    link: "#7a2b22",
+    scheme: "light",
+  },
+  night: {
+    background: "#1a1e1a",
+    text: "#e7ebe1",
+    link: "#b5c99c",
+    scheme: "dark",
+  },
 } as const;
 
 function themeRules(theme: ReaderTheme): string {
@@ -108,9 +129,15 @@ export function readerLayoutAttributes(
   preferences: ReaderPreferences,
 ): Record<"max-inline-size" | "margin" | "gap", string> {
   return {
-    "max-inline-size": { narrow: "560px", balanced: "720px", wide: "860px" }[preferences.measure],
-    margin: { compact: "24px", balanced: "48px", generous: "72px" }[preferences.margins],
-    gap: { compact: "4%", balanced: "7%", generous: "10%" }[preferences.margins],
+    "max-inline-size": { narrow: "560px", balanced: "720px", wide: "860px" }[
+      preferences.measure
+    ],
+    margin: { compact: "24px", balanced: "48px", generous: "72px" }[
+      preferences.margins
+    ],
+    gap: { compact: "4%", balanced: "7%", generous: "10%" }[
+      preferences.margins
+    ],
   };
 }
 
@@ -118,6 +145,23 @@ export type PreferenceRenderer = {
   setStyles?: (styles: string) => void;
   setAttribute: (name: string, value: string) => void;
 };
+
+/** Foliate owns page motion inside its shadow root, so the shell's CSS cannot disable it. */
+export function bindReaderMotion(
+  renderer: Pick<HTMLElement, "setAttribute" | "removeAttribute">,
+): () => void {
+  const preference =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)")
+      : null;
+  const update = () => {
+    if (preference?.matches) renderer.removeAttribute("animated");
+    else renderer.setAttribute("animated", "");
+  };
+  update();
+  preference?.addEventListener("change", update);
+  return () => preference?.removeEventListener("change", update);
+}
 
 export function applyReaderPreferences(
   renderer: PreferenceRenderer,
@@ -136,13 +180,18 @@ const cacheKey = (bookId: string) => `litlet.reader-preferences:${bookId}`;
 
 export function readCachedReaderPreferences(bookId: string): ReaderPreferences {
   try {
-    return normalizeReaderPreferences(JSON.parse(localStorage.getItem(cacheKey(bookId)) ?? "null"));
+    return normalizeReaderPreferences(
+      JSON.parse(localStorage.getItem(cacheKey(bookId)) ?? "null"),
+    );
   } catch {
     return { ...DEFAULT_READER_PREFERENCES };
   }
 }
 
-export function cacheReaderPreferences(bookId: string, preferences: ReaderPreferences): void {
+export function cacheReaderPreferences(
+  bookId: string,
+  preferences: ReaderPreferences,
+): void {
   try {
     localStorage.setItem(cacheKey(bookId), JSON.stringify(preferences));
   } catch {
@@ -161,7 +210,9 @@ export class ReaderPreferenceSaver {
   constructor(
     private readonly put: (preferences: ReaderPreferences) => Promise<void>,
     private readonly delayMs = 350,
-    private readonly onStatus: (status: PreferenceSaveStatus) => void = () => {},
+    private readonly onStatus: (
+      status: PreferenceSaveStatus,
+    ) => void = () => {},
   ) {}
 
   schedule(preferences: ReaderPreferences): void {

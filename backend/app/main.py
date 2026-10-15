@@ -6,6 +6,7 @@ import logging
 import tempfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from starlette.datastructures import MutableHeaders
@@ -29,6 +30,7 @@ from app.hosted.tenant.repository import PostgresTenantRepository
 from app.lifecycle.archive import DataDirLock
 from app.lifecycle_cache import RecapRegistry
 from app.llm.client import ProviderUnavailable
+from app.llm.versioning import ModelMigrationRequired
 
 _MULTIPART_OVERHEAD_BYTES = 64 * 1024
 _CREDENTIAL_BODY_BYTES = 32 * 1024
@@ -77,6 +79,61 @@ class _SecurityHeaders:
             await send(message)
 
         await self.app(scope, receive, add_headers)
+
+
+class _LocalOriginGuard:
+    """Reject foreign browser API requests before body parsing or cost-bearing GET handlers.
+
+    Local mode is deliberately available to CLI clients without authentication. Host validation
+    alone does not stop a foreign website from submitting a simple form to a loopback service.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    @staticmethod
+    def _origin(value):
+        try:
+            parsed = urlsplit(value)
+            scheme = parsed.scheme.casefold()
+            if (scheme not in {"http", "https"} or not parsed.hostname
+                    or parsed.username is not None or parsed.password is not None
+                    or parsed.path or parsed.query or parsed.fragment):
+                return None
+            port = parsed.port
+            return scheme, parsed.hostname.casefold(), port if port is not None else (443 if scheme == "https" else 80)
+        except (TypeError, ValueError):
+            return None
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not (path == "/api" or path.startswith("/api/")):
+            await self.app(scope, receive, send)
+            return
+        origins = []
+        hosts = []
+        cross_site = False
+        for name, value in scope.get("headers", ()):
+            if name == b"origin":
+                origins.append(value.decode("latin-1"))
+            elif name == b"host":
+                hosts.append(value.decode("latin-1"))
+            elif name == b"sec-fetch-site" and value.strip().lower() == b"cross-site":
+                cross_site = True
+        if origins:
+            request_origin = self._origin(f"{scope.get('scheme', 'http')}://{hosts[0]}") if len(hosts) == 1 else None
+            foreign_origin = (len(origins) != 1 or request_origin is None
+                              or self._origin(origins[0]) != request_origin)
+        else:
+            foreign_origin = False
+        if cross_site or foreign_origin:
+            response = JSONResponse({"detail": {
+                "code": "local_origin_required",
+                "message": "Open the local application to use this API.",
+            }}, status_code=403)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 class _EpubUploadBodyLimit:
@@ -369,6 +426,10 @@ def create_app(
     async def provider_unavailable(_request, exc: ProviderUnavailable):
         return JSONResponse({"detail": exc.public_detail()}, status_code=503)
 
+    @app.exception_handler(ModelMigrationRequired)
+    async def model_migration_required(_request, exc: ModelMigrationRequired):
+        return JSONResponse({"detail": exc.public_detail()}, status_code=409)
+
     if settings.deployment_mode == "hosted":
         # Hosted mode is intentionally partial: LIT-41 opens only the inventoried owner-scoped
         # read/reset routes. Storage, workers, and lifecycle operations remain fail-closed.
@@ -383,6 +444,7 @@ def create_app(
         app.add_middleware(_HostedNoStore)
     else:
         app.add_middleware(_EpubUploadBodyLimit, max_file_bytes=settings.epub_max_upload_bytes)
+        app.add_middleware(_LocalOriginGuard)
         app.include_router(health.router)
         app.include_router(books.router)
         app.include_router(reading.router)

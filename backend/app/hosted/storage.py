@@ -20,6 +20,7 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.hosted.tenant.models import OwnerId
+from app.hosted.filesystem_permissions import secure_directory
 
 EPUB_MEDIA_TYPE = "application/epub+zip"
 _FILESYSTEM_MAGIC = b"LITLET-EPUB-AESGCM-1\n"
@@ -131,12 +132,20 @@ class EncryptedFilesystemStorage:
         self._key = bytes(encryption_key)
         self._max_object_bytes = max_object_bytes
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(self._root, 0o700)
+        try:
+            secure_directory(self._root)
+        except OSError as exc:
+            raise StorageConfigurationError("filesystem object root permissions could not be secured") from exc
 
     def _path(self, ref: SourceObjectRef) -> Path:
         if not isinstance(ref, SourceObjectRef):
             raise TypeError("object reference must be a SourceObjectRef")
         owner_dir = self._root / ref.owner_id.value.hex
+        if owner_dir.exists():
+            try:
+                secure_directory(owner_dir)
+            except OSError as exc:
+                raise ObjectStorageUnavailableError("filesystem object directory permissions failed") from exc
         return owner_dir / f"{ref.object_id.hex}.epub.enc"
 
     def put(
@@ -172,7 +181,10 @@ class EncryptedFilesystemStorage:
 
         target = self._path(ref)
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        os.chmod(target.parent, 0o700)
+        try:
+            secure_directory(target.parent)
+        except OSError as exc:
+            raise ObjectStorageUnavailableError("filesystem object directory permissions failed") from exc
         if target.exists():
             raise ObjectConflictError("source object already exists")
         temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")

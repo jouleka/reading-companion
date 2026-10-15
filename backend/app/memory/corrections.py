@@ -103,7 +103,7 @@ def correction_inventory(db, entity_ids, effective_at):
     )
     states = _rows(
         db,
-        f"SELECT state_id,entity_id,revealed_at,status_json FROM entity_state WHERE book_id=? "
+        f"SELECT state_id,entity_id,revealed_at,invalid_at,status_json FROM entity_state WHERE book_id=? "
         f"AND entity_id IN ({marks}) AND revealed_at<=? AND retracted_at IS NULL "
         "AND (invalid_at IS NULL OR invalid_at>?) "
         "ORDER BY entity_id,revealed_at DESC,state_id DESC",
@@ -233,6 +233,52 @@ def correction_history(db, effective_at):
     ]
 
 
+def _carry_later_replacement_dependencies(db, source, target, effective_at):
+    """Rebind retained later rows for an unambiguous one-for-one name correction.
+
+    Rereads retain completed memory. Copy its later dependencies inside the transaction, retaining
+    their original reveal/validity boundaries; no later content is materialized into reader or model
+    inputs. Split/merge corrections deliberately keep their explicit assignment contract instead.
+    """
+    stamp = _now()
+    version = "lit59-reader-correction"
+    with db._writer():
+        db._conn.execute(
+            "INSERT INTO aliases(entity_id,book_id,surface_form,revealed_at,recorded_at,retracted_at) "
+            "SELECT ?,book_id,surface_form,revealed_at,?,NULL FROM aliases "
+            "WHERE book_id=? AND entity_id=? AND revealed_at>? AND retracted_at IS NULL",
+            (target, stamp, db._book_id, source, effective_at),
+        )
+        db._conn.execute(
+            "INSERT INTO edges(book_id,src_entity,dst_entity,rel_type,label,revealed_at,invalid_at,"
+            "schema_version,extractor_version,recorded_at,retracted_at) "
+            "SELECT book_id,CASE WHEN src_entity=? THEN ? ELSE src_entity END,"
+            "CASE WHEN dst_entity=? THEN ? ELSE dst_entity END,rel_type,label,revealed_at,invalid_at,"
+            "?,?,?,NULL FROM edges WHERE book_id=? AND (src_entity=? OR dst_entity=?) "
+            "AND revealed_at>? AND retracted_at IS NULL",
+            (source, target, source, target, migrations.CURRENT_VERSION, version, stamp,
+             db._book_id, source, source, effective_at),
+        )
+        db._conn.execute(
+            "INSERT INTO entity_state(entity_id,book_id,revealed_at,invalid_at,status_json,"
+            "schema_version,extractor_version,recorded_at,retracted_at) "
+            "SELECT ?,book_id,revealed_at,invalid_at,status_json,?,?,?,NULL FROM entity_state "
+            "WHERE book_id=? AND entity_id=? AND revealed_at>? AND retracted_at IS NULL",
+            (target, migrations.CURRENT_VERSION, version, stamp, db._book_id, source, effective_at),
+        )
+        db._conn.execute(
+            "INSERT INTO event_participants(event_id,entity_id,book_id,role,revealed_at) "
+            "SELECT participant.event_id,?,participant.book_id,participant.role,"
+            "MAX(participant.revealed_at,?) FROM event_participants participant "
+            "JOIN events event ON event.event_id=participant.event_id "
+            "AND event.book_id=participant.book_id "
+            "WHERE participant.book_id=? AND participant.entity_id=? "
+            "AND (participant.revealed_at>? OR event.revealed_at>?) "
+            "AND event.retracted_at IS NULL AND (event.invalid_at IS NULL OR event.invalid_at>?)",
+            (target, effective_at, db._book_id, source, effective_at, effective_at, effective_at),
+        )
+
+
 def replace_entity(db, entity_id, *, effective_at, canonical_name, reason):
     """Correct one identity without rewriting the reader's earlier story-time view.
 
@@ -259,6 +305,7 @@ def replace_entity(db, entity_id, *, effective_at, canonical_name, reason):
                 target,
                 effective_at,
                 json.loads(state["status_json"]),
+                invalid_at=state["invalid_at"],
                 extractor_version="lit59-reader-correction",
             )
         aliases = [source["canonical_name"], *(row["surface_form"] for row in inventory["aliases"])]
@@ -288,6 +335,7 @@ def replace_entity(db, entity_id, *, effective_at, canonical_name, reason):
                 participant["event_id"], target, participant["role"], effective_at
             )
             copied_events.append(participant["event_id"])
+        _carry_later_replacement_dependencies(db, entity_id, target, effective_at)
         correction_id = _record(
             db,
             "replace",

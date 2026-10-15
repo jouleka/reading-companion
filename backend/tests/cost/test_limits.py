@@ -63,6 +63,15 @@ def test_pricing_known_never_presents_an_unknown_model_as_free():
     assert not pricing_known("vendor:future-model")
 
 
+def test_openai_54_prices_distinguish_mini_and_large_for_budget_reservations():
+    from app.cost.limits import usd_of
+
+    usage = {"in": 1_000_000, "out": 1_000_000}
+    assert pricing_known("openai-compatible:gpt-5.4-mini")
+    assert usd_of("gpt-5.4-mini", usage) == pytest.approx(5.25)
+    assert usd_of("gpt-5.4", usage) == pytest.approx(17.50)
+
+
 def test_budgeted_completion_settles_actual_usage(tmp_path):
     catalog, client = _catalog(tmp_path), FakeClient()
     result = budgeted_completion(
@@ -108,7 +117,7 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
         EXTRACT_SYSTEM, extract_user_prompt("Huge", roster, ""), Extraction
     )
     settings = _settings(
-        cost_max_input_tokens_per_call=overhead + 300,
+        cost_max_input_tokens_per_call=overhead + 8000,
         cost_max_input_tokens_per_book=100_000,
         cost_max_output_tokens_per_book=100_000,
     )
@@ -117,20 +126,28 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
     prompts = []
 
     def capture(system, user, tier="cheap", schema=None):
-        prompts.append(user)
+        prompts.append((schema, user))
         return original(system, user, tier=tier, schema=schema)
 
     client.complete = capture
-    text = ("Aldric crossed the long valley and met Berenice.\n\n" * 50)
-    extraction, usage, _usd, reservations = worker._complete_extraction(
+    text = ("Aldric crossed the long valley and met Berenice.\n\n" * 200)
+    extraction, usage, _usd, reservations, clearance = worker._complete_extraction(
         "b", 1, "Huge", roster, text
     )
     sent = [prompt.split("CHAPTER TEXT:\n", 1)[1].split("\n\nExtract entities", 1)[0]
-            for prompt in prompts]
+            for schema, prompt in prompts if schema is Extraction]
     assert len(sent) > 1 and "".join(sent) == text
     assert extraction["chapter_summary"] and usage["in"] > 0
-    assert len(reservations) == len(sent)
-    assert len(catalog.get_costs("b")) == 0                 # successful parts await the LIT-7 receipt
+    assert len(reservations) == len(sent)               # only extraction awaits the LIT-7 receipt
+    clearance.assert_matches(text, extraction)
+    reviewed_sources = ["".join(passage["text"] for passage in json.loads(
+        prompt.split("(untrusted JSON data):\n", 1)[1])["source_passages"])
+        for schema, prompt in prompts if schema is not Extraction]
+    assert reviewed_sources == sent
+    reviews = catalog.get_costs("b")
+    assert len(reviews) == len(sent)
+    assert all(row["phase"] == "extraction-review" for row in reviews)
+    assert all(row["model"] == client._model_for("large") for row in reviews)
     for reservation_id in reservations:
         catalog.settle_cost("b", reservation_id, phase="test-cleanup")
 

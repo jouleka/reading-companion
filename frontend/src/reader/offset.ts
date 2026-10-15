@@ -18,7 +18,10 @@ import type { Atom } from "../api";
  * the atom's once), and an anchor-mode file sharing a basename with a front-matter decoy (the
  * multi-claimant rule cancels both). */
 export function normalizeHref(href: string): string {
-  const clean = href.split("#")[0].split("?")[0].replace(/^\.?\//, "");
+  const clean = href
+    .split("#")[0]
+    .split("?")[0]
+    .replace(/^\.?\//, "");
   try {
     return decodeURI(clean);
   } catch {
@@ -33,7 +36,10 @@ export function normalizeHref(href: string): string {
  *   2. a section may suffix-claim only when all its candidate atoms are one file (anchor-mode
  *      collapses to the FIRST atom of the file = under-report, the documented ADR 0008 residual);
  *   3. two sections suffix-claiming the same atom cancel each other (can't tell which is real). */
-export function buildSectionAtomMap(atoms: Atom[], sectionHrefs: string[]): number[] {
+export function buildSectionAtomMap(
+  atoms: Atom[],
+  sectionHrefs: string[],
+): number[] {
   const atomHrefs = atoms.map((a) => normalizeHref(a.href));
   const secHrefs = sectionHrefs.map(normalizeHref);
 
@@ -45,7 +51,8 @@ export function buildSectionAtomMap(atoms: Atom[], sectionHrefs: string[]): numb
     if (result[si] >= 0 || !s) return;
     const candidates: number[] = [];
     atomHrefs.forEach((a, ai) => {
-      if (a && (a.endsWith("/" + s) || s.endsWith("/" + a))) candidates.push(ai);
+      if (a && (a.endsWith("/" + s) || s.endsWith("/" + a)))
+        candidates.push(ai);
     });
     if (candidates.length === 0) return;
     const files = new Set(candidates.map((ai) => atomHrefs[ai]));
@@ -64,7 +71,12 @@ export function buildSectionAtomMap(atoms: Atom[], sectionHrefs: string[]): numb
 /** The conservative offset for a relocation inside atom `i`. Degenerate layout states (page/pages
  * 0, NaN, Infinity — observed live pre-layout) degrade to the atom START: the reader IS in this
  * atom, so its start has certainly been reached, and nothing further is claimed. */
-export function offsetForAtom(atoms: Atom[], i: number, page: number, pages: number): number | null {
+export function offsetForAtom(
+  atoms: Atom[],
+  i: number,
+  page: number,
+  pages: number,
+): number | null {
   if (i < 0 || i >= atoms.length) return null;
   let before = 0;
   for (let k = 0; k < i; k++) before += atoms[k].char_len;
@@ -75,4 +87,42 @@ export function offsetForAtom(atoms: Atom[], i: number, page: number, pages: num
   }
   const offset = Math.floor(before + fraction * atoms[i].char_len);
   return Number.isFinite(offset) ? offset : null;
+}
+
+/** Offer an explicit final-page affirmation only where the file-to-chapter mapping is unambiguous.
+ * Foliate's paginated section geometry includes two padding pages. Landing on the final content
+ * spread is evidence to OFFER the action, never evidence that its still-visible text has been read.
+ * Anchor-driven files may contain multiple atoms, so they remain conservative until range mapping
+ * exists. The caller must also validate/admit the relocation and retain its CFI and reading epoch. */
+export function finalPageOffset(
+  atoms: Atom[],
+  mode: string,
+  atom: number,
+  page: number,
+  pages: number,
+): number | null {
+  if (mode !== "file-driven" || atom !== atoms.length - 1 || atom < 0)
+    return null;
+  const href = normalizeHref(atoms[atom].href);
+  if (
+    !href ||
+    atoms.filter((item) => normalizeHref(item.href) === href).length !== 1
+  )
+    return null;
+  if (
+    !Number.isSafeInteger(page) ||
+    !Number.isSafeInteger(pages) ||
+    pages < 3 ||
+    page < pages - 2 ||
+    page > pages - 1
+  )
+    return null;
+  if (
+    atoms.some(
+      (item) => !Number.isSafeInteger(item.char_len) || item.char_len <= 0,
+    )
+  )
+    return null;
+  const total = atoms.reduce((sum, item) => sum + item.char_len, 0);
+  return Number.isSafeInteger(total) ? total : null;
 }

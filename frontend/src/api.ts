@@ -2,16 +2,28 @@
  * it reports (cfi, offset) and renders whatever the clamped server routes return. */
 
 import {
+  acknowledgePosition,
+  activeOfflineOwner,
   applyPendingMarks,
+  discardPositionBeforeEpoch,
   pendingPosition,
+  positionRequestBody,
   purgeOfflineTenant,
   queueMarkCreate,
   queueMarkDelete,
   queueMarkUpdate,
   queuePosition,
+  trackPositionDelivery,
 } from "./pwa/offline";
 
 export type Book = { book_id: string; title: string; author: string | null };
+export type AiRuntime = {
+  mode: "demo" | "live";
+  provider: string;
+  models: { extraction: string; synthesis: string };
+  completion_status: "ready" | "unchecked" | "degraded";
+  embedding_mode: "demo" | "live";
+};
 export type BookType = "novel" | "anthology" | "drama" | "poetry" | "nonfiction" | "reference" | "unknown";
 export type BookProfile = {
   book_type: BookType;
@@ -227,6 +239,8 @@ function optimisticBase(anchor: ReaderMarkAnchor) {
 }
 
 export const api = {
+  aiRuntime: (signal?: AbortSignal) =>
+    fetch("/api/health/ai", { signal, cache: "no-store" }).then((r) => j<AiRuntime>(r)),
   books: () => fetch("/api/books").then((r) => j<Book[]>(r)),
   importBook: (file: File) => {
     const fd = new FormData();
@@ -250,7 +264,7 @@ export const api = {
       bookmark: Math.max(value.bookmark, completed),
       completed_chapter: Math.max(value.completed_chapter ?? value.bookmark, completed),
       current_offset: offset,
-      high_water_offset: Math.max(value.high_water_offset ?? 0, offset),
+      high_water_offset: Math.max(value.high_water_offset ?? 0, offset, Number(queued.high_water_offset ?? 0)),
       cfi: typeof queued.cfi === "string" ? queued.cfi : value.cfi,
       queued: true,
     };
@@ -360,6 +374,7 @@ export const api = {
     clientId: string,
     clientSequence: number,
   ) => {
+    const owner = activeOfflineOwner();
     const url = `/api/books/${id}/position`;
     const body = {
       cfi,
@@ -371,22 +386,38 @@ export const api = {
       client_sequence: clientSequence,
     };
     // keepalive: the flush-on-pagehide report must survive the page teardown
-    return fetch(url, {
-      method: "PUT",
-      headers: { "content-type": "application/json", ...csrfHeaders() },
-      body: JSON.stringify(body),
-      keepalive: true,
-    }).then((r) => j<PutPosition>(r)).catch((error) => {
-      if (!offlineFailure(error)) throw error;
-      return queuePosition(id, url, body) as PutPosition;
+    let requestBody: Record<string, unknown> = body;
+    return trackPositionDelivery(id, owner, () => {
+      if (activeOfflineOwner() !== owner)
+        return Promise.reject(new ApiError("the reader session changed before the position could be saved", 409));
+      requestBody = positionRequestBody(id, owner, body);
+      return fetch(url, {
+        method: "PUT",
+        headers: { "content-type": "application/json", ...csrfHeaders() },
+        body: JSON.stringify(requestBody),
+        keepalive: true,
+      }).then((r) => j<PutPosition>(r)).then((saved) => {
+        acknowledgePosition(id, requestBody, saved, owner);
+        return saved;
+      }).catch((error) => {
+        if (!offlineFailure(error)) throw error;
+        if (activeOfflineOwner() !== owner)
+          throw new ApiError("the reader session changed before the position could be saved", 409);
+        return queuePosition(id, url, requestBody) as PutPosition;
+      });
     });
   },
-  resetPosition: (id: string, positionEpoch: number) =>
-    fetch(`/api/books/${id}/position/reset`, {
+  resetPosition: (id: string, positionEpoch: number) => {
+    const owner = activeOfflineOwner();
+    return fetch(`/api/books/${id}/position/reset`, {
       method: "POST",
       headers: { "content-type": "application/json", ...csrfHeaders() },
       body: JSON.stringify({ position_epoch: positionEpoch }),
-    }).then((r) => j<Position>(r)),
+    }).then((r) => j<Position>(r)).then((saved) => {
+      discardPositionBeforeEpoch(id, saved.position_epoch, owner);
+      return saved;
+    });
+  },
   // bookmark is optional: omitted = the current frontier; set = the scrubber's past point (LIT-15).
   // Either way the server CLAMPS to the high-water — the client never widens its own frontier.
   catchMeUp: (id: string, bookmark?: number) =>

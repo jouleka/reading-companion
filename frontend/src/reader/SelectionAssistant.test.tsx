@@ -14,7 +14,13 @@ const cost = {
   input_tokens: 30,
   output_tokens: 10,
   pricing_known: true,
-  calls: [{ provider: "openai-compatible", model: "gpt-4o-mini", usd: "0.0000100000" }],
+  calls: [
+    {
+      provider: "openai-compatible",
+      model: "gpt-4o-mini",
+      usd: "0.0000100000",
+    },
+  ],
   payer: "your configured provider account",
 };
 const selection = {
@@ -22,7 +28,9 @@ const selection = {
   text: "The lantern guttered in the rain.",
 };
 
-beforeEach(() => { mocks.selectionAction.mockReset(); });
+beforeEach(() => {
+  mocks.selectionAction.mockReset();
+});
 
 describe("SelectionAssistant", () => {
   test("explains only the selection, returns to its exact anchor, exposes cost, and passes axe", async () => {
@@ -32,8 +40,13 @@ describe("SelectionAssistant", () => {
       insufficient_evidence: false,
       text: "The flame became weak and unsteady because of the rain.",
       citation: {
-        id: 1, ordinal: 2, chapter_key: "2", href: "two.xhtml", title: "Chapter II",
-        excerpt: selection.text, cfi: selection.anchor.cfi,
+        id: 1,
+        ordinal: 2,
+        chapter_key: "2",
+        href: "two.xhtml",
+        title: "Chapter II",
+        excerpt: selection.text,
+        cfi: selection.anchor.cfi,
       },
       cost,
     });
@@ -51,10 +64,15 @@ describe("SelectionAssistant", () => {
     );
     expect(await screen.findByText(/flame became weak/i)).toBeTruthy();
     expect(screen.getByText(/Provider cost: \$0\.000010 USD/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /return to chapter ii/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /return to chapter ii/i }),
+    );
     expect(onNavigate).toHaveBeenCalledWith(selection.anchor.cfi);
     expect(mocks.selectionAction).toHaveBeenCalledWith("b", {
-      action: "explain", text: selection.text, atom: 2, cfi: selection.anchor.cfi,
+      action: "explain",
+      text: selection.text,
+      atom: 2,
+      cfi: selection.anchor.cfi,
     });
     expect(mocks.selectionAction).toHaveBeenCalledTimes(1);
     expect(await axeAA(container)).toHaveNoViolations();
@@ -62,8 +80,12 @@ describe("SelectionAssistant", () => {
 
   test("dismisses with Escape and restores focus to the action button", async () => {
     mocks.selectionAction.mockResolvedValue({
-      action: "define", as_of_chapter: 1, insufficient_evidence: true,
-      text: null, citation: null, cost,
+      action: "define",
+      as_of_chapter: 1,
+      insufficient_evidence: true,
+      text: null,
+      citation: null,
+      cost,
     });
     const opener = document.createElement("button");
     document.body.append(opener);
@@ -71,7 +93,11 @@ describe("SelectionAssistant", () => {
     const onClose = vi.fn();
     const { unmount } = render(
       <SelectionAssistant
-        bookId="b" action="define" selection={selection} onNavigate={() => {}} onClose={onClose}
+        bookId="b"
+        action="define"
+        selection={selection}
+        onNavigate={() => {}}
+        onClose={onClose}
       />,
     );
     fireEvent.keyDown(document, { key: "Escape" });
@@ -79,5 +105,37 @@ describe("SelectionAssistant", () => {
     unmount();
     await waitFor(() => expect(opener).toBe(document.activeElement));
     opener.remove();
+  });
+
+  test("retries passage help in place and announces the response", async () => {
+    mocks.selectionAction
+      .mockRejectedValueOnce(new Error("Provider is offline."))
+      .mockResolvedValue({
+        action: "explain",
+        as_of_chapter: 1,
+        insufficient_evidence: false,
+        text: "The flame was weak and unsteady.",
+        citation: null,
+        cost,
+      });
+    render(
+      <SelectionAssistant
+        bookId="b"
+        action="explain"
+        selection={selection}
+        onNavigate={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Try passage help again" }),
+    );
+    expect(
+      await screen.findByText("The flame was weak and unsteady."),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Your passage help is ready.",
+    );
+    expect(mocks.selectionAction).toHaveBeenCalledTimes(2);
   });
 });

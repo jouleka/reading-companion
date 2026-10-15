@@ -19,7 +19,18 @@ from app.ingest.extraction import resolve as R
 from app.ingest.extraction.chapter_text import content_hash_of
 from app.ingest.extraction.resolve import _norm
 from app.ingest.extraction.schema import Extraction
+from app.ingest.extraction.validation import (
+    ExtractionClearance,
+    ExtractionSafetyError,
+    assert_observed_entity_names,
+    review_extraction,
+)
 from app.llm import versioning
+from app.retrieval_passages import prepare_passages, source_digest
+
+
+class StalePreparedRoster(RuntimeError):
+    """An identity correction changed resolution inputs while provider work was outside the lock."""
 
 
 def all_entities(view):
@@ -35,12 +46,13 @@ def all_entities(view):
 
 
 def _ensure_pinned(mem, identity):
-    """Pin the extractor/embedding identity ONCE per book, BEFORE any chunk (Inv 6). Idempotent: if the
-    book already carries an embed pin, skip (avoids a redundant canary embed call per chapter)."""
-    if (mem.pinned_identity() or {}).get("embed_model"):
-        return
+    """Pin once before any chunk; every later commit must match that prepared model space."""
+    pinned = mem.pinned_identity()
     if identity is None:
         raise RuntimeError("model identity must be prepared before the chapter transaction")
+    versioning.assert_compatible_identity(pinned, identity)
+    if (pinned or {}).get("embed_model"):
+        return
     mem.pin_models(**identity)
 
 
@@ -52,7 +64,8 @@ def _changed_content_error(key):
 
 
 def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embed_fn=None,
-                    resolve_embed=None, identity=None, threshold=0.82, embed_chars=2000):
+                    resolve_embed=None, identity=None, threshold=0.82, embedding_input_limit=60_000,
+                    clearance=None):
     """Validate and prepare every model-derived value without accepting a ``MemoryDB`` handle.
 
     Callers run this outside ``Store.book()``. The returned object contains only values consumed by the
@@ -60,6 +73,16 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
     """
     extraction = Extraction.model_validate(extraction).model_dump(mode="json")
     text = ch.get("text", "") or ""
+    assert_observed_entity_names(text, extraction, roster)
+    if clearance is None:
+        if getattr(client, "provider", None) != "stub":
+            raise ExtractionSafetyError("extraction requires a chapter-grounding review")
+        # Direct offline fixture preparation has no provider IO or paid budget. It still runs the
+        # deterministic guard; the stub verdict is a mock, never evidence of semantic correctness.
+        clearance = review_extraction(text, extraction, roster, complete=client.complete)
+    if not isinstance(clearance, ExtractionClearance):
+        raise ExtractionSafetyError("extraction requires a valid chapter-grounding clearance")
+    clearance.assert_matches(text, extraction)
     actual_content_hash = content_hash_of(text)
     if ch.get("content_hash") not in (None, actual_content_hash):
         raise ValueError("chapter content_hash does not match its text")
@@ -75,7 +98,8 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
                            "input_tokens": usage.get("in", 0), "output_tokens": usage.get("out", 0),
                            "usd": usd}
     chunk_embed = embed_fn or (lambda texts: client.embed(texts)[0])
-    chunk_vec = chunk_embed([text[:embed_chars]])[0] if text else None
+    passages = prepare_passages(ch.get("title", ""), text, chunk_embed,
+                                input_limit=embedding_input_limit)
     decisions = R.resolve_chapter(extraction["entities"], roster, resolve_embed, threshold)
     return {
         "chapter_key": ch["key"],
@@ -86,12 +110,14 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
         "extractor_version": extractor_version,
         "roster": roster,
         "decisions": decisions,
-        "chunk_vec": chunk_vec,
+        "passages": passages,
+        "source_hash": source_digest(ch.get("title", ""), text),
         "completion_cost": completion_cost,
+        "clearance": clearance,
     }
 
 
-def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
+def ingest_chapter(mem, ch, prepared):
     """Commit one prepared chapter atomically using database operations only.
 
     Every memory row, including the completion/cost receipt marker, commits in one SQLite transaction.
@@ -107,11 +133,17 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
             f"prepared chapter mismatch: prepared {prepared['chapter_key']!r}@{prepared['ordinal']}/"
             f"{prepared['content_hash']}, commit requested {key!r}@{ordinal}/{content_hash}"
         )
+    clearance = prepared.get("clearance")
+    if not isinstance(clearance, ExtractionClearance):
+        raise ExtractionSafetyError("extraction requires a valid chapter-grounding clearance")
+    clearance.assert_matches(text, prepared["extraction"])
     receipt = mem.chapter_completion(key, ordinal, content_hash)
     if receipt is not None:
         return {"skipped": True, "key": key, "ordinal": ordinal}
     if mem.chapter_live(key):
         raise _changed_content_error(key)
+    if all_entities(mem.view(max(ordinal - 1, 0))) != prepared["roster"]:
+        raise StalePreparedRoster("identity roster changed; prepare the extraction again before commit")
     with mem.transaction():
         result = _write_chapter(
             mem,
@@ -121,9 +153,9 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
             extractor_version=prepared["extractor_version"],
             roster=prepared["roster"],
             decisions=prepared["decisions"],
-            chunk_vec=prepared["chunk_vec"],
+            passages=prepared["passages"],
+            source_hash=prepared["source_hash"],
             completion_cost=prepared["completion_cost"],
-            chunk_chars=chunk_chars,
         )
     if mem.chapter_completion(key, ordinal, content_hash) is None:
         raise RuntimeError(f"chapter {key!r} committed without its LIT-7 completion marker")
@@ -131,7 +163,7 @@ def ingest_chapter(mem, ch, prepared, *, chunk_chars=500):
 
 
 def _write_chapter(mem, ch, extraction, *, identity, extractor_version, roster, decisions,
-                   chunk_vec, completion_cost, chunk_chars=500):
+                   passages, source_hash, completion_cost):
     """Ingest ONE chapter's validated extraction into ``mem`` (a sole-owned MemoryDB, accessed under the
     Store's per-book lock and ``mem.transaction()``). ``extraction`` has already passed the schema.
 
@@ -234,8 +266,8 @@ def _write_chapter(mem, ch, extraction, *, identity, extractor_version, roster, 
     for th in extraction["themes"]:
         mem.add_theme(th["name"], th.get("description") or "", ordinal, extractor_version=xv)
 
-    if text:                                               # RAG chunk (pinned-space vector)
-        mem.add_chunk(key, ordinal, text[:chunk_chars], chunk_vec)
+    mem.publish_source_index(key, ordinal, source_hash, passages, identity,
+                             require_completion=False)
 
     mem.mark_chapter_ingested(key, content_hash, cost=completion_cost)  # LAST: durable done/receipt
 

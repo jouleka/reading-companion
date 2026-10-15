@@ -82,6 +82,28 @@ def test_gold_object_validates_and_round_trips_to_the_same_dict():
     assert dumped == obj                                     # no transformation, no added/dropped keys
 
 
+def test_generation_field_guidance_is_provider_visible_without_new_keys_or_defaults():
+    schema = Extraction.model_json_schema()
+    assert to_strict_json_schema(Extraction) == schema
+    assert set(schema["required"]) == {
+        "chapter_summary", "entities", "relationships", "events", "themes",
+    }
+    entity = schema["$defs"]["Entity"]
+    assert "snapshot" in entity["properties"]["state"]["description"]
+    assert "Direct results" in entity["properties"]["state"]["description"]
+    assert "No timeless persistence" in entity["properties"]["state"]["description"]
+    assert "not every scenery noun" in schema["properties"]["entities"]["description"]
+    assert "empty array" in schema["properties"]["relationships"]["description"]
+    empty = {"chapter_summary": "No relevant actions are established.", "entities": [],
+             "relationships": [], "events": [], "themes": []}
+    assert Extraction.model_validate(empty).model_dump(mode="json") == empty
+    nullable = {"canonical_name": "Mara", "type": "character", "aliases": [],
+                "matched_roster": False, "state": None}
+    assert Entity.model_validate(nullable).state is None
+    with pytest.raises(Exception):
+        Entity.model_validate({key: value for key, value in nullable.items() if key != "state"})
+
+
 @pytest.mark.parametrize("obj", _ADVERSARIAL)
 def test_adversarial_objects_are_rejected_by_both_validators(obj):
     """Parity: every adversarial object the spike validator rejects, the Pydantic model also rejects."""

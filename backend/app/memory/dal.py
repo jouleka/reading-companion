@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from app.book_types import BOOK_PROFILE_SIGNALS, BOOK_TYPES
 from app.language import normalize_content_language
 
-from . import corrections, migrations, vectors
+from . import corrections, migrations, source_index, vectors
 
 SCHEMA_VERSION = migrations.CURRENT_VERSION
 
@@ -33,7 +33,8 @@ SCHEMA_VERSION = migrations.CURRENT_VERSION
 FACT_TABLES = {
     "book_meta", "chapters", "ingested_chapters", "raw_chapters", "chapter_summaries", "entities",
     "aliases", "edges", "events", "event_participants", "themes", "entity_state",
-    "chunks", "entity_corrections", vectors.VEC0_TABLE,
+    "chunks", "entity_corrections", "retrieval_index_chapters", "retrieval_index_batches",
+    vectors.VEC0_TABLE,
 }
 # Tables whose facts can be superseded IN STORY TIME -> carry invalid_at.
 VALID_TIME_TABLES = {"entities", "edges", "events", "themes", "entity_state"}
@@ -245,6 +246,11 @@ class MemoryDB:
                         "index_schema_version", "dimensions"}
             if "vector_index_meta" not in tables or not required <= self._columns("vector_index_meta"):
                 raise RuntimeError("schema v6 is missing vector_index_meta")
+        if migrations.CURRENT_VERSION >= 7:
+            if not {"source_version", "source_hash", "source_start", "source_end"} <= self._columns("chunks"):
+                raise RuntimeError("schema v7 is missing source chunk provenance")
+            if not {"retrieval_index_chapters", "retrieval_index_batches"} <= tables:
+                raise RuntimeError("schema v7 is missing the guarded source index state")
         vec_objects = tables.intersection({vectors.VEC0_TABLE, *vectors.VEC0_SHADOW_TABLES})
         if vec_objects and vec_objects != {vectors.VEC0_TABLE, *vectors.VEC0_SHADOW_TABLES}:
             raise RuntimeError("partial vec0 schema detected; refusing to open")
@@ -701,7 +707,8 @@ class MemoryDB:
                  SCHEMA_VERSION, extractor_version, _now(), None))
             return cur.lastrowid
 
-    def add_chunk(self, chapter_key, revealed_at, text, vec, embed_model=None, embed_dim=None):
+    def add_chunk(self, chapter_key, revealed_at, text, vec, embed_model=None, embed_dim=None,
+                  *, source_version=None, source_hash=None, source_start=None, source_end=None):
         # LIT-20: stamp embedding identity; if PINNED, the pin is authoritative (reject a mismatch).
         pin = self.pinned_identity()
         if pin and pin.get("embed_model"):
@@ -718,16 +725,18 @@ class MemoryDB:
             if embed_dim != len(normalized):
                 raise ValueError("chunk embed_dim does not match its vector length")
         with self._writer():
-            if self._vector_backend == "vec0":
+            if (self._vector_backend == "vec0"
+                    and getattr(self, "_source_index_append_dimension", None) != len(vec)):
                 self._ensure_vec0_index_locked(dimension_hint=len(vec))
             chapter = self._conn.execute(
                 "SELECT revealed_at,retracted_at FROM chapters WHERE chapter_key=? AND book_id=?",
                 (chapter_key, self._book_id)).fetchone()
             cur = self._conn.execute(
                 "INSERT INTO chunks(book_id,chapter_key,revealed_at,text,vec,embed_model,embed_dim,"
-                "retracted_at) VALUES (?,?,?,?,?,?,?,?)",
+                "retracted_at,source_version,source_hash,source_start,source_end) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (self._book_id, chapter_key, revealed_at, text, json.dumps(vec), embed_model,
-                 embed_dim, None))
+                 embed_dim, None, source_version, source_hash, source_start, source_end))
             if self._vector_backend == "vec0" and chapter:
                 self._vec0_insert({
                     "chunk_id": cur.lastrowid, "chapter_key": chapter_key,
@@ -738,6 +747,18 @@ class MemoryDB:
                     "chapter_retracted": int(chapter["retracted_at"] is not None),
                 })
             return cur.lastrowid
+
+    def source_index_snapshot(self, chapter_key, ordinal):
+        return source_index.snapshot(self, chapter_key, ordinal)
+
+    def stage_source_index_batch(self, chapter_key, ordinal, source_hash, batch_id, passages, identity):
+        return source_index.stage_batch(self, chapter_key, ordinal, source_hash, batch_id,
+                                        passages, identity)
+
+    def publish_source_index(self, chapter_key, ordinal, source_hash, passages, identity,
+                             *, require_completion=True):
+        return source_index.publish(self, chapter_key, ordinal, source_hash, passages, identity,
+                                    require_completion=require_completion)
 
     # ---- LIT-20: per-book model pinning + safe-swap ------------------------
     def pin_models(self, extractor_model=None, synth_model=None, embed_model=None, embed_dim=None,
@@ -913,7 +934,8 @@ class MemoryDB:
                     "UPDATE chunks_vec SET retracted=1,chapter_retracted=1 WHERE chapter_key=?",
                     (chapter_key,))
             stamp = _now()
-            for table in ("chapters", "raw_chapters", "chapter_summaries", "chunks"):
+            for table in ("chapters", "raw_chapters", "chapter_summaries", "chunks",
+                          "retrieval_index_chapters", "retrieval_index_batches"):
                 self._conn.execute(
                     f"UPDATE {table} SET retracted_at=? WHERE retracted_at IS NULL "
                     "AND book_id=? AND chapter_key=?", (stamp, self._book_id, chapter_key))
@@ -1017,8 +1039,10 @@ class BookmarkView:
 
     def relationships(self):
         sub, sp = self._vis_entities()
+        # Every visible edge is still valid at this bookmark. Its stored expiry is future
+        # knowledge; exposing that ordinal would disclose when the relationship changes.
         return self._sel("edges", "edge_id, src_entity, dst_entity, rel_type, label, "
-                         "revealed_at, invalid_at",
+                         "revealed_at, NULL AS invalid_at",
                          where=f"src_entity IN ({sub}) AND dst_entity IN ({sub})",
                          params=[*sp, *sp], order="revealed_at, edge_id")
 

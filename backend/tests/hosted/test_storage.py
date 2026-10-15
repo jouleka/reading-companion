@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import os
 import uuid
 
 import boto3
@@ -27,6 +28,20 @@ from app.hosted.storage import (
 )
 from app.config import Settings
 from app.hosted.tenant.models import OwnerId
+
+
+def _assert_private_file_permissions(path):
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o077 == 0
+        return
+    # Windows stat mode bits cannot represent its DACL. Read the applied native file ACL instead.
+    from app.hosted.filesystem_permissions import _windows_security
+    security = _windows_security()
+    _owner, _protected, entries = security._permissions(str(path))
+    expected = {security._process_sid(), "S-1-5-18", "S-1-5-32-544"}
+    assert len(entries) == len(expected)
+    assert {entry[3] for entry in entries} == expected
+    assert all(kind == 0 and mask == 0x001F01FF for kind, _flags, mask, _sid in entries)
 
 
 def _sha256(data: bytes) -> str:
@@ -60,7 +75,7 @@ def test_encrypted_filesystem_contract_is_owner_scoped_bounded_and_authenticated
     stored_files = [path for path in (tmp_path / "objects").rglob("*") if path.is_file()]
     assert len(stored_files) == 1
     assert payload not in stored_files[0].read_bytes()
-    assert stored_files[0].stat().st_mode & 0o077 == 0
+    _assert_private_file_permissions(stored_files[0])
 
     downloaded = storage.get(ref)
     assert downloaded.data == payload

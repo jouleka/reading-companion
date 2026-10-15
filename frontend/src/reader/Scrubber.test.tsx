@@ -14,11 +14,55 @@ describe("Scrubber", () => {
     expect(s.getAttribute("aria-valuetext")).toMatch(/chapter 3/i);
   });
 
-  test("reports the new chapter on change (arrow keys / drag both fire this)", () => {
+  test("reports keyboard and assistive changes without requiring a pointer", () => {
     const onChange = vi.fn();
     render(<Scrubber max={5} value={3} onChange={onChange} />);
     fireEvent.change(screen.getByRole("slider"), { target: { value: "2" } });
     expect(onChange).toHaveBeenCalledWith(2);
+  });
+
+  test("previews a pointer drag and commits only its final chapter", () => {
+    const onChange = vi.fn();
+    render(<Scrubber max={20} value={3} onChange={onChange} />);
+    const slider = screen.getByRole("slider");
+    fireEvent.pointerDown(slider, { pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "6" } });
+    fireEvent.change(slider, { target: { value: "12" } });
+    expect(slider.getAttribute("aria-valuetext")).toBe("chapter 12");
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.pointerUp(slider, { pointerId: 1 });
+    fireEvent.lostPointerCapture(slider, { pointerId: 1 });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(12);
+  });
+
+  test("cancelling a drag restores the selected chapter without re-querying", () => {
+    const onChange = vi.fn();
+    render(<Scrubber max={20} value={3} onChange={onChange} />);
+    const slider = screen.getByRole("slider") as HTMLInputElement;
+    fireEvent.pointerDown(slider, { pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "12" } });
+    fireEvent.pointerCancel(slider, { pointerId: 1 });
+    expect(slider.value).toBe("3");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("does not re-query when a drag returns to the selected chapter", () => {
+    const onChange = vi.fn();
+    render(<Scrubber max={20} value={3} onChange={onChange} />);
+    const slider = screen.getByRole("slider");
+    fireEvent.pointerDown(slider, { pointerId: 1 });
+    fireEvent.change(slider, { target: { value: "12" } });
+    fireEvent.change(slider, { target: { value: "3" } });
+    fireEvent.pointerUp(slider, { pointerId: 1 });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("follows a chapter selected elsewhere", () => {
+    const { rerender } = render(
+      <Scrubber max={20} value={3} onChange={() => {}} />,
+    );
+    rerender(<Scrubber max={20} value={8} onChange={() => {}} />);
+    expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("8");
   });
 
   test("shows a legible 'as of chapter' label", () => {

@@ -46,7 +46,7 @@ def test_prepared_values_cannot_be_committed_to_a_different_chapter(tmp_path):
 
 def test_prepared_values_bind_ordinal_and_actual_text_hash(tmp_path):
     store, client = Store(data_dir=str(tmp_path)), _client()
-    original = _ch(1, "b:c1.xhtml", "Chapter I", "alpha")
+    original = _ch(1, "b:c1.xhtml", "Chapter I", _CH1["text"] + " alpha")
     prepared = prepare_chapter(original, _EX1, client, roster=[])
     mutated = {**original, "ordinal": 99, "text": "beta", "content_hash": content_hash_of("alpha")}
     with store.book("b", meta=dict(title="B")) as mem:
@@ -408,8 +408,8 @@ def test_changed_content_reingest_fails_loud_and_writes_nothing(tmp_path):
     # corrupt state. It fails loud (first-ingest only; re-extraction retracts first, LIT-19) and writes
     # nothing — the live rows still reflect the ORIGINAL content.
     store, client = Store(data_dir=str(tmp_path)), _client()
-    ch_v1 = _ch(1, "b:c1.xhtml", "Chapter I", "version one: Alyosha appears.")
-    ch_v2 = _ch(1, "b:c1.xhtml", "Chapter I", "version two: a COMPLETELY different text.")
+    ch_v1 = _ch(1, "b:c1.xhtml", "Chapter I", "version one: " + _CH1["text"])
+    ch_v2 = _ch(1, "b:c1.xhtml", "Chapter I", "version two: " + _CH2["text"])
     _commit(store, client, ch_v1, _EX1)
     prepared_v2 = _prepare_for(store, client, ch_v2, _EX2)
     with store.book("b") as mem:

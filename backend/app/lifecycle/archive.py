@@ -127,13 +127,14 @@ class DataDirLock:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         handle = self.path.open("a+b")
-        handle.seek(0)
-        if handle.read(1) == b"":
-            handle.seek(0)
-            handle.write(b"\0")
-            handle.flush()
-        handle.seek(0)
         try:
+            # A Windows byte-range lock also prevents reading the locked byte. Check size with
+            # fstat instead so a competing service reaches the lock attempt and gets our public
+            # DataDirLocked error, rather than leaking PermissionError and an open handle.
+            if os.fstat(handle.fileno()).st_size == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
             if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
                 import msvcrt
 

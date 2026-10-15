@@ -140,9 +140,13 @@ def resolve_one(ent, roster, embed_fn=None, threshold=0.82):
 
     # 1a. roster-link, exact canonical (name-like)
     if ent.get("matched_roster"):
-        for r in same_type:
-            if _namelike(r["canonical_name"]) and _norm(ent["canonical_name"]) == _norm(r["canonical_name"]):
-                return {"action": "merge", "entity_id": r["entity_id"], "method": "roster-link", "score": 1.0}
+        hits = [r for r in same_type if _namelike(r["canonical_name"])
+                and _norm(ent["canonical_name"]) == _norm(r["canonical_name"])]
+        if len(hits) == 1:
+            return {"action": "merge", "entity_id": hits[0]["entity_id"],
+                    "method": "roster-link", "score": 1.0}
+        if len(hits) > 1:
+            return _ambiguous()
         # 1b. roster-link fuzzy: token-subset across SAME-TYPE roster entries (the LLM asserted a link).
         # Type-scoped (review fix): a cross-type token overlap — e.g. a PLACE named after a CHARACTER —
         # is never the same identity; the old whole-roster scan silently absorbed the place into the person.

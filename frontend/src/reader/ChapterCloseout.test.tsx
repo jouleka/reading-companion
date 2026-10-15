@@ -28,12 +28,16 @@ const answer = {
     input_tokens: 50,
     output_tokens: 15,
     pricing_known: true,
-    calls: [{ provider: "anthropic", model: "claude-haiku", usd: "0.0000120000" }],
+    calls: [
+      { provider: "anthropic", model: "claude-haiku", usd: "0.0000120000" },
+    ],
     payer: "your configured provider account",
   },
 };
 
-beforeEach(() => { mocks.chapterCloseout.mockReset(); });
+beforeEach(() => {
+  mocks.chapterCloseout.mockReset();
+});
 
 describe("ChapterCloseout", () => {
   test("renders cited takeaways, navigates to evidence, exposes cost, and passes axe", async () => {
@@ -41,11 +45,20 @@ describe("ChapterCloseout", () => {
     const onNavigate = vi.fn();
     const { container } = render(
       <StrictMode>
-        <ChapterCloseout bookId="b" chapter={2} onNavigate={onNavigate} onClose={() => {}} />
+        <ChapterCloseout
+          bookId="b"
+          chapter={2}
+          onNavigate={onNavigate}
+          onClose={() => {}}
+        />
       </StrictMode>,
     );
-    expect(await screen.findByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /open citation 1 in chapter ii/i }));
+    expect(
+      await screen.findByText(/^Berenice met Aldric at the forge\.$/),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /open citation 1 in chapter ii/i }),
+    );
     expect(onNavigate).toHaveBeenCalledWith(citation);
     expect(screen.getByText(/50 input \/ 15 output tokens/i)).toBeTruthy();
     expect(mocks.chapterCloseout).toHaveBeenCalledTimes(1);
@@ -54,10 +67,46 @@ describe("ChapterCloseout", () => {
 
   test("prefers an explicit insufficient closeout to invented takeaways", async () => {
     mocks.chapterCloseout.mockResolvedValue({
-      ...answer, insufficient_evidence: true, claims: [], citations: [],
+      ...answer,
+      insufficient_evidence: true,
+      claims: [],
+      citations: [],
     });
-    render(<ChapterCloseout bookId="b" chapter={2} onNavigate={() => {}} onClose={() => {}} />);
-    expect(await screen.findByText(/does not provide enough evidence/i)).toBeTruthy();
+    render(
+      <ChapterCloseout
+        bookId="b"
+        chapter={2}
+        onNavigate={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByText(/does not provide enough evidence/i),
+    ).toBeTruthy();
     expect(screen.queryByText(/Berenice met/)).toBeNull();
+  });
+
+  test("retries a failed closeout and announces the completed result", async () => {
+    mocks.chapterCloseout
+      .mockRejectedValueOnce(new Error("Provider is offline."))
+      .mockResolvedValue(answer);
+    render(
+      <ChapterCloseout
+        bookId="b"
+        chapter={2}
+        onNavigate={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Try closeout again" }),
+    );
+    expect(
+      await screen.findByText(/^Berenice met Aldric at the forge\.$/),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Your chapter closeout is ready.",
+    );
+    expect(mocks.chapterCloseout).toHaveBeenCalledTimes(2);
   });
 });

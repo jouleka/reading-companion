@@ -2,7 +2,7 @@
  * unmount — a reader who paged and immediately left lost their final position (the product's one
  * promise). The reporter must coalesce bursts AND flush the pending report when asked. */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { PositionReporter } from "./reporter";
+import { PositionReporter, type PendingPosition } from "./reporter";
 
 describe("PositionReporter", () => {
   let sent: Array<{ cfi: string; offset: number }>;
@@ -11,7 +11,9 @@ describe("PositionReporter", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     sent = [];
-    r = new PositionReporter((cfi, offset) => { sent.push({ cfi, offset }); }, 700);
+    r = new PositionReporter((cfi, offset) => {
+      sent.push({ cfi, offset });
+    }, 700);
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -83,7 +85,10 @@ describe("PositionReporter", () => {
     let releaseFirst: (() => void) | undefined;
     r = new PositionReporter(async (cfi) => {
       calls.push(cfi);
-      if (cfi === "first") await new Promise<void>((resolve) => { releaseFirst = resolve; });
+      if (cfi === "first")
+        await new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        });
     }, 700);
 
     r.schedule("first", 10, 0);
@@ -119,5 +124,109 @@ describe("PositionReporter", () => {
     r.schedule("offline", 8, 2);
     await vi.advanceTimersByTimeAsync(10);
     expect(states.at(-1)).toBe("queued");
+  });
+
+  test("serializes an explicit completion ahead of later relocations", async () => {
+    const calls: string[] = [];
+    let release!: () => void;
+    r = new PositionReporter(async (cfi) => {
+      calls.push(cfi);
+      if (cfi === "first")
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+    });
+    r.schedule("first", 10, 0);
+    r.flush();
+    r.complete("finished", 300, 3);
+    r.schedule("rereading", 100, 1);
+    expect(calls).toEqual(["first"]);
+    release();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toEqual(["first", "finished", "rereading"]);
+  });
+
+  test("a failed completion survives page turns and a reset cancels it", async () => {
+    const calls: string[] = [];
+    let fail = true;
+    r = new PositionReporter(async (cfi) => {
+      calls.push(cfi);
+      if (fail) {
+        fail = false;
+        throw new TypeError("offline");
+      }
+    });
+    r.complete("finished", 300, 3);
+    await Promise.resolve();
+    r.schedule("rereading", 100, 1);
+    await vi.advanceTimersByTimeAsync(701);
+    expect(calls).toEqual(["finished", "finished", "rereading"]);
+    r.complete("old-finish", 300, 3);
+    r.cancel();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(calls.filter((cfi) => cfi === "old-finish")).toHaveLength(1);
+  });
+
+  test("teardown retains an in-flight write, queued completion and latest cursor before disposal", async () => {
+    const retained: PendingPosition[] = [];
+    const calls: string[] = [];
+    let release!: () => void;
+    r = new PositionReporter(async (cfi) => {
+      calls.push(cfi);
+      await new Promise<void>((resolve) => { release = resolve; });
+    });
+    r.schedule("first", 100, 1, 4);
+    r.flush();
+    r.complete("finished", 300, 3, 4);
+    r.schedule("rereading", 10, 0, 4);
+    let drained = false;
+    const drain = r.drainAndDispose((report) => retained.push({ ...report })).then(() => { drained = true; });
+    expect(retained).toEqual([
+      { cfi: "first", offset: 100, completedChapter: 1, positionEpoch: 4 },
+      { cfi: "finished", offset: 300, completedChapter: 3, positionEpoch: 4 },
+      { cfi: "rereading", offset: 10, completedChapter: 0, positionEpoch: 4 },
+    ]);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(calls).toEqual(["first"]);
+    expect(drained).toBe(false);
+    release();
+    await drain;
+    expect(drained).toBe(true);
+    expect(calls).toEqual(["first"]);
+  });
+
+  test("a reset excludes old intent from retention and keeps the next epoch serialized", async () => {
+    const calls: Array<[string, number]> = [];
+    let release!: () => void;
+    r = new PositionReporter(async (cfi, _offset, _completed, epoch) => {
+      calls.push([cfi, epoch]);
+      if (epoch === 0) await new Promise<void>((resolve) => { release = resolve; });
+    });
+    r.complete("old-finish", 300, 3, 0);
+    r.cancel();
+    r.schedule("new-pass", 0, 0, 1);
+    const retained: PendingPosition[] = [];
+    r.retain((report) => retained.push({ ...report }));
+    r.flush();
+    expect(calls).toEqual([["old-finish", 0]]);
+    expect(retained).toEqual([{ cfi: "new-pass", offset: 0, completedChapter: 0, positionEpoch: 1 }]);
+    release();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toEqual([["old-finish", 0], ["new-pass", 1]]);
+  });
+
+  test("throwing persistence never aborts synchronous cleanup or leaves reporter timers active", async () => {
+    const quota = new DOMException("storage full", "QuotaExceededError");
+    r.schedule("last-page", 20, 1, 0);
+    let drain!: Promise<void>;
+    expect(() => {
+      drain = r.drainAndDispose(() => { throw quota; });
+    }).not.toThrow();
+    expect(sent).toEqual([{ cfi: "last-page", offset: 20 }]);
+    await expect(drain).rejects.toBe(quota);
+    r.schedule("after-dispose", 30, 1, 0);
+    r.flush();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(sent).toEqual([{ cfi: "last-page", offset: 20 }]);
   });
 });

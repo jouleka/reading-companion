@@ -11,7 +11,7 @@ LOCK DISCIPLINE (D-A3): the search-query embedding and the recap synthesis LLM c
 CATCH-ME-UP is lazy synthesis (D5) behind the LIT-8 runtime gate: supplied-facts -> large-tier recap
 -> ``assert_recap_safe`` (one regenerate on rejection, then a GENERIC 502 — the error channel must
 never carry the rejected recap or a future name). Cached in-process by the full Inv-7 key
-(book, catalog incarnation, bookmark, validity_snapshot, pinned synth model, prompt version,
+(book, catalog incarnation, bookmark, validity_snapshot, current synth model, prompt version,
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -21,15 +21,35 @@ from app.ask import (
     ASK_SYSTEM,
     AskDraft,
     AskRequest,
+    AskRetrievalLimit,
     AskSafetyError,
     ask_prompt,
+    ask_repair_prompt,
     cited_sources,
+    complete_ask_citations,
     draft_text,
+    judge_ask_draft,
+    retrieve_ask_sources,
     source_facts,
     validate_ask_draft,
 )
+from app.ask_context import complete_ask_context
+from app.ask_evidence import (
+    ASK_EVIDENCE_SYSTEM,
+    AskEvidenceError,
+    AskEvidenceReview,
+    complete_evidence_citations,
+    evidence_prompt,
+)
+from app.ask_selection import (
+    SOURCE_SELECTION_SYSTEM,
+    SourceSelection,
+    SourceSelectionError,
+    selection_prompt as source_selection_prompt,
+    validate_selection,
+)
 
-from app.cost import CostCeilingExceeded, budgeted_completion, budgeted_embedding, pricing_known
+from app.cost import CostCeilingExceeded, budgeted_completion, estimate_input_tokens, pricing_known
 from app.deps import (
     book_lifecycle,
     get_catalog,
@@ -53,8 +73,16 @@ from app.eval.spoiler_gate import (
     synth_prompt,
     validity_snapshot,
 )
-from app.eval.spoiler_gate.judge import JudgeUnavailable, judge_recap
+from app.eval.spoiler_gate.judge import (
+    JUDGE_SYSTEM,
+    JudgeUnavailable,
+    JudgeVerdict,
+    judge_prompt,
+    judge_recap,
+)
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
+from app.llm.retrieval import budgeted_query_embedding
+from app.llm.client import ProviderUnavailable
 from app.reading_assist import (
     CLOSEOUT_SYSTEM,
     SELECTION_SYSTEM,
@@ -192,6 +220,11 @@ def graph(book_id: str, bookmark: int | None = _BM, catalog=Depends(get_catalog)
             chars.append(character)
         rels = [dict(r) for r in v.relationships()]
         chars, rels = _coalesce_honorific_characters(chars, rels)
+        # This endpoint is the people graph. Other visible entity types remain available through
+        # cards/timeline, but every returned graph edge must resolve to a returned character.
+        character_ids = {row["entity_id"] for row in chars}
+        rels = [row for row in rels if row["src_entity"] in character_ids
+                and row["dst_entity"] in character_ids]
     return {"as_of_chapter": eff, "characters": chars, "relationships": rels}
 
 
@@ -213,10 +246,10 @@ def correct_memory(book_id: str, body: EntityCorrectionRequest,
                    catalog=Depends(get_catalog), store=Depends(get_store),
                    settings=Depends(get_settings), worker=Depends(get_worker)):
     """Publish a one-for-one identity correction at the reader's exact current frontier."""
-    eff, _st, _manifest = _effective(
+    eff, state, _manifest = _effective(
         book_id, body.bookmark, catalog, store, settings, worker
     )
-    if eff != body.bookmark:
+    if eff != body.bookmark or state["bookmark"] != body.bookmark:
         raise HTTPException(409, "reading progress changed; reopen the codex and try again")
     try:
         with store.book(book_id) as mem:
@@ -293,9 +326,13 @@ def search(book_id: str, q: str, k: int = Query(default=5, ge=1, le=50),
            bookmark: int | None = _BM, catalog=Depends(get_catalog), store=Depends(get_store),
            settings=Depends(get_settings), client=Depends(get_client), worker=Depends(get_worker)):
     eff, _st, _m = _effective(book_id, bookmark, catalog, store, settings, worker)
+    if eff <= 0:
+        return {"as_of_chapter": 0, "hits": []}
+    with store.book(book_id) as mem:
+        pinned = mem.pinned_identity()
     try:
-        qvec = budgeted_embedding(
-            catalog, settings, client, book_id, phase="search-embedding", texts=[q]
+        qvec = budgeted_query_embedding(
+            catalog, settings, client, book_id, pinned=pinned, texts=[q]
         ).value[0]                                # OUTSIDE the lock (D-A3 — never IO under it)
     except CostCeilingExceeded as exc:
         raise HTTPException(429, "book cost ceiling reached") from exc
@@ -340,6 +377,39 @@ def _public_ask_source(source):
     }
 
 
+def _complete_citation_evidence(value, sources, *, catalog, settings, client, book_id,
+                                remember, known_names=(), question=None):
+    """Explicit evidence coverage before the fresh, claim-specific semantic review.
+
+    This call runs outside the book lock. It may change only citation IDs, using exact spans of
+    already selected completed sources; it cannot repair an unsupported assertion by changing text.
+    """
+    draft = AskDraft.model_validate(value)
+    if draft.insufficient_evidence or client.provider == "stub":
+        return complete_ask_citations(draft, sources, known_names=known_names)
+    review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
+    try:
+        audited = budgeted_completion(
+            catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
+            user=review_prompt, tier="cheap", schema=AskEvidenceReview,
+        )
+    except (CostCeilingExceeded, ProviderUnavailable):
+        raise
+    except Exception:
+        # SDK parse/refusal/truncation failures are unavailable reviews, not draft criticism.
+        # The budget layer already retains their conservative failed-call charge.
+        raise AskEvidenceError(repairable=False) from None
+    remember(audited)
+    reviewed = AskDraft.model_validate(complete_evidence_citations(
+        draft.model_dump(mode="json"), sources, audited.value,
+    ))
+    # A positive reviewer can mistake an inline chapter label for a speaker attribution.
+    # Add only missing named-body context from this same selected pool, within the existing
+    # three-citation cap. Name presence is a necessary clue, never truth clearance: all normal
+    # deterministic gates and the fresh own-citation NLI still review the complete result.
+    return complete_ask_citations(reviewed, sources, known_names=known_names, include_context=False)
+
+
 @router.post("/ask")
 def ask_the_book(
     book_id: str,
@@ -373,9 +443,11 @@ def ask_the_book(
             "citations": [],
             "cost": _ask_cost_payload(calls),
         }
+    with store.book(book_id) as mem:
+        pinned = mem.pinned_identity()
     try:
-        embedded = budgeted_embedding(
-            catalog, settings, client, book_id, phase="search-embedding", texts=[body.question]
+        embedded = budgeted_query_embedding(
+            catalog, settings, client, book_id, pinned=pinned, texts=[body.question]
         )
     except CostCeilingExceeded as exc:
         raise HTTPException(429, "book cost ceiling reached") from exc
@@ -385,26 +457,45 @@ def ask_the_book(
         provider="stub" if embed_identity.startswith("stub:") else client.embed_provider,
         model=embed_identity,
     )
-    with store.book(book_id) as mem:
-        hits = mem.view(eff).search(embedded.value[0], k=6)
-
     atoms = {atom["key"]: atom for atom in manifest["atoms"]}
-    sources = []
-    seen = set()
-    for _score, text, revealed_at, chapter_key in hits:
-        normalized = " ".join((text or "").split())[:2000]
-        if not normalized or (chapter_key, normalized) in seen:
-            continue
-        seen.add((chapter_key, normalized))
-        atom = atoms.get(chapter_key, {})
-        sources.append({
-            "id": len(sources) + 1,
-            "ordinal": int(revealed_at),
-            "chapter_key": chapter_key,
-            "href": atom.get("href", ""),
-            "title": atom.get("title", "") or f"Chapter {revealed_at}",
-            "text": normalized,
-        })
+    try:
+        with store.book(book_id) as mem:
+            view = mem.view(eff)
+            known_names = []
+            for character in view.characters():
+                known_names.append(character["canonical_name"])
+                known_names.extend(alias["surface_form"]
+                                   for alias in view.aliases_of(character["entity_id"]))
+            sources = retrieve_ask_sources(
+                body.question,
+                bookmark=eff,
+                chapters=view.chapters(),
+                read_chapter=view.raw_text,
+                semantic_hits=view.search(embedded.value[0], k=6),
+                atoms=atoms,
+                candidate_pool=client.provider != "stub",
+                known_names=known_names,
+            )
+    except AskRetrievalLimit as exc:
+        raise HTTPException(
+            413, "completed text is too large to search at once; choose an earlier chapter"
+        ) from exc
+    if sources and client.provider != "stub":
+        candidates = sources
+        try:
+            selection = budgeted_completion(
+                catalog, settings, client, book_id, phase="source-selection",
+                system=SOURCE_SELECTION_SYSTEM, user=source_selection_prompt(body.question, sources),
+                tier="cheap", schema=SourceSelection,
+            )
+            remember(selection, provider=client.provider, model=client._model_for("cheap"))
+            sources = validate_selection(selection.value, sources)
+            sources = complete_ask_context(body.question, sources, candidates, known_names=known_names,
+                                           allow_named_fallback=True)
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except (SourceSelectionError, ValueError) as exc:
+            raise HTTPException(502, "evidence selection could not be cleared") from exc
     if not sources:
         return {
             "as_of_chapter": eff,
@@ -415,6 +506,7 @@ def ask_the_book(
         }
 
     prompt = ask_prompt(body.question, sources)
+    repair_feedback = []
     for _attempt in range(2):
         try:
             generated = budgeted_completion(
@@ -424,7 +516,7 @@ def ask_the_book(
                 book_id,
                 phase="synthesis",
                 system=ASK_SYSTEM,
-                user=prompt,
+                user=ask_repair_prompt(prompt, repair_feedback),
                 tier="large",
                 schema=AskDraft,
             )
@@ -432,8 +524,32 @@ def ask_the_book(
             raise HTTPException(429, "book cost ceiling reached") from exc
         remember(generated, provider=client.provider, model=client._model_for("large"))
         try:
-            draft = validate_ask_draft(generated.value, sources)
-        except (AskSafetyError, ValueError):
+            completed = _complete_citation_evidence(
+                generated.value, sources, catalog=catalog, settings=settings, client=client,
+                book_id=book_id, known_names=known_names,
+                question=body.question,
+                remember=lambda result: remember(result, provider=client.provider,
+                                                  model=client._model_for("cheap")),
+            )
+            # The real-provider helper above completed every positive evidence audit. Lexical
+            # overlap is not entailment; supported paraphrases still need the fresh judge below.
+            draft = validate_ask_draft(completed, sources, known_names=known_names,
+                                       defer_lexical_to_judge=client.provider != "stub")
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except AskEvidenceError as exc:
+            if not exc.repairable:
+                raise HTTPException(502, "answer evidence review could not be cleared") from exc
+            repair_feedback = list(exc.review_feedback)
+            continue
+        except (AskSafetyError, ValueError) as exc:
+            repair_feedback = [
+                "The draft was not traceable to its own cited passages or had an invalid citation "
+                "shape. Use only directly supported factual sentences, omit standalone Yes/No "
+                "acknowledgments, and preserve source wording for identities and qualifications."
+            ]
+            if isinstance(exc, AskSafetyError):
+                repair_feedback.extend(exc.review_feedback)
             continue
         if draft.insufficient_evidence:
             return {
@@ -452,6 +568,10 @@ def ask_the_book(
             or score["prolepsis_hits"]
             or score["unsupported_event_bindings"]
         ):
+            repair_feedback = [
+                "The draft failed the completed-source safety checks. Remove unsupported "
+                "developments or bindings and state only what its own cited passages establish."
+            ]
             continue
 
         used = cited_sources(draft, sources)
@@ -472,18 +592,22 @@ def ask_the_book(
             return result.value, result.usage
 
         try:
-            verdict, _usage = judge_recap(
+            verdict, _usage = judge_ask_draft(
                 client,
-                answer,
-                source_facts(used),
+                draft,
+                used,
                 tier="cheap",
                 complete=judge_complete,
+                question=body.question,
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
         except JudgeUnavailable:
             continue
         if verdict["references_future"] or verdict["unsupported_claims"]:
+            repair_feedback = verdict["unsupported_claims"] or [
+                "The draft asserted a development not established by its cited passages."
+            ]
             continue
         return {
             "as_of_chapter": eff,
@@ -650,6 +774,7 @@ def chapter_closeout(
             "cost": _ask_cost_payload(calls),
         }
     prompt = chapter_closeout_prompt(body.chapter, sources)
+    repair_feedback = []
     for _attempt in range(2):
         try:
             generated = budgeted_completion(
@@ -659,7 +784,7 @@ def chapter_closeout(
                 book_id,
                 phase="synthesis",
                 system=CLOSEOUT_SYSTEM,
-                user=prompt,
+                user=ask_repair_prompt(prompt, repair_feedback),
                 tier="large",
                 schema=AskDraft,
             )
@@ -667,8 +792,24 @@ def chapter_closeout(
             raise HTTPException(429, "book cost ceiling reached") from exc
         remember(generated, model=client._model_for("large"))
         try:
-            draft = validate_ask_draft(generated.value, sources)
-        except (AskSafetyError, ValueError):
+            completed = _complete_citation_evidence(
+                generated.value, sources, catalog=catalog, settings=settings, client=client,
+                book_id=book_id,
+                remember=lambda result: remember(result, model=client._model_for("cheap")),
+            )
+            draft = validate_ask_draft(completed, sources,
+                                       defer_lexical_to_judge=client.provider != "stub")
+        except CostCeilingExceeded as exc:
+            raise HTTPException(429, "book cost ceiling reached") from exc
+        except AskEvidenceError as exc:
+            if not exc.repairable:
+                raise HTTPException(502, "answer evidence review could not be cleared") from exc
+            repair_feedback = list(exc.review_feedback)
+            continue
+        except (AskSafetyError, ValueError) as exc:
+            repair_feedback = ["Use only complete factual claims supported by their own cited passages."]
+            if isinstance(exc, AskSafetyError):
+                repair_feedback.extend(exc.review_feedback)
             continue
         if draft.insufficient_evidence:
             return {
@@ -706,10 +847,10 @@ def chapter_closeout(
             return result.value, result.usage
 
         try:
-            verdict, _usage = judge_recap(
+            verdict, _usage = judge_ask_draft(
                 client,
-                answer,
-                source_facts(used),
+                draft,
+                used,
                 tier="cheap",
                 complete=judge_complete,
             )
@@ -718,6 +859,9 @@ def chapter_closeout(
         except JudgeUnavailable:
             continue
         if verdict["references_future"] or verdict["unsupported_claims"]:
+            repair_feedback = verdict["unsupported_claims"] or [
+                "The draft asserted a development not established by its cited passages."
+            ]
             continue
         return {
             "chapter": body.chapter,
@@ -799,6 +943,9 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     runs under it. Returns the one-liner text or None."""
     if not delta["chapter_summaries"]:
         return None                                        # nothing newly completed to describe
+    if not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                             judge_prompt("", facts), schema=JudgeVerdict):
+        return None                                        # cannot review even the shortest output
     try:
         now_text, _usage = _budgeted_runner(
             catalog, settings, client, book_id, "now"
@@ -823,6 +970,21 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     return now_text.strip() or None
 
 
+def _recap_input_fits(settings, client, system, user, *, schema=None):
+    """Preflight only input shape; the budgeted runner still atomically admits book-level spend."""
+    peak_input = estimate_input_tokens(system, user, schema)
+    if (schema is not None and client.provider == "openai-compatible"
+            and not getattr(client, "_is_native_openai", False)):
+        peak_input += settings.cost_max_output_tokens_per_call + 512
+    return peak_input <= settings.cost_max_input_tokens_per_call
+
+
+def _cumulative_recap_facts(facts):
+    """Exactly the evidence synth_prompt supplies, with no additional event history in review."""
+    return {"characters": facts["characters"], "chapter_summaries": facts["chapter_summaries"],
+            "events": facts["events"][:20]}
+
+
 @router.get("/catch-me-up")
 def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 catalog=Depends(get_catalog), store=Depends(get_store),
@@ -840,10 +1002,9 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         cmu = mem.view(eff).catch_me_up()
         facts = supplied_facts(mem, eff)
         snap = validity_snapshot(mem, eff)
-        pinned = mem.pinned_identity() or {}
         book_type = mem.book_profile()["book_type"]
         content_language = mem.content_language()
-    synth_model = pinned.get("synth_model") or client._model_for("large")
+    synth_model = client.extractor_version("large")
     incarnation = catalog.get_book(book_id)["incarnation"]
     key = (book_id, incarnation, cache_key(
         book_id,
@@ -894,20 +1055,34 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             ))
             prior_recap = (recaps.get(prior_key) or {}).get("recap")
 
+        system = flowing_system_for(book_type, content_language)
+        cumulative_facts = _cumulative_recap_facts(facts)
+        full_review_fits = _recap_input_fits(
+            settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
+        )
         recap_final = None
         for attempt in range(2):
             # attempt 0: EVOLVE from recap(N-1) + the delta (non-repetitive). If it fails the gate,
             # attempt 1 falls back to the cumulative synthesis — proven grounded, so the reader still
             # gets a recap rather than a 502. The evolve is the optimization; the cumulative is the
             # safety net. BOTH run under FLOWING_SYSTEM (the anti-foreshadow contract stays intact).
-            if prior_recap and attempt == 0:
-                prompt = evolve_prompt(eff, prior_recap, delta, book_type=book_type)
+            if prior_recap and attempt == 0 and full_review_fits:
+                evolved = evolve_prompt(eff, prior_recap, delta, book_type=book_type)
             else:
-                prompt = synth_prompt(eff, facts, book_type=book_type)
+                evolved = None
+            if evolved is not None and _recap_input_fits(settings, client, system, evolved):
+                prompt, review_facts = evolved, facts
+            else:
+                prompt = synth_prompt(eff, cumulative_facts, book_type=book_type)
+                review_facts = cumulative_facts
+            if (not _recap_input_fits(settings, client, system, prompt)
+                    or not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                                            judge_prompt("", review_facts), schema=JudgeVerdict)):
+                raise HTTPException(429, "recap evidence exceeds the per-call input ceiling")
             try:
                 recap, _usage = _budgeted_runner(
                     catalog, settings, client, book_id, "synthesis"
-                )(flowing_system_for(book_type, content_language), prompt, tier="large")
+                )(system, prompt, tier="large")
             except CostCeilingExceeded as exc:
                 raise HTTPException(429, "book cost ceiling reached") from exc
             with store.book(book_id) as mem:
@@ -921,9 +1096,12 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             # name, no modal). references_future is a HARD reject; a judge outage fails CLOSED (no
             # verdict = unsafe) — both regenerate, then a generic 502. Soft unsupported_claims stay
             # server-side (reader-data-only). The judge sees only the bookmark-bounded facts + the recap.
+            if not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                                     judge_prompt(recap, review_facts), schema=JudgeVerdict):
+                raise HTTPException(429, "recap review exceeds the per-call input ceiling")
             try:
                 verdict, _judge_usage = judge_recap(
-                    client, recap, facts,
+                    client, recap, review_facts,
                     complete=_budgeted_runner(catalog, settings, client, book_id, "judge"),
                 )
             except CostCeilingExceeded as exc:

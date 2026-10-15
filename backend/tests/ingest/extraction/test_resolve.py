@@ -3,6 +3,8 @@ These tests re-prove the exact review findings ADR 0003 rev1/rev2 fixed: roster-
 exact, name-like alias overlap, the role-epithet stop-list (no false-merge of distinct people), and
 layer-4 embedding FORCE-OFF unless a real backend is supplied (+ the margin gate when it is on).
 """
+import pytest
+
 from app.ingest.extraction.resolve import (
     _namelike, _norm, _proper_tokens, resolve_chapter, resolve_one,
 )
@@ -23,6 +25,18 @@ def test_roster_link_exact_canonical_merges():
     roster = [_roster_entry(7, "Alexey Fyodorovitch Karamazov")]
     d = resolve_one(_ent("Alexey Fyodorovitch Karamazov", matched=True), roster)
     assert d == {"action": "merge", "entity_id": 7, "method": "roster-link", "score": 1.0}
+
+
+@pytest.mark.parametrize("matched", [True, False])
+@pytest.mark.parametrize("reverse", [True, False])
+def test_duplicate_canonical_identity_never_uses_roster_order_even_with_model_link(matched, reverse):
+    roster = [_roster_entry(1, "Alex River"), _roster_entry(2, "Alex River")]
+    if reverse:
+        roster.reverse()
+    decision = resolve_one(_ent("Alex River", matched=matched), roster)
+    assert decision["action"] == "create"
+    assert decision["entity_id"] is None
+    assert decision["warn_ambiguous"] is True
 
 
 def test_roster_link_fuzzy_token_subset_links_partial_name():

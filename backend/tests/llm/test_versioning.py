@@ -5,6 +5,8 @@ pinned_identity surface. Lifted near-verbatim (ADR 0007 D-A1 group (a)).
 """
 import math
 
+import pytest
+
 from app.llm import versioning as V
 from app.llm.client import LLMClient
 
@@ -109,3 +111,31 @@ def test_current_identity_round_trips_through_safe_swap():
     ci = V.current_identity(c)
     # an identity compared to itself is always safe (canary cosine == 1.0)
     assert V.safe_swap(ci, V.current_identity(c)) == [("none", V.OK)]
+
+
+@pytest.mark.parametrize("canary", [[float("nan"), 0, 0], [float("inf"), 0, 0],
+                                    [0, 0, 0], ["corrupt", 0, 0], 123])
+def test_invalid_pinned_canary_never_certifies_same_space(canary):
+    with pytest.raises(V.ModelMigrationRequired):
+        V.assert_compatible_identity(_ident(embed_canary=canary), _ident())
+
+
+def test_config_guard_rejects_changed_extractor_without_embedding_io():
+    client = LLMClient(provider="stub", allow_stub=True, env={})
+    pinned = V.current_identity(client)
+    client.cheap_model = "changed-extractor"
+    client.embed = lambda _texts: pytest.fail("config preflight must not perform provider IO")
+    with pytest.raises(V.ModelMigrationRequired) as failure:
+        V.assert_compatible_config(pinned, client)
+    assert failure.value.decisions == (("extractor_model", V.FORCE_RE_EXTRACT),)
+    V.assert_compatible_config(pinned, client, check_extractor=False)
+    assert failure.value.public_detail()["code"] == "model_migration_required"
+
+
+def test_config_guard_allows_new_book_and_stateless_synthesis_swap():
+    client = LLMClient(provider="stub", allow_stub=True, env={})
+    pinned = V.current_identity(client)
+    client.large_model = "new-synthesis-model"
+    V.assert_compatible_config(pinned, client)
+    V.assert_compatible_config(None, client)
+    V.assert_compatible_config({key: None for key in pinned}, client)

@@ -42,9 +42,11 @@ def test_user_prompt_threads_title_roster_text_and_link_instruction():
     assert "matched_roster=true" in p
     assert "Alyosha" in p and "Alexey Fyodorovitch Karamazov" in p
     assert "ONE entity" in p
+    assert "only when the chapter text or visible roster establishes these forms as the same identity" in p
+    assert "only source/roster-supported forms as aliases" in p
 
 
-def test_novel_profile_preserves_the_existing_prompt_byte_for_byte():
+def test_novel_profile_uses_the_default_narrative_contract():
     roster = [{"canonical_name": "Aldric", "type": "character", "aliases": []}]
     assert extract_system_for("novel") == EXTRACT_SYSTEM
     assert extract_user_prompt("Chapter I", roster, "Aldric arrived.", book_type="novel") == (
@@ -77,3 +79,17 @@ def test_non_english_source_keeps_names_in_source_spelling_but_derived_text_in_e
     assert "алёша вернулся домой" in prompt
     assert extract_system_for("novel", content_language="en") == EXTRACT_SYSTEM
     assert extract_system_for("novel", content_language="und") == EXTRACT_SYSTEM
+
+
+def test_all_profiles_request_selective_memory_and_allow_empty_interpretive_fields():
+    for book_type in ("novel", "unknown", "nonfiction", "anthology", "reference"):
+        system = extract_system_for(book_type).lower()
+        assert "not a catalog of every noun" in system
+        assert "salient organizations/factions" in system
+        assert "use null for an unstated entity state and empty arrays" in system
+        assert "one-off visits, loans, handovers" in system
+        assert "put nicknames in aliases" in system
+        assert "does not imply hiding it, secrecy, or concealment" in system
+        assert "not inferred symbolism, intentions, or character judgments" in system
+        prompt = extract_user_prompt("A section", [], "Source passage.", book_type=book_type)
+        assert prompt.index("FINAL SELECTION CHECK") > prompt.index("Source passage.")

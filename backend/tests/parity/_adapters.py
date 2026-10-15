@@ -872,7 +872,7 @@ class PostgresParityAdapter(_SnapshotMixin):
         rows = self.conn.execute(
             """
             SELECT edge.id,edge.src_entity_id,edge.dst_entity_id,
-                   edge.relationship_type AS type,edge.label,edge.revealed_at,edge.invalid_at
+                   edge.relationship_type AS type,edge.label,edge.revealed_at,NULL AS invalid_at
             FROM edges AS edge
             JOIN entities AS src
               ON (src.owner_id,src.book_id,src.book_incarnation,src.id)
