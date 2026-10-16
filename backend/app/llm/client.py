@@ -427,6 +427,10 @@ class LLMClient:
             src = user.split("CHAPTER SUMMARIES:", 1)[-1] if "CHAPTER SUMMARIES:" in user else user
             return "[stub recap] " + " ".join(src.split())[:200], {"in": len(user) // 4, "out": 30}
         model_fields = getattr(schema, "model_fields", {})
+        if "questions" in model_fields or "audits" in model_fields:
+            # Preparation has no offline semantic oracle. An empty plan grants no suggestions.
+            field = "questions" if "questions" in model_fields else "audits"
+            return schema.model_validate({field: []}).model_dump(mode="json"), {"in": len(user)//4, "out": 5}
         if "insufficient_evidence" in model_fields and "claims" in model_fields:
             # Offline mode cannot synthesize a grounded cited answer. Say that explicitly instead of
             # forcing the extraction-shaped fallback through the Ask schema and returning a 502.

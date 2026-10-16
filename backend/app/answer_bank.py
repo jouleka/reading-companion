@@ -86,6 +86,7 @@ class AnswerBank:
                         or not 2 <= len(key[3]) <= 500
                         or not isinstance(row.get("reviewed_question"), str)
                         or not 2 <= len(row["reviewed_question"]) <= 500
+                        or type(row.get("suggested", False)) is not bool
                         or not valid_answer(row["payload"])):
                     return
             self.rows.update((tuple(k), v) for k, v in rows)
@@ -129,8 +130,12 @@ class AnswerBank:
         if not valid_answer(payload):
             return
         with self.lock:
+            prior = self.rows.get(key, {})
             self.rows[key] = {"reviewed_question": reviewed_question or key[3],
-                              "payload": deepcopy(payload)}
+                              "payload": deepcopy(payload),
+                              "suggested": bool(prior.get("suggested")
+                                  and (reviewed_question or key[3]) == key[3]
+                                  and prior.get("reviewed_question") == key[3])}
             self.rows.move_to_end(key)
             while len(self.rows) > self.limit:
                 self.rows.popitem(last=False)
@@ -149,6 +154,20 @@ class AnswerBank:
                 words & content_words(r["reviewed_question"] + " " +
                     " ".join(c["text"] for c in r["payload"]["claims"]))), reverse=True)
             return deepcopy(ranked[:limit])
+
+    def mark_suggestion(self, key):
+        with self.lock:
+            row = self.rows.get(key)
+            if row is not None and row["reviewed_question"] == key[3] and valid_answer(row["payload"]):
+                row["suggested"] = True
+                self._save()
+
+    def suggestions(self, scope, *, frontier=None, limit=8):
+        with self.lock:
+            return [key[3] for key, row in self.rows.items()
+                    if key[:3] == scope and row.get("suggested") is True
+                    and row["reviewed_question"] == key[3] and valid_answer(row["payload"])
+                    and (frontier is None or row["payload"]["as_of_chapter"] == frontier)][:limit]
 
     def invalidate_book(self, book_id):
         with self.lock:

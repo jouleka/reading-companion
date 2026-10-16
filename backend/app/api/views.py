@@ -248,8 +248,7 @@ def prepared_questions(book_id: str, bookmark: int | None = _BM,
     if eff > 0 and settings.reader_answer_cache and bank is not None:
         scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
                              settings=settings, client=client)
-        questions = [c["reviewed_question"] for c in bank.candidates(scope, "completed chapter", limit=3)
-                     if valid_answer(c["payload"]) and c["payload"]["as_of_chapter"] == eff]
+        questions = bank.suggestions(scope, frontier=eff, limit=settings.reader_prepare_max_questions)
     return {"as_of_chapter": eff, "questions": questions}
 
 

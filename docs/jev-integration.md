@@ -19,6 +19,7 @@ RECAP_PREWARM=true
 RECAP_DISK_CACHE=true
 READER_ANSWER_CACHE=true
 READER_PREPARE_ENABLED=true
+READER_PREPARE_MAX_QUESTIONS=8
 READER_REUSE_ENABLED=true
 READER_FAST_MODE=false
 ```
@@ -82,14 +83,31 @@ match. Ambiguous pronouns, new premises, extra questions and uncertain results f
 Ask. Aliases retain the original reviewed question, preventing chains of paraphrases from drifting.
 The lookup has a 0.65-second provider timeout and makes no retries. Exact hits need no Jev call.
 
-`READER_PREPARE_ENABLED` prepares up to three likely chapter questions after the recap, using only
-the most recent completed chapter's facts. Each answer uses the normal retrieval, evidence and
-independent GPT review route. Only cleared answers appear in the existing Ask suggestions through
-the read-only `/prepared-questions` endpoint; no model call is triggered by listing suggestions.
+`READER_PREPARE_ENABLED` prepares up to eight questions by default (`READER_PREPARE_MAX_QUESTIONS`,
+1–10) after the recap. A maximum twelve-question plan covers returning characters, established
+relationships, events/objects, explicitly stated motives, one summary and up to two self-contained
+follow-ups. Deterministic ordering covers available categories before second questions; unsupported
+categories are never required. The context includes the last two completed chapters' summaries and
+events, relevant visible cast/aliases, state snapshots and established ties. Whole fields interleave
+under an 18,000-byte cap (or half the call budget); omitted/oversized fields cannot supply proof.
+No future memory, expiry dates or whole-book oracle enter planning.
+
+A separate independent structured question review checks every original question ID, its premises,
+answerability and fact references. Invalid coverage/references fail closed; rejected parents drop
+their follow-ups. Every answer still uses normal retrieval, Jev evidence checks where enabled, and
+independent own-citation review. A follow-up runs only after its parent's complete answer clears.
+Only explicitly premise-reviewed questions with cleared answers appear in Ask suggestions through
+the read-only `/prepared-questions` endpoint. Cached foreground questions and semantic aliases do
+not become suggestions automatically. Approval survives restart in the existing bounded checkpoint;
+listing suggestions makes no model calls and rechecks the current source scope and frontier.
+
 The preparation admission cap is $0.25 per book, including pending reservations and failed calls,
 in addition to the ordinary book cap. Scope attempts are persisted to avoid repeated spending on
-unchanged chapters after scrolling or restarting. These three optional reader flags remain off
-by default; the local Jev profile enables them together.
+unchanged chapters after scrolling or restarting. Attempt identity includes the planner version
+and configured question count, allowing one bounded upgrade attempt while preserving existing
+reviewed answers. Preparation requires answer caching. Optional reader flags remain off by default;
+the local Jev profile enables them with eight-question admission. Broader coverage is still bounded
+by available evidence, successful reviews and spend; eight answers are not promised at every chapter.
 
 ## Chapter extraction screening
 
@@ -184,6 +202,10 @@ python scripts/jev_reuse_audit.py --run --output reuse.json
 python scripts/jev_reuse_audit.py --run --heldout --output reuse-heldout.json
 python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.env --output prepared.json
 python scripts/reader_preparation_audit.py --run --extraction --env-file /path/to/ignored/.env --output extraction-prepared.json
+python scripts/reader_preparation_audit.py --run --broader --extraction --env-file /path/to/ignored/.env --output broader-prepared.json
+python scripts/reader_preparation_audit.py --run --broader --reviewed-fixture --env-file /path/to/ignored/.env --output broader-controlled.json
+python scripts/reader_preparation_audit.py --run --premises --env-file /path/to/ignored/.env --output premises.json
+python scripts/reader_preparation_audit.py --run --premises --heldout --env-file /path/to/ignored/.env --output premises-heldout.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
 python scripts/jev_integration_audit.py --run --partial --repeat 2 --env-file /path/to/ignored/.env --output partial-paired.json
 python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
@@ -197,9 +219,13 @@ cached recap. It includes a complete multi-fact explanation and separately measu
 answers. Inspect semantic results manually: term matches and a small sample are not accuracy
 certification. Integration scripts delete temporary databases and imported EPUBs when finished.
 
-Current preparation verification: two live reviewed synthetic answers returned in 5–40 ms,
-the full reviewed recap in 10 ms, and five page-position saves in 8–16 ms. Preparation cost $0.0021;
-restart incurred no new provider spend and reset rejected advanced answers. The direct reuse sample
+Broader preparation verification: forty frozen question-premise judgments had zero unsupported
+approvals, accepting 19/20 supported questions. The natural live fixture prepared five complete
+reviewed answers in 2–4 ms, kept page-position saves below 7 ms, incurred no new provider spend
+after restart, and rejected advanced answers after reset. Preparation cost $0.0056. A separate
+controlled extraction mode isolates planning while retaining actual independent extraction
+grounding, question review and full answer review; it is not an extraction-quality evaluation.
+The direct reuse sample
 had 0 false accepts across 45 development and 24 held-out multi-candidate checks, accepting only
 4 of 24 eligible paraphrases. That limited recall is intentional; these small samples do not
 establish production accuracy or a universal 1.5-second guarantee.

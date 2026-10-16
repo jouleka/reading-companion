@@ -13,7 +13,9 @@ from app.answer_bank import AnswerBank, answer_scope, valid_answer
 from app.ingest.manifest import load_manifest
 from app.llm import jev_tasks
 from app.llm.jev import JevUnavailable
-from app.reader_prepare import GuardedCache, PreparationCatalog, PreparationScope, PreparationStale, prepare
+from app.reader_prepare import (
+    GuardedCache, PreparationCatalog, PreparationScope, PreparationStale, preparation_key, prepare,
+)
 from app.recap_warm import RecapPrewarmer
 
 
@@ -213,23 +215,29 @@ def test_preparation_uses_only_completed_facts_and_normal_reviewed_answer_route(
     _, bid, app, _ = env
     scope = capture(app, bid)
     app.state.settings.reader_prepare_enabled = True
+    app.state.settings.reader_answer_cache = True
     app.state.settings.reader_prepare_max_questions = 2
     questions, inputs = [], []
     def plan(*args, **kwargs):
         inputs.append(json.loads(kwargs["user"]))
-        return SimpleNamespace(value={"questions": ["Who is Berenice?", "Who is Berenice?",
-                                                     "Where did Berenice meet Aldric?"]})
+        if kwargs["schema"].__name__ == "PreparationReview":
+            return SimpleNamespace(value={"audits": [{"question_id": c["id"],
+                "safe_to_prepare": True, "basis_ids": [1]} for c in inputs[-1]["questions"]]})
+        return SimpleNamespace(value={"questions": [{"question": q, "kind": "character",
+            "basis_ids": [1], "follow_up_to": None} for q in ["Who is Berenice?", "Who is Berenice?",
+                                                     "Where did Berenice meet Aldric?"]]})
     def reviewed(book_id, body, catalog, store, settings, client, worker):
         assert client.preparing and book_id == bid and body.bookmark == 2
         questions.append(body.question)
         client.answers.set((*scope.answer_key, body.question), payload())
+        return payload()
     monkeypatch.setattr("app.reader_prepare.budgeted_completion", plan)
     monkeypatch.setattr("app.api.views.ask_the_book", reviewed)
     prepare(app, scope)
     prepare(app, scope)
-    assert len(inputs) == 1 and len(questions) == 2
+    assert len(inputs) == 2 and len(questions) == 2
     assert "Corvus" not in json.dumps(inputs)
-    assert app.state.reader_client.answers.prepared(scope.answer_key)
+    assert app.state.reader_client.answers.prepared(preparation_key(scope, app.state.settings))
     assert len(app.state.reader_client.answers.candidates(scope.answer_key, "Berenice")) == 2
 
 
@@ -243,6 +251,7 @@ def test_semantic_reuse_is_unchanged_and_never_considers_future_or_retracted_sco
         store=app.state.store, settings=settings, client=client)
     original = "Where did Berenice meet Aldric?"
     client.answers.set((*scope, original), payload())
+    client.answers.mark_suggestion((*scope, original))
     offered = api.get(f"/api/books/{bid}/prepared-questions").json()
     assert offered["questions"] == [original]
     assert api.get(f"/api/books/{bid}/prepared-questions?bookmark=1").json()["questions"] == []
