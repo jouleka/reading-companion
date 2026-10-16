@@ -132,14 +132,78 @@ def install_observers(client, report, phase):
         try:
             if row["unread_canary"]:
                 raise RuntimeError("unread memory reached a provider input")
-            return original(system, user, tier, schema, max_output_tokens)
+            result = original(system, user, tier, schema, max_output_tokens)
+            if row["schema"] == "PreparedQuestions":
+                row["planned_questions"] = result[0].get("questions", [])
+            elif row["schema"] == "PreparationReview":
+                row["accepted_question_ids"] = [a["question_id"] for a in result[0].get("audits", [])
+                                                if a.get("safe_to_prepare")]
+            return result
         except Exception as error:
             row["error"] = type(error).__name__
             raise
         finally:
             row["seconds"] = time.perf_counter()-started
             report["provider_calls"].append(row)
-    setattr(client, method, observed)
+    if client.provider == "openai-compatible" and getattr(client, "_is_native_openai", False):
+        # Observe the actual wire call. Wrapping a bound _complete_openai method would bind
+        # copied foreground-review clients back to the original client's reasoning/tier.
+        def observe_wire(original_wire):
+            def wire(**kwargs):
+                schema = kwargs.get("response_format")
+                row = {**phase, "provider": "generative", "schema": getattr(schema, "__name__", None),
+                    "output_cap": kwargs.get("max_completion_tokens"),
+                    "reasoning_effort": kwargs.get("reasoning_effort"),
+                    "service_tier": kwargs.get("service_tier"),
+                    "unread_canary": CANARY in json.dumps(kwargs.get("messages", []))}
+                started = time.perf_counter()
+                try:
+                    if row["unread_canary"]:
+                        raise RuntimeError("unread memory reached a provider input")
+                    result = original_wire(**kwargs)
+                    parsed = getattr(result.choices[0].message, "parsed", None)
+                    value = parsed.model_dump(mode="json") if parsed is not None else {}
+                    if row["schema"] == "PreparedQuestions":
+                        row["planned_questions"] = value.get("questions", [])
+                    elif row["schema"] == "PreparationReview":
+                        row["accepted_question_ids"] = [a["question_id"] for a in value.get("audits", [])
+                                                        if a.get("safe_to_prepare")]
+                    elif row["schema"] == "Extraction":
+                        row["entity_names"] = [{"name": e["canonical_name"], "aliases": e.get("aliases", [])}
+                                               for e in value.get("entities", [])]
+                    elif row["schema"] == "ExtractionVerdict":
+                        row["review_rejections"] = {k: value.get(k) for k in
+                                                   ("references_future", "unsupported_claims")}
+                        from app.ingest.extraction.validation import _validate_field_evidence
+                        data = json.loads(kwargs["messages"][-1]["content"].split("(untrusted JSON data):\n", 1)[1])
+                        try:
+                            _validate_field_evidence(parsed, data["fields"], data["source_passages"],
+                                                     data["prior_visible_identities"])
+                        except ValueError as error:
+                            row["audit_integrity_error"] = str(error)
+                            row["requested_fields"] = [f["id"] for f in data["fields"]]
+                            row["returned_fields"] = [f["field_id"] for f in value["field_audits"]]
+                            expected = {f["id"]: [s["id"] for s in f["segments"]] for f in data["fields"]}
+                            row["segment_mismatches"] = [
+                                {"field": f["field_id"], "expected": expected.get(f["field_id"]),
+                                 "returned": [s["segment_id"] for s in f["assertions"]]}
+                                for f in value["field_audits"]
+                                if [s["segment_id"] for s in f["assertions"]] != expected.get(f["field_id"])]
+                    elif row["schema"] in {"ReuseVerdict", "PreparedResponseVerdict"}:
+                        row["review"] = value
+                    return result
+                except Exception as error:
+                    row["error"] = type(error).__name__
+                    raise
+                finally:
+                    row["seconds"] = time.perf_counter()-started
+                    report["provider_calls"].append(row)
+            return wire
+        completions = client._oai.chat.completions
+        completions.parse = observe_wire(completions.parse)
+        completions.create = observe_wire(completions.create)
+    else:
+        setattr(client, method, observed)
     original_embed = client.embed
     def observed_embed(texts):
         row = {**phase, "provider": "embedding", "unread_canary": CANARY in json.dumps(texts)}
@@ -163,7 +227,10 @@ def install_observers(client, report, phase):
             try:
                 if row["unread_canary"]:
                     raise RuntimeError("unread memory reached a provider input")
-                return original_jev(state, questions, **kwargs)
+                result = original_jev(state, questions, **kwargs)
+                if any(k.startswith("coverage") for k in questions):
+                    row["reuse_decisions"] = result[0]
+                return result
             except Exception as error:
                 row["error"] = type(error).__name__
                 raise

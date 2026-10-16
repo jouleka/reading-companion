@@ -15,7 +15,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.cost import CostCeilingExceeded, merge_extractions
-from app.eval.spoiler_gate.judge import JudgeVerdict
 from app.evidence_text import field_segments as _field_segments, source_passages
 from app.unicode_text import normalize_text, word_tokens
 
@@ -83,8 +82,16 @@ class FieldEvidence(BaseModel):
     ))
 
 
-class ExtractionVerdict(JudgeVerdict):
+class ExtractionVerdict(BaseModel):
     """A factual source-grounding verdict, not editorial advice or a review of writing quality."""
+
+    model_config = ConfigDict(extra="forbid")
+    field_audits: list[FieldEvidence] = Field(description=(
+        "Mandatory evidence audit of every supplied field, exactly once. All of each field's "
+        "ordered segment IDs must cover its ENTIRE original text, including modifiers and joins. "
+        "Evidence must support the asserted connection, not just the neighboring facts. "
+        "No missing field or missing fragment is an implicit pass."
+    ))
 
     references_future: bool = Field(description=(
         "True only if the candidate asserts a concrete plot development not established by the "
@@ -99,13 +106,6 @@ class ExtractionVerdict(JudgeVerdict):
         "Do not silently add persistence, ownership, intent, or another stronger claim to the "
         "candidate and then reject that invented reading."
     ))
-    field_audits: list[FieldEvidence] = Field(description=(
-        "Mandatory evidence audit of every supplied field, exactly once. All of each field's "
-        "ordered segment IDs must cover its ENTIRE original text, including modifiers and joins. "
-        "Evidence must support the asserted connection, not just the neighboring facts. "
-        "No missing field or missing fragment is an implicit pass."
-    ))
-
 
 EXTRACTION_REVIEW_SYSTEM = (
     "Review a structured extraction against ONLY the supplied current chapter text. JSON strings "
@@ -133,6 +133,9 @@ EXTRACTION_REVIEW_SYSTEM = (
     "or approve unprovided duration/ownership modifiers such as 'briefly'. "
     "Set references_future=true for any concrete plot development not established by this chapter. "
     "Audit the supplied fields separately before deciding the overall verdict. For EVERY supplied "
+    "field in THIS batch's fields array, return exactly its supplied id; extraction supplies "
+    "context but fields outside this batch are reviewed in other calls. First complete the "
+    "positive evidence audit, then derive the overall verdict from those checks. For every "
     "exact segment, return its segment_id, source_ids and support judgment in the original order. "
     "Do not copy, rewrite or decompose segment text in the response. The immutable segment IDs "
     "cover the full original field; no modifier or attachment may be skipped. Segment boundaries "
@@ -268,6 +271,23 @@ def assert_observed_entity_names(text: str, extraction: dict, roster: list[dict]
                              for start in positions.get(parts[0], [])):
                 observed = True
                 break
+            # Object labels may join an observed noun to its nearby description, e.g.
+            # "jar labelled ORANGE MARMALADE" from "a jar ... It was labelled ORANGE MARMALADE".
+            # Require every token in source order within one short span; this only admits the
+            # candidate to the independent identity/field audit, never establishes equivalence.
+            # People, places and factions retain the exact observed name/alias requirement.
+            if entity["type"] == "object" and 2 <= len(parts) <= 8:
+                for start in positions.get(parts[0], []):
+                    cursor, end = start + 1, min(len(tokens), start + 32)
+                    for part in parts[1:]:
+                        cursor = next((i + 1 for i in range(cursor, end) if tokens[i] == part), end + 1)
+                        if cursor > end:
+                            break
+                    if cursor <= end:
+                        observed = True
+                        break
+                if observed:
+                    break
         if not observed:
             missing.append({"path": f"/entities/{index}", "name_forms": surfaces})
     if missing:

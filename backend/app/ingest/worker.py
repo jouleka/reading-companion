@@ -417,6 +417,12 @@ class IngestWorker:
         # input is checked by budgeted_completion too; oversized output fails closed, never truncated.
         overhead = estimate_input_tokens(system, empty_prompt, Extraction)
         chunk_input_limit = overhead + max(0, (chunk_input_limit - overhead) // 2)
+        # Input capacity alone does not bound the structured extraction's output. Long chapters
+        # generated more entities/events than the shared reasoning+output cap could serialize.
+        # Split the exact source into smaller complete pieces; every piece still needs its full
+        # independent review and all pieces must clear before any chapter memory is published.
+        chunk_input_limit = min(chunk_input_limit,
+                                overhead + 3 * self._settings.cost_max_output_tokens_per_call)
         chunks = split_text_for_prompt(
             text,
             prompt_without_text=empty_prompt,

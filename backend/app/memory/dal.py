@@ -42,6 +42,22 @@ VALID_TIME_TABLES = {"entities", "edges", "events", "themes", "entity_state"}
 # are infrastructure; similarly named or newly introduced tables fail closed.
 INFRA_TABLES: set[str] = {"vector_index_meta", *vectors.VEC0_SHADOW_TABLES}
 
+# Cache coherence needs membership and version metadata, never full source text or vectors.
+# Keep this projection explicit so an added fingerprint field cannot silently disappear.
+_CACHE_AUDIT_COLUMNS = {
+    "entities": "entity_id,revealed_at,retracted_at,invalid_at,recorded_at",
+    "aliases": "alias_id,revealed_at,retracted_at,recorded_at",
+    "edges": "edge_id,revealed_at,retracted_at,invalid_at,recorded_at",
+    "events": "event_id,revealed_at,retracted_at,invalid_at,recorded_at,order_idx",
+    "entity_state": "state_id,revealed_at,retracted_at,invalid_at,recorded_at",
+    "themes": "theme_id,revealed_at,retracted_at,invalid_at,recorded_at",
+    "chapter_summaries": "summary_id,revealed_at,retracted_at,recorded_at",
+    "raw_chapters": "chapter_key,revealed_at,retracted_at,recorded_at,content_hash",
+    "chunks": "chunk_id,revealed_at,retracted_at",
+    "chapters": "chapter_key,revealed_at,retracted_at,recorded_at,content_hash,title",
+    "event_participants": "event_id,entity_id,revealed_at",
+}
+
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
@@ -987,6 +1003,13 @@ class MemoryDB:
         app's view reads (ADR 0007 D-A2)."""
         with self._writer():
             return self._conn.execute(f"SELECT * FROM {table}").fetchall()
+
+    def _audit_cache_rows(self, table):
+        """Named audit hatch for cache-version metadata only; not reader-facing content."""
+        if table not in _CACHE_AUDIT_COLUMNS:
+            raise ValueError("table is not part of the cache fingerprint")
+        with self._writer():
+            return self._conn.execute(f"SELECT {_CACHE_AUDIT_COLUMNS[table]} FROM {table}").fetchall()
 
     def close(self):
         self._conn.close()

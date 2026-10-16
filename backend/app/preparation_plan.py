@@ -8,7 +8,7 @@ from app.unicode_text import normalize_text, word_tokens, words
 from app.retrieval_passages import passage_windows
 
 
-PREPARATION_VERSION = "primary-source-questions-v4"
+PREPARATION_VERSION = "primary-source-questions-v7-focused-identities"
 PLAN_OUTPUT_TOKENS = 4096
 REVIEW_OUTPUT_TOKENS = 3072
 KINDS = ("character", "relationship", "event", "motive", "summary", "follow_up")
@@ -55,6 +55,15 @@ include one recap question. Include TWO follow-ups whenever the facts support ad
 of a primary question; label these follow_up, not extra event questions. Do not fill the plan with
 eight event questions. Aim for the full varied coverage, while omitting unsupported categories.
 Every question must be self-contained, name its subject and preserve attribution and uncertainty.
+Relationship questions ask an established tie between named people, especially explicit kinship;
+an action such as providing care or making a visit is an event, not a substitute for that coverage.
+Include relevant supporting characters' stated identities and relationships, not just the protagonist.
+Prefer a character's main observed name over only a diminutive. When the visible identity facts
+establish both forms, include the observed alias in parentheses to retrieve the primary identity
+bridge too. Those identity hints guide retrieval; the final answer still needs primary proof.
+Ask a short question about one concrete episode or relationship. Do not pack a checklist of
+dates, participants and every incidental detail into one question. A prepared answer can include
+related source facts separately without making the question itself complicated.
 Write naturally for a reader. Do not refer to memory records, snapshots, fact IDs or review steps;
 use a chapter number when historical context is needed.
 Keep fact ordinals: an earlier state snapshot does not establish that it persists in a later chapter.
@@ -68,8 +77,8 @@ different facts and people. Returning fewer questions or an empty plan is valid.
 Facts with kind=source are exact completed primary passages. Prefer them over derived summaries,
 which may omit details or contain old extraction errors. Cover concrete who/what/where/when details
 from the current source, including dialogue and the end of the chapter. Include the explicitly
-stated reason, recipient, quantity, location and timing together when they explain one event, so
-a prepared complete answer can also answer narrower questions about that event. Do not combine
+stated reason, recipient, quantity, location and timing across the plan when they explain events.
+The prepared answers will retain related facts as separate cited claims. Do not combine
 unrelated events just to increase coverage. Use the completed chapter number to distinguish
 repeated scenes. Never treat an omitted primary passage as evidence of absence.
 """

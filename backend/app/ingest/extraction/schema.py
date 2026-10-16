@@ -82,6 +82,8 @@ class Event(BaseModel):
     participants: list[str] = Field(description=(
         "Canonical names from extracted entities or the prior roster that are actually involved in "
         "this event. Do not invent identities or treat every name mentioned nearby as a participant."
+        " A person merely discussed, invited or expected is not thereby a participant in the "
+        "conversation; list its actual speakers/actors instead."
     ))
 
 
