@@ -40,6 +40,7 @@ from app.cost import (
     usd_of,
 )
 from app.ingest.extraction.chapter_text import segment_for_ingest
+from app.ingest.extraction.identity import review_identity
 from app.ingest.extraction.pipeline import (
     StalePreparedRoster,
     all_entities,
@@ -56,6 +57,9 @@ from app.ingest.extraction.validation import (
 )
 from app.ingest.manifest import load_manifest
 from app.llm import versioning
+from app.llm import jev_tasks
+from app.llm.jev import JevUnavailable
+from app.llm.jev_budget import budgeted_jev
 
 _RESOLVE_THRESHOLD = 0.82
 _MALFORMED_RETRY_DELAYS = (0.25,)                # initial attempt + one bounded corrective retry
@@ -124,6 +128,7 @@ def _usd_of(model, usage):
 
 class IngestWorker:
     def __init__(self, store, catalog, client, settings, executor=None, sleep=None):
+        self.on_complete = None
         self._store = store
         self._catalog = catalog
         self._client = client
@@ -318,7 +323,12 @@ class IngestWorker:
                         self._state[book_id]["status"] = "done"
                         self._state[book_id]["error"] = None      # a successful run clears stale errors
                         self._running.discard(book_id)
-                        return
+                        break
+            if self.on_complete is not None:
+                try:
+                    self.on_complete(book_id, incarnation)
+                except Exception:
+                    pass  # Best-effort preparation cannot change durable ingestion success.
         except _IngestStopping:
             with self._mu:
                 self._running.discard(book_id)
@@ -463,8 +473,36 @@ class IngestWorker:
                             # so the extraction-only durable receipt is truthful during crash recovery.
                             return reviewed.value, reviewed.usage
 
+                        def screen_extraction(payload):
+                            self._check_stopping()
+                            jev = getattr(self._client, "jev", None)
+                            if not getattr(self._settings, "jev_extraction_enabled", False) or jev is None:
+                                return
+                            def run(state, questions):
+                                self._check_stopping()
+                                return budgeted_jev(
+                                    self._catalog, self._settings, jev, book_id,
+                                    phase="jev-extraction-screen", state=state, questions=questions,
+                                    chapter_ordinal=ordinal,
+                                ).value
+                            try:
+                                issues = jev_tasks.extraction_issues(payload, run=run,
+                                    input_limit=self._settings.cost_max_input_tokens_per_call)
+                            except JevUnavailable:
+                                return  # Outages/oversize/ambiguity never become chapter clearances.
+                            if issues:
+                                raise ExtractionGroundingRejected(
+                                    "extraction could not be grounded in its chapter",
+                                    feedback=[f"Recheck {f['path']} against the current source; "
+                                              "a fast screen flagged a possible unsupported assertion: "
+                                              + f["text"][:180] for f in issues[:4]],
+                                )
+
                         clearance = review_extraction(
                             chunk, validated, roster, complete=reviewed_complete,
+                            max_output_tokens=self._settings.cost_max_output_tokens_per_call,
+                            screen=(screen_extraction if getattr(self._settings, "jev_extraction_enabled", False)
+                                    and getattr(self._client, "jev", None) is not None else None),
                         )
                         parts.append((chunk, validated, clearance))
                         usage_total["in"] += result.usage["in"]
@@ -574,6 +612,41 @@ class IngestWorker:
                 content_language=content_language,
             )                                                           # (2) ALL IO OUTSIDE the lock
             memo = _MemoEmbed(self._client, embed_call=embed_call)
+            identity_attempts = 0
+
+            def identity_review(text, entity, working_roster):
+                nonlocal identity_attempts
+                self._check_stopping()
+                jev = getattr(self._client, "jev", None)
+                # Bound optional work across the initial preparation and all stale-roster retries.
+                if identity_attempts >= 8 or jev is None:
+                    return None
+                def run(state, questions):
+                    nonlocal identity_attempts
+                    self._check_stopping()
+                    identity_attempts += 1
+                    return budgeted_jev(
+                        self._catalog, self._settings, jev, book_id,
+                        phase="jev-identity", state=state, questions=questions,
+                        chapter_ordinal=ch["ordinal"],
+                    ).value
+
+                def complete(system, user, *, tier, schema):
+                    self._check_stopping()
+                    reviewed = budgeted_completion(
+                        self._catalog, self._settings, self._client, book_id,
+                        phase="identity-review", system=system, user=user, tier=tier,
+                        schema=schema, chapter_ordinal=ch["ordinal"],
+                    )
+                    return reviewed.value, reviewed.usage
+
+                link = review_identity(text, entity, working_roster, run=run, complete=complete,
+                    input_limit=self._settings.cost_max_input_tokens_per_call)
+                self._check_stopping()
+                return link
+
+            identity_callback = (identity_review if getattr(self._settings, "jev_identity_enabled", False)
+                                 else None)
             try:
                 self._check_stopping()
                 prepared = prepare_chapter(
@@ -589,6 +662,7 @@ class IngestWorker:
                     threshold=_RESOLVE_THRESHOLD,
                     embedding_input_limit=self._settings.cost_max_input_tokens_per_call,
                     clearance=clearance,
+                    identity_review=identity_callback,
                 )
             except Exception:
                 for reservation_id in reservation_ids:
@@ -629,6 +703,7 @@ class IngestWorker:
                         threshold=_RESOLVE_THRESHOLD,
                         embedding_input_limit=self._settings.cost_max_input_tokens_per_call,
                         clearance=clearance,
+                        identity_review=identity_callback,
                     )
                     memo.seal()
             except Exception:

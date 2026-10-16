@@ -14,6 +14,9 @@ never carry the rejected recap or a future name). Cached in-process by the full 
 (book, catalog incarnation, bookmark, validity_snapshot, current synth model, prompt version,
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
+from copy import deepcopy
+import hashlib
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
@@ -33,6 +36,8 @@ from app.ask import (
     source_facts,
     validate_ask_draft,
 )
+from app.answer_bank import AnswerBusy, answer_scope, valid_answer
+from app.answer_reuse import review_reuse
 from app.ask_context import complete_ask_context
 from app.ask_evidence import (
     ASK_EVIDENCE_SYSTEM,
@@ -40,6 +45,7 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    merge_evidence_audits,
 )
 from app.ask_selection import (
     SOURCE_SELECTION_SYSTEM,
@@ -54,6 +60,7 @@ from app.deps import (
     book_lifecycle,
     get_catalog,
     get_client,
+    get_reader_client,
     get_settings,
     get_store,
     get_worker,
@@ -83,6 +90,9 @@ from app.eval.spoiler_gate.judge import (
 from app.ingest.manifest import AtomSetMismatch, assert_matches_store, load_manifest
 from app.llm.retrieval import budgeted_query_embedding
 from app.llm.client import ProviderUnavailable
+from app.llm.jev import JevUnavailable
+from app.llm.jev_budget import budgeted_jev
+from app.llm import jev_tasks
 from app.reading_assist import (
     CLOSEOUT_SYSTEM,
     SELECTION_SYSTEM,
@@ -92,6 +102,10 @@ from app.reading_assist import (
     chapter_closeout_prompt,
     chapter_passages,
     selection_prompt,
+)
+from app.recap_grounding import (
+    PRIMARY_RECAP_VERSION, primary_generation_prompt, primary_repair_context,
+    primary_review_preflight, primary_snapshot, review_primary_recap,
 )
 
 router = APIRouter(
@@ -228,6 +242,22 @@ def graph(book_id: str, bookmark: int | None = _BM, catalog=Depends(get_catalog)
     return {"as_of_chapter": eff, "characters": chars, "relationships": rels}
 
 
+@router.get("/prepared-questions")
+def prepared_questions(book_id: str, bookmark: int | None = _BM,
+                       catalog=Depends(get_catalog), store=Depends(get_store),
+                       settings=Depends(get_settings), client=Depends(get_reader_client),
+                       worker=Depends(get_worker)):
+    """Read-only: offer questions only when their complete current answer has cleared review."""
+    eff, state, manifest = _effective(book_id, bookmark, catalog, store, settings, worker)
+    questions = []
+    bank = getattr(client, "answers", None)
+    if eff > 0 and settings.reader_answer_cache and bank is not None:
+        scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                             settings=settings, client=client)
+        questions = bank.suggestions(scope, frontier=eff, limit=settings.reader_prepare_max_questions)
+    return {"as_of_chapter": eff, "questions": questions}
+
+
 @router.get("/memory-corrections")
 def memory_corrections(book_id: str, bookmark: int | None = _BM,
                        catalog=Depends(get_catalog), store=Depends(get_store),
@@ -242,7 +272,7 @@ def memory_corrections(book_id: str, bookmark: int | None = _BM,
 
 
 @router.post("/memory-corrections")
-def correct_memory(book_id: str, body: EntityCorrectionRequest,
+def correct_memory(book_id: str, body: EntityCorrectionRequest, request: Request,
                    catalog=Depends(get_catalog), store=Depends(get_store),
                    settings=Depends(get_settings), worker=Depends(get_worker)):
     """Publish a one-for-one identity correction at the reader's exact current frontier."""
@@ -262,6 +292,9 @@ def correct_memory(book_id: str, body: EntityCorrectionRequest,
             items = mem.entity_correction_history(eff)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+    warmer = request.app.state.recap_warmer
+    if warmer is not None:
+        warmer.notify(book_id, catalog.get_book(book_id)["incarnation"], force=True)
     return {"as_of_chapter": eff, **result, "items": items}
 
 
@@ -378,7 +411,7 @@ def _public_ask_source(source):
 
 
 def _complete_citation_evidence(value, sources, *, catalog, settings, client, book_id,
-                                remember, known_names=(), question=None):
+                                remember, known_names=(), question=None, remember_jev=None):
     """Explicit evidence coverage before the fresh, claim-specific semantic review.
 
     This call runs outside the book lock. It may change only citation IDs, using exact spans of
@@ -388,6 +421,32 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
     if draft.insufficient_evidence or client.provider == "stub":
         return complete_ask_citations(draft, sources, known_names=known_names)
     review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
+    approved = None
+    jev = getattr(client, "jev", None)
+    if jev is not None and settings.jev_evidence_enabled:
+        def run(state, questions):
+            result = budgeted_jev(catalog, settings, jev, book_id, phase="jev-citation-review",
+                                  state=state, questions=questions)
+            if remember_jev is not None:
+                remember_jev(result)
+            return result.value
+        try:
+            audit_fn = (jev_tasks.evidence_partial if settings.jev_partial_evidence_enabled
+                        else jev_tasks.evidence)
+            audit = audit_fn(draft.model_dump(mode="json"), sources,
+                             question=question, run=run, settings=settings)
+            approved_ids = [c["claim_id"] for c in audit["claim_audits"]]
+            remaining = [i for i in range(1, len(draft.claims)+1) if i not in approved_ids]
+            if not remaining:
+                reviewed = complete_evidence_citations(draft.model_dump(mode="json"), sources, audit)
+                return complete_ask_citations(AskDraft.model_validate(reviewed), sources,
+                                              known_names=known_names, include_context=False)
+            if approved_ids:
+                approved = audit
+                review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources,
+                                                question=question, claim_ids=remaining)
+        except JevUnavailable:
+            pass  # Existing complete positive-evidence audit remains the bounded fallback.
     try:
         audited = budgeted_completion(
             catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
@@ -400,8 +459,10 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
         # The budget layer already retains their conservative failed-call charge.
         raise AskEvidenceError(repairable=False) from None
     remember(audited)
+    audit_value = (merge_evidence_audits(draft.model_dump(mode="json"), sources, approved, audited.value)
+                   if approved is not None else audited.value)
     reviewed = AskDraft.model_validate(complete_evidence_citations(
-        draft.model_dump(mode="json"), sources, audited.value,
+        draft.model_dump(mode="json"), sources, audit_value,
     ))
     # A positive reviewer can mistake an inline chapter label for a speaker attribution.
     # Add only missing named-body context from this same selected pool, within the existing
@@ -417,9 +478,35 @@ def ask_the_book(
     catalog=Depends(get_catalog),
     store=Depends(get_store),
     settings=Depends(get_settings),
-    client=Depends(get_client),
+    client=Depends(get_reader_client),
     worker=Depends(get_worker),
 ):
+    bank = getattr(client, "answers", None)
+    if settings.reader_answer_cache and hasattr(bank, "run_once"):
+        eff, state, manifest = _effective(book_id, body.bookmark, catalog, store, settings, worker)
+        eff = min(eff, state["ingest_progress"])
+        if eff > 0:
+            scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                                 settings=settings, client=client)
+            cached = bank.get((*scope, body.question))
+            if cached is not None and cached.get("as_of_chapter") == eff and valid_answer(cached):
+                return {**cached, "cached": True, "cost": _ask_cost_payload([])}
+            # A paused background call must not make an interactive request inherit its
+            # cancellation or its smaller preparation ceiling. Share foreground calls only.
+            key = (*scope, body.question, bool(getattr(client, "preparing", False)))
+            try:
+                value, shared = bank.run_once(key, lambda: _ask_the_book(
+                    book_id, body, catalog, store, settings, client, worker))
+            except AnswerBusy as exc:
+                raise HTTPException(503, "answer preparation is busy; retry shortly") from exc
+            if shared:
+                value["cost"] = _ask_cost_payload([])
+                value["cached"] = not value["insufficient_evidence"]
+            return value
+    return _ask_the_book(book_id, body, catalog, store, settings, client, worker)
+
+
+def _ask_the_book(book_id, body, catalog, store, settings, client, worker):
     """Answer only from completed, retrieved passages and return chapter-navigable citations."""
     eff, state, manifest = _effective(book_id, body.bookmark, catalog, store, settings, worker)
     eff = min(eff, state["ingest_progress"])
@@ -443,6 +530,50 @@ def ask_the_book(
             "citations": [],
             "cost": _ask_cost_payload(calls),
         }
+    answer_cache = getattr(client, "answers", None) if settings.reader_answer_cache else None
+    answer_key = None
+    if answer_cache is not None:
+        scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                             settings=settings, client=client)
+        answer_key = (*scope, body.question)
+        cached = answer_cache.get(answer_key)
+        if cached is not None and cached.get("as_of_chapter") == eff and valid_answer(cached):
+            return {**deepcopy(cached), "cached": True, "cost": _ask_cost_payload([])}
+        if (settings.reader_reuse_enabled and not getattr(client, "preparing", False)
+                and getattr(client, "jev", None) is not None):
+            candidates = answer_cache.candidates(scope, body.question)
+            candidates = [c for c in candidates if c["payload"]["as_of_chapter"] == eff
+                          and valid_answer(c["payload"])]
+            if candidates:
+                def reuse_run(data, questions):
+                    result = budgeted_jev(catalog, settings, client.jev, book_id,
+                                          phase="jev-answer-reuse", state=data, questions=questions,
+                                          timeout_seconds=settings.reader_reuse_timeout_seconds)
+                    remember(result, provider="typesafe", model=client.jev.model)
+                    return result.value
+                try:
+                    matched = jev_tasks.reuse_answer(body.question, candidates, run=reuse_run,
+                        settings=settings, review=lambda candidate: review_reuse(
+                            body.question, candidate, frontier=eff, store=store,
+                            atoms={a["key"]: a for a in manifest["atoms"]},
+                            catalog=catalog, settings=settings, client=client, book_id=book_id,
+                            remember=lambda result: remember(result, provider=client.provider,
+                                                             model=client.billing_model("cheap"))))
+                    payload = {**matched["payload"], "cached": True,
+                               "cost": _ask_cost_payload(calls)}
+                    answer_cache.set(answer_key, payload,
+                                     reviewed_question=matched["reviewed_question"])
+                    return payload
+                except JevUnavailable:
+                    pass
+                except CostCeilingExceeded as exc:
+                    raise HTTPException(429, "book cost ceiling reached") from exc
+
+    def finish(payload):
+        if answer_cache is not None and not payload["insufficient_evidence"]:
+            answer_cache.set(answer_key, deepcopy(payload))
+        return payload
+
     with store.book(book_id) as mem:
         pinned = mem.pinned_identity()
     try:
@@ -483,13 +614,30 @@ def ask_the_book(
     if sources and client.provider != "stub":
         candidates = sources
         try:
-            selection = budgeted_completion(
-                catalog, settings, client, book_id, phase="source-selection",
-                system=SOURCE_SELECTION_SYSTEM, user=source_selection_prompt(body.question, sources),
-                tier="cheap", schema=SourceSelection,
-            )
-            remember(selection, provider=client.provider, model=client._model_for("cheap"))
-            sources = validate_selection(selection.value, sources)
+            selected = None
+            jev = getattr(client, "jev", None)
+            if jev is not None and settings.jev_selection_enabled:
+                def select_run(state, questions):
+                    result = budgeted_jev(catalog, settings, jev, book_id,
+                                          phase="jev-source-selection", state=state,
+                                          questions=questions)
+                    remember(result, provider="typesafe", model=jev.model)
+                    return result.value
+                try:
+                    selected = jev_tasks.select(body.question, sources, run=select_run,
+                                                settings=settings, frontier=eff)
+                except JevUnavailable:
+                    pass
+            if selected is None:
+                selection = budgeted_completion(
+                    catalog, settings, client, book_id, phase="source-selection",
+                    system=SOURCE_SELECTION_SYSTEM,
+                    user=source_selection_prompt(body.question, sources, frontier=eff),
+                    tier="cheap", schema=SourceSelection,
+                )
+                remember(selection, provider=client.provider, model=client.billing_model("cheap"))
+                selected = validate_selection(selection.value, sources)
+            sources = selected
             sources = complete_ask_context(body.question, sources, candidates, known_names=known_names,
                                            allow_named_fallback=True)
         except CostCeilingExceeded as exc:
@@ -505,7 +653,7 @@ def ask_the_book(
             "cost": _ask_cost_payload(calls),
         }
 
-    prompt = ask_prompt(body.question, sources)
+    prompt = ask_prompt(body.question, sources, frontier=eff)
     repair_feedback = []
     for _attempt in range(2):
         try:
@@ -522,14 +670,16 @@ def ask_the_book(
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
-        remember(generated, provider=client.provider, model=client._model_for("large"))
+        remember(generated, provider=client.provider, model=client.billing_model("large"))
         try:
             completed = _complete_citation_evidence(
                 generated.value, sources, catalog=catalog, settings=settings, client=client,
                 book_id=book_id, known_names=known_names,
                 question=body.question,
                 remember=lambda result: remember(result, provider=client.provider,
-                                                  model=client._model_for("cheap")),
+                                                  model=client.billing_model("cheap")),
+                remember_jev=lambda result: remember(result, provider="typesafe",
+                                                      model=client.jev.model),
             )
             # The real-provider helper above completed every positive evidence audit. Lexical
             # overlap is not entailment; supported paraphrases still need the fresh judge below.
@@ -572,6 +722,12 @@ def ask_the_book(
                 "The draft failed the completed-source safety checks. Remove unsupported "
                 "developments or bindings and state only what its own cited passages establish."
             ]
+            if score["prolepsis_hits"]:
+                repair_feedback.append(
+                    "Future-modal wording is blocked even inside indirect speech. Report only "
+                    "the completed statement in past tense with explicit named speakers and "
+                    "subjects: 'Mara instructed Lio to marry', not 'Lio will marry'. Do not "
+                    "change the source's certainty or convert its prediction into an event.")
             continue
 
         used = cited_sources(draft, sources)
@@ -588,7 +744,7 @@ def ask_the_book(
                 tier=tier,
                 schema=schema,
             )
-            remember(result, provider=client.provider, model=client._model_for(tier))
+            remember(result, provider=client.provider, model=client.billing_model(tier))
             return result.value, result.usage
 
         try:
@@ -599,6 +755,10 @@ def ask_the_book(
                 tier="cheap",
                 complete=judge_complete,
                 question=body.question,
+                frontier=eff,
+                scene_sources=[s for s in candidates if s["ordinal"] == eff]
+                    if client.provider != "stub" else (),
+                coverage_sources=sources if client.provider != "stub" else (),
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
@@ -609,13 +769,13 @@ def ask_the_book(
                 "The draft asserted a development not established by its cited passages."
             ]
             continue
-        return {
+        return finish({
             "as_of_chapter": eff,
             "insufficient_evidence": False,
             "claims": [claim.model_dump(mode="json") for claim in draft.claims],
             "citations": [_public_ask_source(source) for source in used],
             "cost": _ask_cost_payload(calls),
-        }
+        })
     raise HTTPException(502, "answer could not be cleared against the pages you have read")
 
 
@@ -645,9 +805,9 @@ def selection_action(
     }
     calls = []
 
-    def remember(result, *, model):
+    def remember(result, *, model, provider=None):
         calls.append({
-            "provider": client.provider,
+            "provider": provider or client.provider,
             "model": model,
             "input_tokens": int(result.usage.get("in", 0) or 0),
             "output_tokens": int(result.usage.get("out", 0) or 0),
@@ -754,9 +914,9 @@ def chapter_closeout(
     )
     calls = []
 
-    def remember(result, *, model):
+    def remember(result, *, model, provider=None):
         calls.append({
-            "provider": client.provider,
+            "provider": provider or client.provider,
             "model": model,
             "input_tokens": int(result.usage.get("in", 0) or 0),
             "output_tokens": int(result.usage.get("out", 0) or 0),
@@ -796,6 +956,8 @@ def chapter_closeout(
                 generated.value, sources, catalog=catalog, settings=settings, client=client,
                 book_id=book_id,
                 remember=lambda result: remember(result, model=client._model_for("cheap")),
+                remember_jev=lambda result: remember(result, provider="typesafe",
+                                                      model=client.jev.model),
             )
             draft = validate_ask_draft(completed, sources,
                                        defer_lexical_to_judge=client.provider != "stub")
@@ -934,6 +1096,24 @@ def _budgeted_runner(catalog, settings, client, book_id, phase):
     return complete
 
 
+def _review_recap(client, text, facts, *, catalog, settings, book_id, phase="judge", tier="large"):
+    jev = getattr(client, "jev", None)
+    if jev is not None and settings.jev_recap_enabled:
+        def run(state, questions):
+            return budgeted_jev(catalog, settings, jev, book_id, phase=f"jev-{phase}",
+                                 state=state, questions=questions).value
+        try:
+            return jev_tasks.recap(text, facts, run=run, settings=settings), {}
+        except JevUnavailable:
+            pass
+    runner = _budgeted_runner(catalog, settings, client, book_id, phase)
+    def complete(system, user, **kwargs):
+        if jev is not None:
+            system += jev_tasks.SUMMARY_GROUNDING_RULES
+        return runner(system, user, **kwargs)
+    return judge_recap(client, text, facts, tier=tier, complete=complete)
+
+
 def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, book_type="novel",
               content_language="und"):
     """LIT-29 'right now' one-liner (option b): its OWN small (cheap-tier) model call, spoiler-gated by
@@ -949,7 +1129,8 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
     try:
         now_text, _usage = _budgeted_runner(
             catalog, settings, client, book_id, "now"
-        )(now_system_for(book_type, content_language),
+        )(now_system_for(book_type, content_language) + (
+            jev_tasks.SUMMARY_GROUNDING_RULES if getattr(client, "jev", None) is not None else ""),
           now_prompt(eff, delta, book_type=book_type), tier="cheap")
     except Exception:
         return None                                        # provider error -> no one-liner (fail-safe)
@@ -959,13 +1140,14 @@ def _make_now(client, store, catalog, settings, book_id, eff, delta, facts, *, b
         except SpoilerGateError:
             return None                                    # spoiler-bearing details stay server-side
     try:                                                   # the judge backstop, OUTSIDE the lock
-        verdict, _judge_usage = judge_recap(
-            client, now_text, facts, tier="cheap",
-            complete=_budgeted_runner(catalog, settings, client, book_id, "now-judge"),
+        verdict, _judge_usage = _review_recap(
+            client, now_text, facts, tier="cheap", catalog=catalog, settings=settings,
+            book_id=book_id, phase="now-judge",
         )
     except (JudgeUnavailable, CostCeilingExceeded):
         return None
-    if verdict["references_future"]:
+    if verdict["references_future"] or (getattr(client, "jev", None) is not None
+                                        and verdict["unsupported_claims"]):
         return None
     return now_text.strip() or None
 
@@ -988,7 +1170,7 @@ def _cumulative_recap_facts(facts):
 @router.get("/catch-me-up")
 def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 catalog=Depends(get_catalog), store=Depends(get_store),
-                settings=Depends(get_settings), client=Depends(get_client), worker=Depends(get_worker)):
+                settings=Depends(get_settings), client=Depends(get_reader_client), worker=Depends(get_worker)):
     eff, st, manifest = _effective(book_id, bookmark, catalog, store, settings, worker)
     # the recap can only describe INGESTED chapters: min with the ingest high-water (LIT-12's honest
     # lag — the pending/uningested tail is not recapped), reported as the true as_of.
@@ -1005,6 +1187,13 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         book_type = mem.book_profile()["book_type"]
         content_language = mem.content_language()
     synth_model = client.extractor_version("large")
+    use_primary = client.provider != "stub"
+    if use_primary:
+        review_endpoint = hashlib.sha256(str(getattr(client, "base_url", "")).encode()).hexdigest()
+        synth_model += f":{PRIMARY_RECAP_VERSION}:{client.extractor_version('cheap')}:{review_endpoint}"
+    if getattr(client, "jev", None) is not None:
+        synth_model += (f":jev-hybrid-recap-v2:{settings.jev_recap_enabled}:{client.jev.model}:"
+                        f"{settings.jev_min_probability}:{settings.jev_min_confidence}")
     incarnation = catalog.get_book(book_id)["incarnation"]
     key = (book_id, incarnation, cache_key(
         book_id,
@@ -1015,7 +1204,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         atom_set_version=manifest["atom_set_version"],
     ))
     cached = recaps.get(key)
-    if cached is not None:
+    if cached is not None and cached.get("as_of_chapter") == eff:
         return {**cached, "cached": True}
 
     # SINGLE-FLIGHT per cache key (review pass-1): N concurrent cold requests must pay for ONE
@@ -1029,7 +1218,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         raise HTTPException(502, "recap generation recently failed the spoiler gate; retry shortly")
     with recaps.flight(key):
         cached = recaps.get(key)
-        if cached is not None:
+        if cached is not None and cached.get("as_of_chapter") == eff:
             return {**cached, "cached": True}
         if _recently_failed():                    # the flight ahead of us just failed — don't re-pay
             raise HTTPException(502, "recap generation recently failed the spoiler gate; retry shortly")
@@ -1043,6 +1232,10 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             delta = delta_facts(mem, eff)
             cast = _visible_cast(mem, eff)
             snap_prev = validity_snapshot(mem, eff - 1) if eff >= 2 else None
+            try:
+                primary = primary_snapshot(mem, eff) if use_primary else None
+            except AskRetrievalLimit as exc:
+                raise HTTPException(413, "completed recap text exceeds the search budget") from exc
         prior_recap = None
         if snap_prev is not None:
             prior_key = (book_id, incarnation, cache_key(
@@ -1053,14 +1246,30 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 recap_prompt_version=_recap_prompt_version(book_type, content_language),
                 atom_set_version=manifest["atom_set_version"],
             ))
-            prior_recap = (recaps.get(prior_key) or {}).get("recap")
+            prior_payload = recaps.get(prior_key) or {}
+            prior_recap = (prior_payload.get("recap")
+                           if prior_payload.get("as_of_chapter") == eff - 1 else None)
 
         system = flowing_system_for(book_type, content_language)
+        if getattr(client, "jev", None) is not None:
+            system += jev_tasks.SUMMARY_GROUNDING_RULES
         cumulative_facts = _cumulative_recap_facts(facts)
-        full_review_fits = _recap_input_fits(
+        full_review_fits = not use_primary and _recap_input_fits(
             settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
         )
         recap_final = None
+        primary_correction, primary_now = "", None
+        atoms = {atom["key"]: atom for atom in manifest["atoms"]}
+        source_prompt = None
+        if use_primary:
+            try:
+                source_prompt = primary_generation_prompt(primary, eff, atoms,
+                    byte_limit=min(18000, settings.cost_max_input_tokens_per_call//2))
+            except JudgeUnavailable as exc:
+                raise HTTPException(502, "completed primary evidence could not be prepared") from exc
+            if not _recap_input_fits(settings, client, ASK_EVIDENCE_SYSTEM,
+                                     primary_review_preflight(source_prompt), schema=AskEvidenceReview):
+                raise HTTPException(429, "recap proof exceeds the per-call input ceiling")
         for attempt in range(2):
             # attempt 0: EVOLVE from recap(N-1) + the delta (non-repetitive). If it fails the gate,
             # attempt 1 falls back to the cumulative synthesis — proven grounded, so the reader still
@@ -1075,8 +1284,16 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             else:
                 prompt = synth_prompt(eff, cumulative_facts, book_type=book_type)
                 review_facts = cumulative_facts
+            if use_primary:
+                prompt = source_prompt
+            prompt += primary_correction
+            if use_primary:
+                prompt += ("\nReturn at most six complete sentences, each at most 800 characters. "
+                           "Use explicit named subjects so every sentence can be reviewed separately. "
+                           "Every fact must also be verifiable against the completed primary text; "
+                           "derived chapter memory may contain old errors.")
             if (not _recap_input_fits(settings, client, system, prompt)
-                    or not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                    or not use_primary and not _recap_input_fits(settings, client, JUDGE_SYSTEM,
                                             judge_prompt("", review_facts), schema=JudgeVerdict)):
                 raise HTTPException(429, "recap evidence exceeds the per-call input ceiling")
             try:
@@ -1087,10 +1304,32 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 raise HTTPException(429, "book cost ceiling reached") from exc
             with store.book(book_id) as mem:
                 try:
-                    assert_recap_safe(mem, eff, recap, read_text=read_text_upto(mem, eff))
+                    if use_primary:
+                        score = score_recap(mem, eff, recap, read_text=read_text_upto(mem, eff))
+                        if (score["future_entity_leaks"] or score["prolepsis_hits"]
+                                or score["unsupported_event_bindings"]):
+                            continue
+                        # Legacy-memory word overlap cannot validate or veto primary facts.
+                        # Complete positive support is mandatory in the raw-source audits below,
+                        # followed by the independent own-citation judge (the same Ask policy).
+                    else:
+                        assert_recap_safe(mem, eff, recap, read_text=read_text_upto(mem, eff))
                 except SpoilerGateError:
                     # spoiler-bearing details stay server-side (D-A9 pass-2) — never the response
                     continue
+            if use_primary:
+                try:
+                    primary_now, _sources = review_primary_recap(
+                        recap, primary, eff, atoms, catalog=catalog, settings=settings,
+                        client=client, book_id=book_id,
+                    )
+                except CostCeilingExceeded as exc:
+                    raise HTTPException(429, "book cost ceiling reached") from exc
+                except (JudgeUnavailable, AskEvidenceError, ValueError):
+                    primary_correction = primary_repair_context(recap, primary, eff, atoms)
+                    continue
+                recap_final = recap
+                break
             # THE LLM-JUDGE BACKSTOP (LIT-14, ADR 0004 Vector 3), OUTSIDE the lock (D-A3): the semantic
             # net for a paraphrased future EVENT the deterministic gate can't see (past tense, no future
             # name, no modal). references_future is a HARD reject; a judge outage fails CLOSED (no
@@ -1100,15 +1339,16 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                                      judge_prompt(recap, review_facts), schema=JudgeVerdict):
                 raise HTTPException(429, "recap review exceeds the per-call input ceiling")
             try:
-                verdict, _judge_usage = judge_recap(
-                    client, recap, review_facts,
-                    complete=_budgeted_runner(catalog, settings, client, book_id, "judge"),
+                verdict, _judge_usage = _review_recap(
+                    client, recap, review_facts, catalog=catalog, settings=settings,
+                    book_id=book_id,
                 )
             except CostCeilingExceeded as exc:
                 raise HTTPException(429, "book cost ceiling reached") from exc
             except JudgeUnavailable:
                 continue
-            if verdict["references_future"]:
+            if verdict["references_future"] or (getattr(client, "jev", None) is not None
+                                                and verdict["unsupported_claims"]):
                 continue
             recap_final = recap
             break
@@ -1116,7 +1356,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         if recap_final is not None:
             recaps.clear_failed(key)
             # the 'right now' one-liner — best-effort, fail-safe to absent (never blocks a cleared recap)
-            now_text = _make_now(
+            now_text = primary_now if use_primary else _make_now(
                 client, store, catalog, settings, book_id, eff, delta, facts,
                 book_type=book_type, content_language=content_language,
             )

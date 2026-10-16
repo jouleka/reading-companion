@@ -43,7 +43,9 @@ class Entity(BaseModel):
     canonical_name: str = Field(description=(
         "Name of a salient person, organization/faction, significant setting, or concrete object "
         "needed to understand the section. Reuse a known identity's canonical name. Do not catalog "
-        "generic background nouns."
+        "generic background nouns. A NEW identity needs an exact phrase present in this section "
+        "as its name or source-native alias. Use an observed description such as 'his wife' when "
+        "no personal name is given; do not infer a spouse's name or import a remembered full name."
     ))
     type: EntityType              # character | place | faction | object
     aliases: list[str] = Field(description=(

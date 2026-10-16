@@ -1,4 +1,4 @@
-"""Bounded process-local recap state (LIT-33).
+"""Bounded recap state, with an optional compact checkpoint of cleared positive recaps.
 
 Positive and negative results are independent LRU maps. Per-key synthesis locks are reference-counted
 and removed as soon as their holder/waiters leave; a semaphore caps the number of distinct active
@@ -10,6 +10,10 @@ observing an earlier shelf incarnation even before explicit invalidation runs.
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
+import hashlib
+import json
+import os
+from pathlib import Path
 import threading
 import time
 
@@ -21,7 +25,7 @@ class _Flight:
 
 
 class RecapRegistry:
-    def __init__(self, *, max_entries: int, max_failures: int, max_flights: int):
+    def __init__(self, *, max_entries: int, max_failures: int, max_flights: int, persist_path=None):
         for name, value in (
             ("max_entries", max_entries),
             ("max_failures", max_failures),
@@ -36,6 +40,75 @@ class RecapRegistry:
         self._flights: dict[tuple, _Flight] = {}
         self._gate = threading.Lock()
         self._flight_slots = threading.BoundedSemaphore(max_flights)
+        self._path = Path(persist_path) if persist_path is not None else None
+        self._load()
+
+    @staticmethod
+    def _encoded(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+    @staticmethod
+    def _valid_recap(value):
+        return (isinstance(value, dict) and isinstance(value.get("recap"), str)
+                and 0 < len(value["recap"]) <= 20000
+                and (value.get("now") is None or isinstance(value["now"], str))
+                and type(value.get("as_of_chapter")) is int and value["as_of_chapter"] > 0
+                and all(type(value.get(k)) is int and value[k] >= 0
+                        for k in ("cast_size", "open_threads"))
+                and isinstance(value.get("cast"), list) and len(value["cast"]) <= 2000
+                and all(isinstance(c, dict) and isinstance(c.get("name"), str)
+                        and type(c.get("entity_id")) is int for c in value["cast"])
+                and value.get("cached") is False)
+
+    def _load(self):
+        if self._path is None:
+            return
+        try:
+            with self._path.open("rb") as stream:
+                raw = stream.read(2 * 1024 * 1024 + 1)
+            if len(raw) > 2 * 1024 * 1024:
+                return
+            checkpoint = json.loads(raw)
+            rows = checkpoint["rows"]
+            if (checkpoint["version"] != 1 or not isinstance(rows, list)
+                    or len(rows) > self._max_entries
+                    or hashlib.sha256(self._encoded(rows)).hexdigest() != checkpoint["sha256"]):
+                return
+            for key, value in rows:
+                if (not isinstance(key, list) or len(key) != 3
+                        or not all(isinstance(k, str) for k in key) or not self._valid_recap(value)):
+                    return
+            self._cache.update((tuple(key), value) for key, value in rows)
+        except (OSError, ValueError, TypeError, KeyError):
+            pass  # A damaged or old cache is a miss, never a partially trusted recap.
+
+    def _save(self):
+        if self._path is None:
+            return
+        temporary = self._path.with_suffix(".tmp")
+        try:
+            # Only this registry's cleared recap payloads may be persisted. Answers and failures
+            # use process-local registries. One bounded file avoids accumulating per-run artifacts.
+            rows = [[list(k), v] for k, v in self._cache.items() if self._valid_recap(v)]
+            while rows:
+                raw = self._encoded({"version": 1, "rows": rows,
+                                     "sha256": hashlib.sha256(self._encoded(rows)).hexdigest()})
+                if len(raw) <= 2 * 1024 * 1024:
+                    break
+                rows.pop(0)
+            if not rows:
+                raw = self._encoded({"version": 1, "rows": [],
+                                    "sha256": hashlib.sha256(self._encoded([])).hexdigest()})
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_bytes(raw)
+            os.replace(temporary, self._path)
+        except (OSError, ValueError, TypeError):
+            pass  # Availability must not depend on the optional checkpoint being writable.
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     @staticmethod
     def _trim(mapping, limit):
@@ -54,6 +127,7 @@ class RecapRegistry:
             self._cache[key] = value
             self._cache.move_to_end(key)
             self._trim(self._cache, self._max_entries)
+            self._save()
 
     def failure_recent(self, key, *, ttl: float, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
@@ -125,6 +199,7 @@ class RecapRegistry:
             for mapping in (self._cache, self._failed):
                 for key in [candidate for candidate in mapping if candidate[0] == book_id]:
                     del mapping[key]
+            self._save()
 
     def stats(self):
         with self._gate:

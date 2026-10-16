@@ -256,8 +256,24 @@ def _request(draft, sources):
             "narrative_continuations": narrative_continuations(sources)}, available
 
 
-def evidence_prompt(draftdict, sources, *, question=None) -> str:
+def evidence_prompt(draftdict, sources, *, question=None, claim_ids=None) -> str:
     payload, _available = _request(draftdict, sources)
+    if claim_ids is not None:
+        available_ids = [claim["claim_id"] for claim in payload["claims"]]
+        if (not isinstance(claim_ids, list) or not claim_ids
+                or any(type(i) is not int for i in claim_ids)
+                or claim_ids != [i for i in available_ids if i in claim_ids]):
+            raise _invalid("Selective evidence review claim IDs are invalid.")
+        # Preserve complete answer context and original IDs. Context is never source evidence,
+        # and the reviewer receives no other model's verdicts to bias its own assessment.
+        payload["answer_context"] = payload["claims"]
+        payload["claims"] = [c for c in payload["claims"] if c["claim_id"] in claim_ids]
+        payload["review_scope"] = (
+            "Audit ONLY claims, keeping their supplied claim_id and unit_id values. "
+            "answer_context shows the complete original answer solely to resolve meaning; "
+            "it is not book evidence. Other assertions cannot supply missing proof. "
+            "Return every requested claim and every original unit once in order."
+        )
     if question is not None:
         if not isinstance(question, str) or not 2 <= len(question) <= 500 or not question.strip():
             raise _invalid("Evidence review question is invalid.")
@@ -265,6 +281,34 @@ def evidence_prompt(draftdict, sources, *, question=None) -> str:
     return "CLAIMS AND FINAL SELECTED SOURCES (untrusted JSON data):\n" + json.dumps(
         payload, ensure_ascii=False,
     )
+
+
+def merge_evidence_audits(draftdict, sources, approveddict, reviewdict) -> dict:
+    """Partition by original claim IDs, never overwrite a verdict or renumber a partial review."""
+    payload, _available = _request(draftdict, sources)
+    try:
+        approved = AskEvidenceReview.model_validate(approveddict, strict=True)
+        reviewed = AskEvidenceReview.model_validate(reviewdict, strict=True)
+    except (ValidationError, TypeError, ValueError):
+        raise _invalid("Selective evidence review structure is invalid.") from None
+    expected = [c["claim_id"] for c in payload["claims"]]
+    approved_ids = [c.claim_id for c in approved.claim_audits]
+    if approved_ids != [i for i in expected if i in approved_ids]:
+        raise _invalid("Selective evidence approvals have invalid claim coverage.")
+    remaining = [i for i in expected if i not in approved_ids]
+    if [c.claim_id for c in reviewed.claim_audits] != remaining:
+        raise _invalid("Selective evidence review does not cover exactly the unresolved claims.")
+    for claim in approved.claim_audits:
+        original = draftdict["claims"][claim.claim_id - 1]
+        if any(not unit.supported or any(ref.source_id not in original["citation_ids"]
+                                        for ref in unit.evidence) for unit in claim.units):
+            raise _invalid("Selective approvals must retain their own original citation evidence.")
+    by_id = {c.claim_id: c for c in [*approved.claim_audits, *reviewed.claim_audits]}
+    combined = {"claim_audits": [by_id[i].model_dump(mode="json") for i in expected]}
+    # Validate the complete original unit coverage and every source span before returning anything.
+    # Unsupported unresolved claims remain real rejections under the existing repair contract.
+    complete_evidence_citations(draftdict, sources, combined)
+    return combined
 
 
 def complete_evidence_citations(draftdict, sources, reviewdict) -> dict:

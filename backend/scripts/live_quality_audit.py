@@ -80,8 +80,12 @@ def install_call_recording(provider, report, output_cap):
         ).encode("utf-8")).hexdigest()
         if getattr(provider, "_is_native_openai", False) and record["model"] in _NATIVE_REASONING_EFFORT:
             record["configured_reasoning_effort"] = _NATIVE_REASONING_EFFORT[record["model"]]
-            record["configured_service_tier"] = "default"
+            record["configured_service_tier"] = getattr(provider, "service_tier", "default")
         report.setdefault("model_calls", []).append(record)
+        if getattr(schema, "__name__", None) == "AskEvidenceReview":
+            payload = json.loads(user.split("(untrusted JSON data):\n", 1)[1])
+            record["audited_claim_ids"] = [c["claim_id"] for c in payload["claims"]]
+            record["context_claim_ids"] = [c["claim_id"] for c in payload.get("answer_context", [])]
         try:
             value, usage = complete(system, user, tier, schema, cap)
             record.update(status="succeeded", usage=usage, response=value)

@@ -23,6 +23,7 @@ export function AskTheBook({
   const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [prepared, setPrepared] = useState<{ bookId: string; bookmark: number; questions: string[] } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const onCloseRef = useRef(requestClose);
@@ -61,6 +62,20 @@ export function AskTheBook({
       requestRef.current += 1;
     };
   }, [bookId, bookmark]);
+
+  useEffect(() => {
+    let active = true;
+    void api.preparedQuestions(bookId, bookmark).then((result) => {
+      if (active && result.as_of_chapter <= bookmark) {
+        setPrepared({ bookId, bookmark, questions: result.questions });
+      }
+    }).catch(() => { /* Suggestions remain available when preparation is unavailable. */ });
+    return () => { active = false; };
+  }, [bookId, bookmark]);
+
+  const suggestions = prepared?.bookId === bookId && prepared.bookmark === bookmark && prepared.questions.length
+    ? prepared.questions
+    : ["What should I remember so far?", "What are the key connections?"];
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -137,10 +152,7 @@ export function AskTheBook({
           />
           {!answer && !busy && (
             <div className="ask-suggestions" aria-label="Suggested questions">
-              {[
-                "What should I remember so far?",
-                "What are the key connections?",
-              ].map((prompt) => (
+              {suggestions.map((prompt) => (
                 <Button
                   key={prompt}
                   variant="ghost"

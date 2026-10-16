@@ -17,6 +17,7 @@ production changes:
 """
 from app.ingest.extraction import resolve as R
 from app.ingest.extraction.chapter_text import content_hash_of
+from app.ingest.extraction.identity import IdentityLink, ResolutionClearance
 from app.ingest.extraction.resolve import _norm
 from app.ingest.extraction.schema import Extraction
 from app.ingest.extraction.validation import (
@@ -65,7 +66,7 @@ def _changed_content_error(key):
 
 def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embed_fn=None,
                     resolve_embed=None, identity=None, threshold=0.82, embedding_input_limit=60_000,
-                    clearance=None):
+                    clearance=None, identity_review=None):
     """Validate and prepare every model-derived value without accepting a ``MemoryDB`` handle.
 
     Callers run this outside ``Store.book()``. The returned object contains only values consumed by the
@@ -100,7 +101,19 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
     chunk_embed = embed_fn or (lambda texts: client.embed(texts)[0])
     passages = prepare_passages(ch.get("title", ""), text, chunk_embed,
                                 input_limit=embedding_input_limit)
-    decisions = R.resolve_chapter(extraction["entities"], roster, resolve_embed, threshold)
+    def checked_identity(entity, working_roster):
+        # Provider adapters receive a copy. A mutating callback cannot alter prepared memory.
+        import copy
+        link = identity_review(text, copy.deepcopy(entity), copy.deepcopy(working_roster))
+        if link is None:
+            return None
+        if not isinstance(link, IdentityLink):
+            raise ExtractionSafetyError("identity review requires a source-bound clearance")
+        link.assert_matches(text, entity, working_roster)
+        return link.entity_id
+
+    decisions = R.resolve_chapter(extraction["entities"], roster, resolve_embed, threshold,
+        identity_review=checked_identity if identity_review is not None else None)
     return {
         "chapter_key": ch["key"],
         "ordinal": ch["ordinal"],
@@ -114,6 +127,7 @@ def prepare_chapter(ch, extraction, client, *, roster, usage=None, usd=0.0, embe
         "source_hash": source_digest(ch.get("title", ""), text),
         "completion_cost": completion_cost,
         "clearance": clearance,
+        "resolution_clearance": ResolutionClearance.bind(text, extraction, roster, decisions),
     }
 
 
@@ -144,6 +158,10 @@ def ingest_chapter(mem, ch, prepared):
         raise _changed_content_error(key)
     if all_entities(mem.view(max(ordinal - 1, 0))) != prepared["roster"]:
         raise StalePreparedRoster("identity roster changed; prepare the extraction again before commit")
+    resolution = prepared.get("resolution_clearance")
+    if not isinstance(resolution, ResolutionClearance):
+        raise ExtractionSafetyError("identity resolution requires a preparation clearance")
+    resolution.assert_matches(text, prepared["extraction"], prepared["roster"], prepared["decisions"])
     with mem.transaction():
         result = _write_chapter(
             mem,

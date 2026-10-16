@@ -6,6 +6,7 @@ import logging
 import tempfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
@@ -402,11 +403,26 @@ def create_app(
                 max_entries=settings.recap_cache_max_entries,
                 max_failures=settings.recap_failure_max_entries,
                 max_flights=settings.recap_max_inflight,
+                persist_path=(Path(settings.data_dir) / "reviewed-recaps-v1.json"
+                              if settings.recap_disk_cache else None),
             )
+            warmer = None
+            if settings.recap_prewarm or settings.reader_prepare_enabled:
+                from app.recap_warm import RecapPrewarmer
+                warmer = RecapPrewarmer(app)
+                app.state.worker.on_complete = warmer.notify
+                for book in state["catalog"].list_books()[:8]:
+                    if state["catalog"].high_water(book["book_id"]):
+                        warmer.notify(book["book_id"], book["incarnation"])
+            app.state.recap_warmer = warmer
             try:
                 yield
             finally:
                 app.state.worker.shutdown()
+                if warmer is not None:
+                    await warmer.close()
+                if getattr(state["client"], "jev", None) is not None:
+                    state["client"].jev.close()
                 app.state.store.close()
                 app.state.catalog.close()
         finally:

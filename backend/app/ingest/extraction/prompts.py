@@ -32,7 +32,16 @@ _FINAL_EXTRACTION_CHECK = (
     "and repetitive scenery events unless they matter to the section's actions or main subject. "
     "Use empty relationship/theme arrays when nothing suitable is established, and null for unstated "
     "states. Put one-off actions in events and nickname links in aliases. State only supported "
-    "snapshots and direct consequences, with no invented motives, secrecy, duration, or ownership."
+    "snapshots and direct consequences, with no invented motives, secrecy, duration, or ownership. "
+    "For EVERY new entity, use a name or identifying phrase actually present in the current text "
+    "as its canonical name or source-native alias. Do not expand a first name into a remembered "
+    "full name or invent descriptive labels combining words from different places. If an unnamed "
+    "role has no useful observed name, describe its action in the summary instead of adding an "
+    "entity. Do not invent an alias just to make an identity pass this check."
+    " A spouse's surname or a famous character's usual name is not an observed surface: if the "
+    "source calls someone only 'his wife', use that exact identifying phrase rather than 'Mrs' "
+    "plus the husband's surname. If repair flags a name, remove that unobserved form completely "
+    "and use an exact source phrase consistently in the identity, states and event participants."
 )
 
 EXTRACT_SYSTEM = (

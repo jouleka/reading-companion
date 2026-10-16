@@ -177,7 +177,7 @@ def test_actual_recap_overflow_stops_before_review_without_retry_or_cache(runtim
 
 
 @pytest.mark.parametrize("change", ["model", "provider"])
-def test_current_model_and_provider_identity_invalidate_recap_cache_without_repinning(runtime, change):
+def test_current_model_and_provider_identity_invalidate_recap_cache_without_repinning(runtime, change, monkeypatch):
     with runtime.app.state.store.book(runtime.book_id) as mem:
         original_pin = mem.pinned_identity()["synth_model"]
     assert _recap(runtime).json()["cached"] is False
@@ -187,6 +187,11 @@ def test_current_model_and_provider_identity_invalidate_recap_cache_without_repi
         runtime.client.large_model = "gpt-5.4"
     else:
         runtime.client.provider = "anthropic"  # the fixture adapter remains the pure offline stub
+        runtime.settings.cost_max_input_tokens_per_call = runtime.ingest_input_ceiling
+        # This test isolates cache identity. Primary proof has separate adversarial route tests;
+        # the crude offline echo is not a factual recap and cannot stand in for that reviewer.
+        from app.api import views
+        monkeypatch.setattr(views, "review_primary_recap", lambda *a, **kw: (None, []))
     changed = _recap(runtime)
     assert changed.status_code == 200 and changed.json()["cached"] is False
     assert len(_syntheses(runtime)) == 2

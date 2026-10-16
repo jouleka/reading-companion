@@ -1,0 +1,161 @@
+"""Opt-in paired live API benchmark. Only the authored synthetic EPUB is sent to providers."""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import statistics
+import sys
+import tempfile
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.llm.jev import JevClient, windows_credential
+from app.main import create_app
+from live_quality_audit import CASES, InlineExecutor, fixture, install_call_recording, cost_snapshot
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run", action="store_true")
+    parser.add_argument("--env-file", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--reader-fast-mode", action="store_true")
+    parser.add_argument("--partial", action="store_true", help="Compare complete versus unresolved-only GPT evidence audits")
+    parser.add_argument("--repeat", type=int, choices=range(1, 4), default=1)
+    args = parser.parse_args()
+    if not args.run:
+        parser.error("--run is required for the capped paid comparison")
+    report = {"scope": "Paired live synthetic API sample, one shared ingested book, same model roles. "
+                       "Small sample; terms are triage, inspect complete claims and citations.",
+              "per_book_budget_usd": 1.0, "cases": [], "jev_calls": []}
+    modes = ("jev", "partial") if args.partial else ("gpt", "jev")
+    report["modes"] = modes
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    def save():
+        args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    with tempfile.TemporaryDirectory(prefix="jev-integration-") as scratch:
+        settings = Settings(_env_file=str(args.env_file), data_dir=str(Path(scratch)/"data"),
+                            frontend_dist_dir=None, trusted_hosts="testserver", deployment_mode="local",
+                            jev_enabled=False, recap_prewarm=False, cost_max_usd_per_book=1.0,
+                            reader_fast_mode=args.reader_fast_mode, reader_answer_cache=True,
+                            openai_base_url="https://api.openai.com/v1",
+                            embed_provider="openai-compatible", embed_base_url="https://api.openai.com/v1",
+                            embed_api_key=None, embed_model="text-embedding-3-small")
+        report["models"] = {"cheap": settings.llm_cheap_model, "large": settings.llm_large_model,
+                             "jev": settings.jev_model}
+        app = create_app(settings, ingest_executor=InlineExecutor())
+        with TestClient(app, raise_server_exceptions=False) as api:
+            provider = app.state.reader_client
+            provider.max_retries = 0
+            provider._oai = provider._oai.with_options(max_retries=0)
+            provider._embed_oai = provider._embed_oai.with_options(max_retries=0)
+            install_call_recording(provider, report, settings.cost_max_output_tokens_per_call)
+            jev = JevClient(api_key=windows_credential(), model=settings.jev_model)
+            original = jev.evaluate
+            def evaluate(state, questions):
+                started = time.perf_counter()
+                try:
+                    answers, usage = original(state, questions)
+                    report["jev_calls"].append({"seconds": round(time.perf_counter()-started, 4),
+                                                "questions": len(questions), "usage": usage,
+                                                "answers": answers})
+                    return answers, usage
+                finally:
+                    save()
+            jev.evaluate = evaluate
+            imported = api.post("/api/books", files={"file": (
+                "synthetic.epub", fixture(), "application/epub+zip")})
+            if imported.status_code != 201:
+                raise RuntimeError("Synthetic import failed")
+            bid = imported.json()["book_id"]
+            try:
+                atoms = json.loads((Path(settings.data_dir)/"books"/bid/"atoms.json").read_text())["atoms"]
+                started = time.perf_counter()
+                api.put(f"/api/books/{bid}/position", json={"cfi": "synthetic", "position_epoch": 0,
+                                                           "offset": sum(a["char_len"] for a in atoms[:2])})
+                ingest = api.get(f"/api/books/{bid}/ingest").json()
+                report["ingestion"] = {"seconds": time.perf_counter()-started, "result": ingest}
+                save()
+                if ingest.get("ingest_progress") != 2:
+                    report["status"] = "ingestion-not-cleared"
+                    return 1
+                # Alternate order by case to reduce time-of-run/order bias; no request retries.
+                cases = [*CASES, {"id": "multi-fact-explanation", "bookmark": 2,
+                    "question": "Explain the brass key's journey: who lent it, where Mara kept it, "
+                                "and how it was returned.", "expected": "answer",
+                    "required": ["jonas", "mara", "red tin", "sink", "return"]}]
+                for i, case in enumerate(cases * args.repeat):
+                    for mode in (modes if i % 2 == 0 else modes[::-1]):
+                        provider.jev = jev if mode in {"jev", "partial"} else None
+                        settings.jev_partial_evidence_enabled = mode == "partial"
+                        provider.answers.invalidate_book(bid)
+                        before = len(report.get("model_calls", [])), len(report["jev_calls"])
+                        started = time.perf_counter()
+                        response = api.post(f"/api/books/{bid}/ask", json={
+                            "question": case["question"], "bookmark": case["bookmark"],
+                        })
+                        value = response.json()
+                        claims = value.get("claims", [])
+                        text = " ".join(c["text"] for c in claims).lower()
+                        citations = value.get("citations", [])
+                        passed = (response.status_code == 200
+                                  and value.get("as_of_chapter") == case["bookmark"]
+                                  and all(c["ordinal"] <= case["bookmark"] for c in citations)
+                                  and (value.get("insufficient_evidence") is True and not claims
+                                       if case["expected"] == "refuse" else
+                                       bool(claims) and bool(citations)
+                                       and all(t in text for t in case["required"])))
+                        report["cases"].append({**case, "mode": mode,
+                            "seconds": round(time.perf_counter()-started, 4), "status": response.status_code,
+                            "basic_check": passed, "response": value,
+                            "model_calls": len(report.get("model_calls", []))-before[0],
+                            "evidence_calls": [c for c in report.get("model_calls", [])[before[0]:]
+                                               if c.get("schema") == "AskEvidenceReview"],
+                            "jev_calls": len(report["jev_calls"])-before[1]})
+                        if value.get("claims") and response.status_code == 200:
+                            started = time.perf_counter()
+                            repeat = api.post(f"/api/books/{bid}/ask", json={
+                                "question": case["question"], "bookmark": case["bookmark"]})
+                            report["cases"][-1]["cached_seconds"] = round(time.perf_counter()-started, 4)
+                            report["cases"][-1]["cache_exact"] = (
+                                repeat.json().get("cached") is True
+                                and repeat.json().get("claims") == claims
+                                and repeat.json().get("citations") == citations
+                                and repeat.json().get("cost", {}).get("calls") == [])
+                        save()
+                for mode in modes:
+                    provider.jev = jev if mode in {"jev", "partial"} else None
+                    settings.jev_partial_evidence_enabled = mode == "partial"
+                    app.state.recaps.invalidate_book(bid)
+                    for cache in ("cold", "warm"):
+                        started = time.perf_counter()
+                        response = api.get(f"/api/books/{bid}/catch-me-up", params={"bookmark": 999})
+                        report.setdefault("recaps", []).append({
+                            "mode": mode, "cache": cache, "seconds": round(time.perf_counter()-started, 4),
+                            "status": response.status_code, "response": response.json()})
+                        save()
+                api.post(f"/api/books/{bid}/position/reset", json={"position_epoch": 0})
+                reset = api.get(f"/api/books/{bid}/catch-me-up", params={"bookmark": 999})
+                report["reset"] = reset.json()
+                report["status"] = "completed-needs-manual-review"
+            finally:
+                report["cost"] = cost_snapshot(app.state.catalog, bid)
+                provider.jev = None
+                jev.close()
+                report["latency"] = {mode: {"median_seconds": statistics.median(
+                    c["seconds"] for c in report["cases"] if c["mode"] == mode)}
+                    for mode in modes if any(c["mode"] == mode for c in report["cases"])}
+                save()
+    print(json.dumps({"status": report["status"], "latency": report["latency"],
+                      "basic_passed": sum(c["basic_check"] for c in report["cases"]),
+                      "cases": len(report["cases"])}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

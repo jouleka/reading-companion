@@ -4,7 +4,7 @@ server derives the integer bookmark through the frontier over the import-time at
 persists it as a monotonic high-water (the catalog's SQL MAX — a backward page never lowers it,
 matching ``max(cfi_to_bookmark(cfi), stored_bookmark)``). Every route here FAILS CLOSED on a corrupt /
 store-divergent manifest (D-A10's version check made concrete)."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, StrictInt
 
 from app.deps import book_lifecycle, get_catalog, get_settings, get_store, get_worker
@@ -69,7 +69,7 @@ def get_position(book_id: str, catalog=Depends(get_catalog), store=Depends(get_s
 
 
 @router.put("/position", dependencies=[Depends(book_lifecycle)])
-def put_position(book_id: str, pos: PositionIn, catalog=Depends(get_catalog),
+def put_position(book_id: str, pos: PositionIn, request: Request, catalog=Depends(get_catalog),
                  store=Depends(get_store), settings=Depends(get_settings),
                  worker=Depends(get_worker)):
     # One incarnation owns the whole transition: validation, position commit, and enqueue publication.
@@ -90,6 +90,9 @@ def put_position(book_id: str, pos: PositionIn, catalog=Depends(get_catalog),
         # The worker validates explicit v2 completion markers even when legacy catalog progress
         # already reaches this bookmark; matching durable receipts replay idempotently.
         worker.enqueue(book_id, bookmark)
+    warmer = request.app.state.recap_warmer
+    if warmer is not None:
+        warmer.notify(book_id, catalog.get_book(book_id)["incarnation"], foreground=True)
     return {
         "bookmark": bookmark,
         "cfi": pos.cfi,
@@ -101,7 +104,7 @@ def put_position(book_id: str, pos: PositionIn, catalog=Depends(get_catalog),
 
 
 @router.post("/position/reset", dependencies=[Depends(book_lifecycle)])
-def reset_position(book_id: str, reset: PositionResetIn, catalog=Depends(get_catalog),
+def reset_position(book_id: str, reset: PositionResetIn, request: Request, catalog=Depends(get_catalog),
                    store=Depends(get_store), settings=Depends(get_settings)):
     """Start a new pass while retaining extracted memory, receipts, and spend history."""
     manifest, _bounds, durable = _load_checked(book_id, catalog, store, settings)
@@ -109,6 +112,9 @@ def reset_position(book_id: str, reset: PositionResetIn, catalog=Depends(get_cat
         state = catalog.reset_position(book_id, expected_epoch=reset.position_epoch)
     except ValueError as error:
         _position_conflict(error)
+    warmer = request.app.state.recap_warmer
+    if warmer is not None:
+        warmer.notify(book_id, catalog.get_book(book_id)["incarnation"], foreground=True)
     return {
         "bookmark": state["bookmark"],
         "cfi": state["cfi"],

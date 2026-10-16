@@ -154,4 +154,7 @@ def delete_book(book_id: str, request: Request, catalog=Depends(get_catalog),
         catalog.remove_book(book_id)
         worker.invalidate_book(book_id)
         request.app.state.recaps.invalidate_book(book_id)
+        answer_cache = getattr(request.app.state.reader_client, "answers", None)
+        if answer_cache is not None:
+            answer_cache.invalidate_book(book_id)
         store.evict(book_id)

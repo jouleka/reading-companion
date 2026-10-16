@@ -353,7 +353,8 @@ class Catalog:
             raise ValueError(f"{what} must be a finite non-negative number, got {value!r}")
 
     def reserve_cost(self, book_id, *, phase, model, input_tokens, output_tokens, usd,
-                     max_input_tokens, max_output_tokens, max_usd, chapter_ordinal=None):
+                     max_input_tokens, max_output_tokens, max_usd, chapter_ordinal=None,
+                     expected_reading_scope=None, max_preparation_usd=None):
         """Atomically reserve a worst-case completion against per-book ceilings.
 
         Ledger usage and every outstanding reservation participate in the same ``BEGIN IMMEDIATE``
@@ -366,12 +367,36 @@ class Catalog:
             self._check_cost_value(value, what)
         self._check_usd(usd)
         self._check_usd(max_usd, "max_usd")
+        if max_preparation_usd is not None:
+            self._check_usd(max_preparation_usd, "max_preparation_usd")
         reservation_id = uuid.uuid4().hex
         with self._lock:
             try:
                 self._conn.execute("BEGIN IMMEDIATE")
                 if self._conn.execute("SELECT 1 FROM books WHERE book_id=?", (book_id,)).fetchone() is None:
                     raise ValueError(f"unknown book {book_id!r}")
+                if expected_reading_scope is not None:
+                    current = self._conn.execute(
+                        "SELECT b.incarnation,s.position_epoch,s.bookmark,s.ingest_progress "
+                        "FROM books b JOIN reading_state s USING(book_id) WHERE b.book_id=?", (book_id,)
+                    ).fetchone()
+                    incarnation, epoch, frontier = expected_reading_scope
+                    if (current is None or current[0] != incarnation or current[1] != epoch
+                            or current[2] != frontier or current[3] < frontier):
+                        raise RuntimeError("reader preparation scope is no longer current")
+                if max_preparation_usd is not None:
+                    if not phase.startswith("reader-prepare:"):
+                        raise ValueError("preparation reservations require their own phase")
+                    spent = self._conn.execute(
+                        "SELECT COALESCE(SUM(usd),0) FROM cost_ledger WHERE book_id=? "
+                        "AND phase LIKE 'reader-prepare:%'", (book_id,)
+                    ).fetchone()[0]
+                    reserved = self._conn.execute(
+                        "SELECT COALESCE(SUM(reserved_usd),0) FROM cost_reservations WHERE book_id=? "
+                        "AND phase LIKE 'reader-prepare:%'", (book_id,)
+                    ).fetchone()[0]
+                    if spent + reserved + usd > max_preparation_usd:
+                        raise RuntimeError("reader preparation cost ceiling reached")
                 ledger = self._conn.execute(
                     "SELECT COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0),"
                     "COALESCE(SUM(usd),0.0) FROM cost_ledger WHERE book_id=?", (book_id,)

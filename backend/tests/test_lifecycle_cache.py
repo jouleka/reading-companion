@@ -1,7 +1,34 @@
 import threading
 import time
+import json
 
 from app.lifecycle_cache import RecapRegistry
+
+
+def test_cleared_recaps_survive_restart_but_corrupt_or_invalid_checkpoints_do_not(tmp_path):
+    path = tmp_path / "recaps.json"
+    def registry():
+        return RecapRegistry(max_entries=2, max_failures=1, max_flights=1, persist_path=path)
+    key = ("book", "incarnation", "snapshot-model-prompt-atoms")
+    payload = {"recap": "Aldric arrived.", "now": None, "as_of_chapter": 1,
+               "cast_size": 1, "open_threads": 0,
+               "cast": [{"name": "Aldric", "entity_id": 1}], "cached": False}
+    first = registry()
+    first.set(key, payload)
+    first.mark_failed(("book", "incarnation", "failed"))
+    second = registry()
+    assert second.get(key) == payload and second.stats()["failures"] == 0
+    assert second.get(("book", "new-incarnation", key[2])) is None
+    damaged = json.loads(path.read_bytes())
+    damaged["rows"][0][1]["recap"] = "Unreviewed future plot."
+    path.write_text(json.dumps(damaged))
+    assert registry().get(key) is None
+    first.invalidate_book("book")
+    assert registry().get(key) is None
+    path.write_text('{"version":1,"rows":')
+    assert registry().stats()["entries"] == 0
+    path.write_bytes(b"x" * (2 * 1024 * 1024 + 1))
+    assert registry().stats()["entries"] == 0
 
 
 def _key(book, incarnation, suffix):

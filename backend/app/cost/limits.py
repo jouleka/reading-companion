@@ -20,6 +20,8 @@ class CostCeilingExceeded(RuntimeError):
 # Advisory USD pricing already used by the product. Hard token ceilings remain effective for unknown
 # models; unknown pricing intentionally returns zero rather than pretending a current price is known.
 _USD = {
+    "jev-1.13.0": (0.042e-6, 0.0),
+    "jev-1.14.0": (0.042e-6, 0.0),
     # Standard text-token prices checked against official model documentation 2026-10-15.
     # Keep the longer mini name first: identities include the provider and model name.
     "gpt-6-luna": (0.10e-6, 0.50e-6),
@@ -66,11 +68,16 @@ def usd_of(model, usage):
     if name is None:
         return 0.0
     input_price, output_price = _USD[name]
+    # Native Fast processing is 2x Standard; identity is separate from the wire model name.
+    if (model or "").startswith("fast:"):
+        input_price, output_price = input_price * 2, output_price * 2
     if name not in _CACHE_INPUT_USD:
         return usage.get("in", 0) * input_price + usage.get("out", 0) * output_price
     actual = completion_usage(usage)
     read, write = actual.get("cache_read", 0), actual.get("cache_write", 0)
     cached_price, write_price = _CACHE_INPUT_USD[name]
+    if (model or "").startswith("fast:"):
+        cached_price, write_price = cached_price * 2, write_price * 2
     # GPT-6 long-context premiums apply to the entire request, not only the excess tokens.
     input_scale, output_scale = (2, 1.5) if actual["in"] > 272_000 else (1, 1)
     return (((actual["in"] - read - write) * input_price + read * cached_price + write * write_price)
@@ -182,7 +189,7 @@ def budgeted_completion(catalog, settings, client, book_id, *, phase, system, us
     unavailable. A successful deferred call keeps its actual usage reserved until LIT-7 atomically
     publishes the chapter receipt and catalog row.
     """
-    model = client._model_for(tier)
+    model = getattr(client, "billing_model", client._model_for)(tier)
     estimated_input = estimate_input_tokens(system, user, schema)
     generic_reask = bool(
         schema is not None

@@ -424,6 +424,10 @@ export const api = {
     fetch(`/api/books/${id}/catch-me-up${bookmark != null ? `?bookmark=${bookmark}` : ""}`).then(
       (r) => j<CatchMeUp>(r),
     ),
+  preparedQuestions: (id: string, bookmark: number) =>
+    fetch(`/api/books/${id}/prepared-questions?bookmark=${bookmark}`).then(
+      (r) => j<{ as_of_chapter: number; questions: string[] }>(r),
+    ),
   askBook: (id: string, question: string, bookmark?: number) =>
     fetch(`/api/books/${id}/ask`, {
       method: "POST",
