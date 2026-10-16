@@ -26,6 +26,7 @@ def main():
         jev_selection_enabled=True, jev_evidence_enabled=True, jev_recap_enabled=False,
         jev_partial_evidence_enabled=True,
         jev_extraction_enabled=True,
+        jev_identity_enabled=True,
         recap_prewarm=True, recap_disk_cache=True, reader_answer_cache=True,
         reader_prepare_enabled=True, reader_reuse_enabled=True, reader_fast_mode=False,
         cost_max_usd_per_book=1.0,

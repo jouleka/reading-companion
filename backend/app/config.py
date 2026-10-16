@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     jev_evidence_enabled: bool = True
     jev_partial_evidence_enabled: bool = False
     jev_extraction_enabled: bool = False
+    jev_identity_enabled: bool = False
     jev_recap_enabled: bool = False  # Experimental: conservative routing added latency in live QA.
     jev_min_probability: float = Field(default=0.95, ge=0.9, le=1)
     jev_min_confidence: float = Field(default=0.85, ge=0.8, le=1)

@@ -13,6 +13,7 @@ JEV_SELECTION_ENABLED=true
 JEV_EVIDENCE_ENABLED=true
 JEV_PARTIAL_EVIDENCE_ENABLED=true
 JEV_EXTRACTION_ENABLED=true
+JEV_IDENTITY_ENABLED=true
 JEV_RECAP_ENABLED=false
 RECAP_PREWARM=true
 RECAP_DISK_CACHE=true
@@ -111,6 +112,35 @@ existing completed memory is not rewritten or silently re-extracted. This can av
 of an obviously bad candidate, but adds a small screening call to eligible candidates. It is an
 accuracy/early-repair feature, not a demonstrated general latency improvement.
 
+## Character identities and aliases
+
+`JEV_IDENTITY_ENABLED` handles unresolved names during background chapter ingestion. Exact known
+names, aliases and narrow honorific matches remain deterministic. In this mode embeddings cannot
+authorize an identity merge. A new name needs its own observed canonical surface and a distinct,
+uniquely identifying earlier roster name observed in the current chapter. Shared aliases, pure
+role epithets, different types and pending same-chapter identities cannot supply that anchor.
+
+Jev nominates at most one of four eligible candidates, requiring probability >=0.99 and confidence
+>=0.90. Every nomination then needs a separate GPT `IdentityVerdict` citing valid current-source
+passages containing both name anchors. The reviewer sees no Jev labels or confidence. Only an
+explicit narrative identity binding is allowed; resemblance, impersonation, quoted allegations,
+denial, pronouns and familiar plot knowledge cannot establish it. An accepted name is reused
+within that preparation without another paid check. All accepted extractions also retain their
+full independent field/segment grounding review.
+
+Missing evidence, uncertain or multiple nominations, outages, invalid citations and oversized
+input leave identities separate. Complete source/roster input must fit the conservative byte cap;
+it is never truncated. At most eight paid nominations are admitted per chapter attempt, including
+stale-roster retries. Separate chapter ledger phases `jev-identity` and `identity-review` enforce
+the normal book ceiling. Budget/shutdown failure cannot publish partial memory.
+
+Provider calls run outside store/lifecycle locks. Link clearances bind exact chapter text, extracted
+identity and working roster; the final resolution clearance binds every prepared decision. Commit
+also rechecks the earlier visible roster, forcing fresh preparation after a correction. Aliases
+retain the chapter reveal ordinal, so a reset cannot expose a later alias. The flag is off by
+default and enabled in the local launcher. Completed books are preserved; this does not repair
+older mistaken merges. This is an accuracy/background-preparation feature, not a fresh-Ask speedup.
+
 ## Recaps
 
 `RECAP_PREWARM` prepares the normal guarded recap after successful durable ingestion. One background
@@ -147,6 +177,9 @@ python scripts/jev_quality_audit.py --run --partial --output partial.json
 python scripts/jev_quality_audit.py --run --partial --heldout --output partial-heldout.json
 python scripts/jev_quality_audit.py --run --extraction --output extraction.json
 python scripts/jev_quality_audit.py --run --extraction --heldout --output extraction-heldout.json
+python scripts/jev_identity_audit.py --run --env-file /path/to/ignored/.env --output identities.json
+python scripts/jev_identity_audit.py --run --heldout --env-file /path/to/ignored/.env --output identities-heldout.json
+python scripts/jev_identity_audit.py --run --pipeline-only --env-file /path/to/ignored/.env --output identities-pipeline.json
 python scripts/jev_reuse_audit.py --run --output reuse.json
 python scripts/jev_reuse_audit.py --run --heldout --output reuse-heldout.json
 python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.env --output prepared.json
@@ -183,6 +216,14 @@ with 0/34 false rejections of supported candidates. Missed errors still receive 
 The live synthetic ingestion/preparation trial verifies that screen calls run, complete extraction
 reviews remain mandatory, no unread facts reach either provider, and restart/reset safeguards hold.
 These small samples do not certify factual correctness or real-world false-rejection rates.
+
+Identity verification: 44 frozen development/held-out cases produced 0 false merges, accepting
+7/12 explicit valid links. The live pipeline used hand-authored extractions to isolate resolution,
+with actual budgeted Jev nomination, independent GPT extraction/identity reviews and embeddings.
+It committed one character with a newly revealed alias, while the earlier view had no alias.
+Fifty-one offline tests cover thresholds, ambiguity, malformed/outage responses, citations, mutation,
+pending identities, spend limits, shutdown and stale-roster preparation. Small synthetic samples
+do not certify real-world identity accuracy or improve the unmet universal 1.5-second target.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [models and pricing](https://docs.typesafe.ai/models),

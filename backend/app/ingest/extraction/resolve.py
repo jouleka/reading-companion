@@ -8,7 +8,7 @@ roster (merge -> reuse entity_id) or new (create). Layered, cheapest first:
 
   1. roster-link   — the extractor was given the roster and set matched_roster=true. PRIMARY (iText2KG):
                        1a exact canonical match;
-                       1b token-subset fuzzy match across the WHOLE roster (cross-type), so
+                       1b token-subset fuzzy match across the SAME-TYPE roster, so
                           'Ivan Karamazov' links to 'Ivan Fyodorovitch Karamazov' instead of spawning a
                           second Ivan. An unmatched matched_roster=true is WARNED, not silently duplicated.
   2. exact         — canonical_name matches a roster canonical_name (name-like only).
@@ -17,6 +17,8 @@ roster (merge -> reuse entity_id) or new (create). Layered, cheapest first:
   4. embedding KNN — cosine >= threshold AND a clear margin over the 2nd-best. DISABLED unless a REAL
                      semantic embedding backend is supplied (the lexical stand-in over-merges siblings —
                      Dmitri/Ivan cosine ~ 0.824 — so it must not be a merge authority).
+     In guarded identity mode, embedding-only merges are disabled altogether. Unresolved names may
+     instead use the chapter-grounded alias reviewer; ambiguity remains a distinct entity.
 """
 from app.llm.client import cosine
 from app.unicode_text import normalize_text
@@ -206,13 +208,30 @@ def resolve_one(ent, roster, embed_fn=None, threshold=0.82):
     return {"action": "create", "entity_id": None, "method": "new", "score": 0.0, "warn_unmatched_link": warn}
 
 
-def resolve_chapter(entities, roster, embed_fn=None, threshold=0.82):
+def resolve_chapter(entities, roster, embed_fn=None, threshold=0.82, *, identity_review=None):
     """Resolve a chapter's entities IN ORDER, growing a working roster so two new mentions of the same
     entity within one chapter also collapse. Returns [(entity, decision)] aligned to input."""
-    work = [dict(r) for r in roster]
+    work = [{**r, "aliases": list(r.get("aliases", []))} for r in roster]
     out = []
     for e in entities:
-        d = resolve_one(e, work, embed_fn, threshold)
+        # In guarded mode embeddings cannot authorize a merge. Exact known forms remain free;
+        # otherwise only a chapter-grounded, independently reviewed identity can supply the ID.
+        d = resolve_one(e, work, None if identity_review is not None else embed_fn, threshold)
+        if identity_review is not None and d["action"] == "create":
+            eid = identity_review(e, work)
+            if eid is not None:
+                hits = [r for r in work if r["entity_id"] == eid and r["type"] == e["type"]]
+                if len(hits) != 1 or type(eid) is not int:
+                    raise ValueError("reviewed identity is absent or ambiguous in the roster")
+                d = {"action": "merge", "entity_id": eid, "method": "reviewed-alias", "score": 1.0}
+                # Repeated occurrences of the just-reviewed name need no second paid review.
+                # This local copy never changes the prior-visible roster used at commit.
+                target = hits[0]
+                known = {_norm_key(s) for s in [target["canonical_name"], *target["aliases"]]}
+                for surface in [e["canonical_name"], *e.get("aliases", [])]:
+                    if _namelike(surface) and _norm_key(surface) not in known:
+                        target["aliases"].append(surface)
+                        known.add(_norm_key(surface))
         out.append((e, d))
         if d["action"] == "create":
             work.append({"canonical_name": e["canonical_name"], "type": e["type"],
