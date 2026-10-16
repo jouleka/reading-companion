@@ -139,11 +139,25 @@ Current measurements (2026-10-17):
   review. Own citations were manually checked against the primary passages. The unread-scene
   question refused in 5.05 s. New spend $0.01194; zero pending reservations; original fingerprint
   unchanged. This replays a fixed prepared bank, not a new ingestion or universal coverage claim.
-- The 80-case synthetic review audit rejected all 53 negative cases and reused 26/27 positives;
-  median 1.22 s, spend $0.00863, zero pending. These are development fixtures, not a measured
+- The 82-case synthetic review audit rejected all 55 negative cases and reused 26/27 positives;
+  median 1.12 s, spend $0.03614, zero pending. These are development fixtures, not a measured
   real-book accuracy rate.
-- Fresh-preparation and multi-book validation are still being evaluated. Cold misses remain
-  slower than the target, and malformed extraction reviews can block preparation.
+- Fresh Karamazov preparation at chapters 2 and 5 answered 8/8 independent questions, with 4/8
+  prepared reuses (1.26–1.33 s). Overall median 3.96 s; worst 16.61 s. Both recaps returned and
+  both future probes refused. New spend $0.11260; zero pending; original files and position
+  unchanged. This run started before the final identity-binding and focused-planner revisions.
+- Natural ingestion of three additional public-domain books completed Pride and Prejudice
+  chapter 1: 4/4 questions answered, 3/4 prepared reuses (1.26–1.62 s), one cold answer at
+  18.71 s, recap returned and future probe refused. Alice chapter 1, Pride chapter 2 and
+  Sherlock chapter 1 failed ingestion; none are counted as successful coverage. Spend $0.09079,
+  zero pending, no unread canary reached a provider. This run also preceded the final identity
+  and planner revisions. Malformed segment audits and all-reasoning output exhaustion remain
+  blockers. A separate low-reasoning extraction experiment still failed Alice's segment audit
+  ($0.00809); production extraction/review settings were therefore retained.
+- All seven CI checks passed on implementation commit `ea46e38`: 1,621 backend tests passed,
+  85 skipped; 319 frontend tests passed, with build, PostgreSQL integration, dependency,
+  security and secret checks green. Universal latency, fresh coverage and multi-book acceptance
+  remain unpassed; the performance follow-up stays draft.
 
 References: [TypeSafe API](https://docs.typesafe.ai/api),
 [TypeSafe models](https://docs.typesafe.ai/models),
