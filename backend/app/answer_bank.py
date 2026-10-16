@@ -12,7 +12,7 @@ from app.eval.spoiler_gate import validity_snapshot
 from app.preparation_plan import valid_saved_plan
 
 
-ANSWER_VERSION = "reviewed-answer-v2"
+ANSWER_VERSION = "reviewed-answer-v3-scene-context"
 
 
 def answer_scope(book_id, eff, state, manifest, *, catalog, store, settings, client):

@@ -5,11 +5,12 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.unicode_text import normalize_text, word_tokens, words
+from app.retrieval_passages import passage_windows
 
 
-PREPARATION_VERSION = "diverse-reviewed-questions-v2"
+PREPARATION_VERSION = "primary-source-questions-v3"
 PLAN_OUTPUT_TOKENS = 3072
-REVIEW_OUTPUT_TOKENS = 1536
+REVIEW_OUTPUT_TOKENS = 3072
 KINDS = ("character", "relationship", "event", "motive", "summary", "follow_up")
 
 
@@ -63,6 +64,13 @@ follow_up_to is the one-based ID of an EARLIER non-follow-up question. Ask a dis
 detail, never a paraphrase or 'why did he do that?'. The follow-up must make sense without seeing
 its parent's answer. Non-follow-ups have null follow_up_to. Avoid duplicate questions and cover
 different facts and people. Returning fewer questions or an empty plan is valid.
+Facts with kind=source are exact completed primary passages. Prefer them over derived summaries,
+which may omit details or contain old extraction errors. Cover concrete who/what/where/when details
+from the current source, including dialogue and the end of the chapter. Include the explicitly
+stated reason, recipient, quantity, location and timing together when they explain one event, so
+a prepared complete answer can also answer narrower questions about that event. Do not combine
+unrelated events just to increase coverage. Use the completed chapter number to distinguish
+repeated scenes. Never treat an omitted primary passage as evidence of absence.
 """
 
 REVIEW_SYSTEM = """Independently review EVERY supplied preparation question in its original order.
@@ -78,6 +86,8 @@ Follow-ups must stand alone, add a distinct detail and have a valid safe earlier
 For safe_to_prepare=true cite the exact supplied basis_ids supporting the ENTIRE question and a
 useful answer; use [] for false/uncertain questions. Return every original question_id exactly once
 in order. Never rewrite a question. Other candidate questions are not evidence.
+Prefer exact kind=source passages to derived memory when they disagree. When primary passages
+are supplied, a derived summary alone cannot establish a conflicting premise or an inferred motive.
 """
 
 
@@ -90,7 +100,27 @@ def preparation_facts(mem, frontier, *, byte_limit=18000):
     view = mem.view(frontier)
     summaries = [dict(r) for r in view.chapter_summaries() if r["revealed_at"] >= max(1, frontier-1)]
     events = [dict(r) for r in view.timeline() if r["revealed_at"] >= max(1, frontier-1)]
-    recent = " ".join(r["summary"] for r in summaries+events)
+    # Whole exact windows, spread across the latest chapter (including its ending). Primary
+    # evidence gets a bounded share; it cannot displace the entire cast/relationship context.
+    source_rows, raw_recent = [], []
+    source_budget = byte_limit * 2 // 3
+    for chapter in sorted(view.chapters(), key=lambda r: r["revealed_at"], reverse=True):
+        if chapter["revealed_at"] != frontier:
+            continue
+        raw = view.raw_text(chapter["chapter_key"]) or ""
+        if len(raw) > 1_000_000:
+            continue
+        raw_recent.append(raw)
+        windows = list(passage_windows(raw))
+        count = min(len(windows), max(1, source_budget // 1800))
+        indices = sorted({round(i * (len(windows)-1) / max(1, count-1)) for i in range(count)})
+        for index in indices:
+            text = windows[index][2]
+            cost = len(json.dumps(text, ensure_ascii=False).encode()) + 100
+            if cost <= source_budget:
+                source_rows.append(("source", frontier, text))
+                source_budget -= cost
+    recent = " ".join([*(r["summary"] for r in summaries+events), *raw_recent])
     recent_words = tuple(word_tokens(recent))
     positions = {}
     for index, token in enumerate(recent_words):
@@ -127,7 +157,7 @@ def preparation_facts(mem, frontier, *, byte_limit=18000):
         if r["src_entity"] in salient or r["dst_entity"] in salient][:12]
     groups = [[("summary", r["revealed_at"], r["summary"]) for r in reversed(summaries)],
               [("event", r["revealed_at"], r["summary"]) for r in reversed(events)][:16],
-              identities, states, relations]
+              identities, states, relations, source_rows]
     facts, seen = [], set()
     # Interleave groups so a long event list cannot crowd out cast/relationship context.
     for index in range(max(map(len, groups), default=0)):

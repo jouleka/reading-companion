@@ -13,7 +13,7 @@ from app.llm.jev import JevClient, JevUnavailable, windows_credential
 from app.llm.jev_tasks import reuse_answer
 
 
-# Reviewed question, complete answer, equivalent queries, incompatible/underspecified queries.
+# Reviewed question, complete answer, fully covered queries, incompatible/underspecified queries.
 GROUPS = [
     ("Where did Mara put the brass key?",
      "Mara placed the brass key inside a red tin beneath the kitchen sink.",
@@ -38,7 +38,9 @@ GROUPS = [
     ("Describe the brass key's journey.",
      "Jonas lent Mara the brass key. Mara stored it in a red tin beneath the kitchen sink. "
      "Mara returned it to Jonas before noon.",
-     ["Summarize the journey of the brass key.", "Explain what happened to the brass key."],
+     ["Summarize the journey of the brass key.", "Explain what happened to the brass key.",
+      "Who lent Mara the brass key?", "Where did Mara store the brass key?",
+      "When did Mara return the brass key to Jonas?"],
      ["Describe the key's journey and explain why Jonas lent it.",
       "Describe the silver compass's journey.", "What happened to the key after noon?"]),
     ("Who was called Lark by Dena?", "Dena called Ivo Lark.",
@@ -71,6 +73,12 @@ HELDOUT = [
 ]
 
 
+def _candidate(question, text):
+    return {"reviewed_question": question, "payload": {
+        "as_of_chapter": 2, "claims": [{"text": text}], "citations": [{"ordinal": 2}],
+    }}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
@@ -88,10 +96,10 @@ def main():
         groups = HELDOUT if args.heldout else GROUPS
         report["heldout"] = args.heldout
         for original, text, equivalent, incompatible in groups:
-            candidate = {"reviewed_question": original, "payload": {"claims": [{"text": text}]}}
+            candidate = _candidate(original, text)
             candidates = [candidate]
             if args.heldout:
-                candidates += [{"reviewed_question": q, "payload": {"claims": [{"text": a}]}}
+                candidates += [_candidate(q, a)
                                for q, a, *_ in groups if q != original]
             for expected, questions in ((True, equivalent), (False, incompatible)):
                 for question in questions:

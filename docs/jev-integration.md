@@ -34,6 +34,11 @@ dependency is required.
 
 1. Existing deterministic retrieval fences the candidate pool to completed chapters and exact
    normalized source slices. Jev sees that pool only; source selection cannot authorize an answer.
+   Source judgments pack into at most four requests under the same conservative byte/token limit,
+   preserving every original candidate verbatim and its ID. All packets are planned before any
+   paid call. A failure or impossible packing returns to the guarded GPT selector, without a
+   partial approval. This avoids forcing a long 24-window pool straight to GPT merely because
+   a single Jev request cannot fit it.
 2. Jev evaluates the whole original claim and every immutable contextual unit against that claim's
    own original citations. Both the selected probability (at least 0.95) and confidence (at least
    0.85) must pass for **every** question. The normal ordered evidence-coverage validator commits
@@ -75,12 +80,15 @@ cached. Cold explanations still require sequential generation and independent re
 no verified 1.5-second guarantee for complete fresh answers**. Jev selects/checks; it does not write
 explanations. No quote-only response or first-token timing substitutes for a complete answer.
 
-`READER_REUSE_ENABLED` asks Jev whether a new question requests the same facts as an original
-reviewed question **and** whether its unchanged complete answer covers every requested detail.
+`READER_REUSE_ENABLED` asks Jev whether every premise of a new question is explicitly compatible
+with an already reviewed answer **and** whether that unchanged complete answer covers every
+requested detail. A narrower detail question can qualify without duplicating the original question.
 Both independent decisions require probability >=0.99 and confidence >=0.90. Up to four candidates
 are shortlisted within the exact same source/frontier/model scope; word overlap never approves a
-match. Ambiguous pronouns, new premises, extra questions and uncertain results fall back to normal
-Ask. Aliases retain the original reviewed question, preventing chains of paraphrases from drifting.
+match. Ambiguous pronouns, unsupported new premises, missing details and uncertain results fall
+back to normal Ask. Without an explicit chapter reference, an older-only answer cannot resolve a
+repeated current scene and is not reused. Explicit requested chapters must occur in the citations.
+Aliases retain the original reviewed question, preventing chains of paraphrases from drifting.
 The lookup has a 0.65-second provider timeout and makes no retries. Exact hits need no Jev call.
 
 `READER_PREPARE_ENABLED` prepares up to eight questions by default (`READER_PREPARE_MAX_QUESTIONS`,
@@ -90,6 +98,10 @@ follow-ups. Deterministic ordering covers available categories before second que
 categories are never required. The context includes the last two completed chapters' summaries and
 events, relevant visible cast/aliases, state snapshots and established ties. Whole fields interleave
 under an 18,000-byte cap (or half the call budget); omitted/oversized fields cannot supply proof.
+Planner v3 also includes whole primary-text windows from the latest completed chapter, spread
+across its beginning, middle and ending under a two-thirds share of the same byte limit. This
+supplies details missing from legacy summaries; omitted passages cannot support absence claims.
+Related timing, recipient, location and explicit reasons can be covered by one complete answer.
 No future memory, expiry dates or whole-book oracle enter planning.
 
 A separate independent structured question review checks every original question ID, its premises,
@@ -106,7 +118,7 @@ in addition to the ordinary book cap. Scope attempts are persisted to avoid repe
 unchanged chapters after scrolling or restarting. Attempt identity includes the planner version
 and configured question count, allowing one bounded upgrade attempt while preserving existing
 reviewed answers. Planner v2 allows up to 3,072 output tokens (including reasoning), bounded by the
-configured per-call ceiling; question review uses at most 1,536 under the same ceiling. This avoids
+configured per-call ceiling; question review uses at most 3,072 under the same ceiling. This avoids
 losing a complete plan at the earlier 2,048-token cap without adding a retry. Preparation requires
 answer caching. Optional reader flags remain off by default;
 the local Jev profile enables them with eight-question admission. Broader coverage is still bounded
@@ -193,9 +205,26 @@ remain valid. Reset, correction, deletion and shutdown still reject stale public
 snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs still apply.
 Shutdown stops new phases and settles the in-flight call before stores close.
 
-The hybrid profile strengthens recap generation/review against unsupported location, time and
-causal attachments and withholds unsupported details. Its separate cache identity prevents reuse
-of earlier approvals. This does not certify that old extracted memory is factually correct.
+All real-provider recaps now require primary-text proof, including recaps based on legacy memory.
+Every original sentence is retained as a whole claim. At most three exact completed-source windows
+per sentence are retrieved locally, with at most eighteen total windows across six sentences.
+A full GPT field/unit evidence audit in batches of at most two whole sentences commits numbered
+source spans, then a separate GPT reviewer
+checks every complete claim against only its own committed citations. Derived summaries and other
+claims cannot supply proof. Invalid coverage, source references, uncertainty and outages fail
+closed. The existing single regeneration can receive exact primary passages for correction; there
+is no memory-only approval fallback. Scan and per-call/book/preparation ceilings still apply.
+The optional current-chapter line reuses an unchanged cleared sentence only when all its citations
+are from that chapter. This avoids another ungrounded generation and two extra calls. Cache
+identity binds the primary-proof version, both model roles and endpoint; old approvals miss.
+Existing extracted memory is preserved, rather than silently rewritten or certified.
+
+Ask retrieval reserves current-chapter candidates even when older scenes have greater lexical
+overlap. Selection and generation receive the completed frontier. The independent own-citation
+review also sees bounded current-scene context to reject an older-scene answer to a current event
+question; this context can expose a mismatch but cannot supply positive proof for another claim.
+Explicit history and broad identity questions can still use earlier evidence. Answer-cache version
+v3 prevents older scene-insensitive approvals from being reused after this change.
 
 The experimental `JEV_RECAP_ENABLED` flag is **off by default**. In live calibration it escalated
 most supported summaries to GPT and added cold-request overhead. Background preparation supplies

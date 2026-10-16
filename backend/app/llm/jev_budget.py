@@ -4,11 +4,15 @@ import json
 from app.cost.limits import BudgetedResult, CostCeilingExceeded, usd_of
 
 
+def estimate_jev_input(model, state, questions):
+    return len(json.dumps({"model": model, "state": state, "questions": questions},
+                          ensure_ascii=False).encode("utf-8")) + 256
+
+
 def budgeted_jev(catalog, settings, jev, book_id, *, phase, state, questions, timeout_seconds=None,
                  chapter_ordinal=None):
     # UTF-8 bytes deliberately overestimate tokens, just as the completion budget does.
-    estimated = len(json.dumps({"model": jev.model, "state": state, "questions": questions},
-                               ensure_ascii=False).encode("utf-8")) + 256
+    estimated = estimate_jev_input(jev.model, state, questions)
     # Stay inside the default 32k per-question context; no long-context override.
     if estimated > min(settings.cost_max_input_tokens_per_call, 30000):
         from app.llm.jev import JevUnavailable

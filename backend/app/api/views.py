@@ -15,6 +15,7 @@ never carry the rejected recap or a future name). Cached in-process by the full 
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
 from copy import deepcopy
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
@@ -100,6 +101,9 @@ from app.reading_assist import (
     chapter_closeout_prompt,
     chapter_passages,
     selection_prompt,
+)
+from app.recap_grounding import (
+    PRIMARY_RECAP_VERSION, primary_repair_context, primary_snapshot, review_primary_recap,
 )
 
 router = APIRouter(
@@ -588,14 +592,14 @@ def ask_the_book(
                     return result.value
                 try:
                     selected = jev_tasks.select(body.question, sources, run=select_run,
-                                                settings=settings)
+                                                settings=settings, frontier=eff)
                 except JevUnavailable:
                     pass
             if selected is None:
                 selection = budgeted_completion(
                     catalog, settings, client, book_id, phase="source-selection",
                     system=SOURCE_SELECTION_SYSTEM,
-                    user=source_selection_prompt(body.question, sources),
+                    user=source_selection_prompt(body.question, sources, frontier=eff),
                     tier="cheap", schema=SourceSelection,
                 )
                 remember(selection, provider=client.provider, model=client.billing_model("cheap"))
@@ -616,7 +620,7 @@ def ask_the_book(
             "cost": _ask_cost_payload(calls),
         }
 
-    prompt = ask_prompt(body.question, sources)
+    prompt = ask_prompt(body.question, sources, frontier=eff)
     repair_feedback = []
     for _attempt in range(2):
         try:
@@ -712,6 +716,9 @@ def ask_the_book(
                 tier="cheap",
                 complete=judge_complete,
                 question=body.question,
+                frontier=eff,
+                scene_sources=[s for s in candidates if s["ordinal"] == eff]
+                    if client.provider != "stub" else (),
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc
@@ -1140,6 +1147,10 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         book_type = mem.book_profile()["book_type"]
         content_language = mem.content_language()
     synth_model = client.extractor_version("large")
+    use_primary = client.provider != "stub"
+    if use_primary:
+        review_endpoint = hashlib.sha256(str(getattr(client, "base_url", "")).encode()).hexdigest()
+        synth_model += f":{PRIMARY_RECAP_VERSION}:{client.extractor_version('cheap')}:{review_endpoint}"
     if getattr(client, "jev", None) is not None:
         synth_model += (f":jev-hybrid-recap-v2:{settings.jev_recap_enabled}:{client.jev.model}:"
                         f"{settings.jev_min_probability}:{settings.jev_min_confidence}")
@@ -1181,6 +1192,10 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             delta = delta_facts(mem, eff)
             cast = _visible_cast(mem, eff)
             snap_prev = validity_snapshot(mem, eff - 1) if eff >= 2 else None
+            try:
+                primary = primary_snapshot(mem, eff) if use_primary else None
+            except AskRetrievalLimit as exc:
+                raise HTTPException(413, "completed recap text exceeds the search budget") from exc
         prior_recap = None
         if snap_prev is not None:
             prior_key = (book_id, incarnation, cache_key(
@@ -1203,6 +1218,8 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
         )
         recap_final = None
+        primary_correction, primary_now = "", None
+        atoms = {atom["key"]: atom for atom in manifest["atoms"]}
         for attempt in range(2):
             # attempt 0: EVOLVE from recap(N-1) + the delta (non-repetitive). If it fails the gate,
             # attempt 1 falls back to the cumulative synthesis — proven grounded, so the reader still
@@ -1217,6 +1234,12 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             else:
                 prompt = synth_prompt(eff, cumulative_facts, book_type=book_type)
                 review_facts = cumulative_facts
+            prompt += primary_correction
+            if use_primary:
+                prompt += ("\nReturn at most six complete sentences, each at most 800 characters. "
+                           "Use explicit named subjects so every sentence can be reviewed separately. "
+                           "Every fact must also be verifiable against the completed primary text; "
+                           "derived chapter memory may contain old errors.")
             if (not _recap_input_fits(settings, client, system, prompt)
                     or not _recap_input_fits(settings, client, JUDGE_SYSTEM,
                                             judge_prompt("", review_facts), schema=JudgeVerdict)):
@@ -1233,6 +1256,19 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 except SpoilerGateError:
                     # spoiler-bearing details stay server-side (D-A9 pass-2) — never the response
                     continue
+            if use_primary:
+                try:
+                    primary_now, _sources = review_primary_recap(
+                        recap, primary, eff, atoms, catalog=catalog, settings=settings,
+                        client=client, book_id=book_id,
+                    )
+                except CostCeilingExceeded as exc:
+                    raise HTTPException(429, "book cost ceiling reached") from exc
+                except (JudgeUnavailable, AskEvidenceError, ValueError):
+                    primary_correction = primary_repair_context(recap, primary, eff, atoms)
+                    continue
+                recap_final = recap
+                break
             # THE LLM-JUDGE BACKSTOP (LIT-14, ADR 0004 Vector 3), OUTSIDE the lock (D-A3): the semantic
             # net for a paraphrased future EVENT the deterministic gate can't see (past tense, no future
             # name, no modal). references_future is a HARD reject; a judge outage fails CLOSED (no
@@ -1259,7 +1295,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         if recap_final is not None:
             recaps.clear_failed(key)
             # the 'right now' one-liner — best-effort, fail-safe to absent (never blocks a cleared recap)
-            now_text = _make_now(
+            now_text = primary_now if use_primary else _make_now(
                 client, store, catalog, settings, book_id, eff, delta, facts,
                 book_type=book_type, content_language=content_language,
             )

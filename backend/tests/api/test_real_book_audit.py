@@ -187,7 +187,7 @@ def test_pending_preparation_cannot_take_foreground_cash_headroom(env):
     catalog.settle_cost(bid, second)
 
 
-@pytest.mark.parametrize("configured,expected", [(4096, [3072, 1536]), (1000, [1000, 1000])])
+@pytest.mark.parametrize("configured,expected", [(4096, [3072, 3072]), (1000, [1000, 1000])])
 def test_preparation_token_allowance_respects_configured_hard_limit(env, monkeypatch, configured, expected):
     from app.reader_prepare import prepare
     _, bid, app, _ = env
