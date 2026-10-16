@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     reader_answer_cache: bool = False
     reader_fast_mode: bool = False
     reader_reuse_enabled: bool = False
+    reader_reuse_fast_review: bool = True  # Local GPT-6 Luna reuse checks only; normal preparation is unchanged.
     reader_reuse_min_probability: float = Field(default=0.99, ge=0.95, le=1)
     reader_reuse_min_confidence: float = Field(default=0.90, ge=0.85, le=1)
     reader_reuse_timeout_seconds: float = Field(default=0.65, gt=0, le=1)
@@ -74,7 +75,9 @@ class Settings(BaseSettings):
     epub_max_upload_bytes: int = Field(default=128 * 1024 * 1024, ge=1, lt=2 ** 63)
     cost_max_input_tokens_per_call: int = Field(default=60_000, ge=1, lt=2 ** 63)
     cost_max_output_tokens_per_call: int = Field(default=4_096, ge=1, lt=2 ** 63)
-    cost_max_input_tokens_per_book: int = Field(default=2_000_000, ge=1, lt=2 ** 63)
+    # Long-book ingestion can consume the old 2M default before reader preparation starts.
+    # Dollar/per-call/background caps still apply; an explicit deployment override wins.
+    cost_max_input_tokens_per_book: int = Field(default=8_000_000, ge=1, lt=2 ** 63)
     cost_max_output_tokens_per_book: int = Field(default=500_000, ge=1, lt=2 ** 63)
     cost_max_usd_per_book: float = Field(default=5.0, gt=0, allow_inf_nan=False)
 

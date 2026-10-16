@@ -187,6 +187,23 @@ def test_pending_preparation_cannot_take_foreground_cash_headroom(env):
     catalog.settle_cost(bid, second)
 
 
+def test_preparation_uses_remaining_allowance_while_preserving_one_full_review(env):
+    from app.reader_prepare import PreparationCatalog
+    _, bid, app, _ = env
+    catalog = app.state.catalog
+    used = sum(r["input_tokens"] for r in catalog.get_costs(bid))
+    kwargs = dict(phase="questions", model="test", input_tokens=80000, output_tokens=1, usd=.001,
+        max_input_tokens=used+159794, max_output_tokens=10**8, max_usd=10)
+    proxy = PreparationCatalog(app, capture(app, bid))
+    prepared = proxy.reserve_cost(bid, **kwargs)
+    foreground = catalog.reserve_cost(bid, **{**kwargs, "phase": "foreground", "input_tokens":60000})
+    with pytest.raises(RuntimeError, match="cost ceiling"):
+        proxy.reserve_cost(bid, **{**kwargs, "input_tokens":1})
+    assert len(catalog.get_cost_reservations(bid)) == 2
+    catalog.settle_cost(bid, prepared)
+    catalog.settle_cost(bid, foreground)
+
+
 @pytest.mark.parametrize("configured,expected", [(4096, [4096, 3072]), (1000, [1000, 1000])])
 def test_preparation_token_allowance_respects_configured_hard_limit(env, monkeypatch, configured, expected):
     from app.reader_prepare import prepare

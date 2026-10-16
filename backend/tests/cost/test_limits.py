@@ -137,6 +137,7 @@ def test_huge_chapter_is_split_without_dropping_text_and_keeps_one_receipt_cost(
     sent = [prompt.split("CHAPTER TEXT:\n", 1)[1].split("\n\nExtract entities", 1)[0]
             for schema, prompt in prompts if schema is Extraction]
     assert len(sent) > 1 and "".join(sent) == text
+    assert max(len(piece.encode("utf-8")) for piece in sent) <= 3 * settings.cost_max_output_tokens_per_call
     assert extraction["chapter_summary"] and usage["in"] > 0
     assert len(reservations) == len(sent)               # only extraction awaits the LIT-7 receipt
     clearance.assert_matches(text, extraction)

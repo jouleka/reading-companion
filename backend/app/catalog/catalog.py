@@ -429,17 +429,19 @@ class Catalog:
                 self._conn.rollback()
                 raise
 
-    def note_reservation_actual(self, book_id, reservation_id, *, input_tokens, output_tokens, usd):
+    def note_reservation_actual(self, book_id, reservation_id, *, input_tokens, output_tokens, usd, model=None):
         """Replace a reservation's estimate with known actual usage while keeping it durable."""
         self._check_cost_value(input_tokens, "input_tokens")
         self._check_cost_value(output_tokens, "output_tokens")
         self._check_usd(usd)
+        if model is not None and (not isinstance(model, str) or not model):
+            raise ValueError("actual billing model must be a nonempty string")
         with self._lock:
             cur = self._conn.execute(
                 "UPDATE cost_reservations SET reserved_input_tokens=?,reserved_output_tokens=?,"
-                "reserved_usd=?,actual_input_tokens=?,actual_output_tokens=?,actual_usd=? "
+                "reserved_usd=?,actual_input_tokens=?,actual_output_tokens=?,actual_usd=?,model=COALESCE(?,model) "
                 "WHERE reservation_id=? AND book_id=?",
-                (input_tokens, output_tokens, usd, input_tokens, output_tokens, usd,
+                (input_tokens, output_tokens, usd, input_tokens, output_tokens, usd, model,
                  reservation_id, book_id),
             )
             if cur.rowcount != 1:

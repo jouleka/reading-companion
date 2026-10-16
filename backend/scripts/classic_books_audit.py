@@ -153,18 +153,6 @@ def main():
             with TestClient(app) as api:
                 phase = {"book": book, "kind": "ingestion", "frontier": 0}
                 install_observers(app.state.reader_client, report, phase)
-                original_complete = app.state.reader_client._complete_openai
-                def observe_names(system, user, tier, schema, max_output_tokens):
-                    value, usage = original_complete(system, user, tier, schema, max_output_tokens)
-                    if getattr(schema, "__name__", None) == "Extraction":
-                        report["provider_calls"][-1]["entity_names"] = [
-                            {"name": e['canonical_name'], "aliases": e.get('aliases', [])}
-                            for e in value.get('entities', [])]
-                    if getattr(schema, "__name__", None) == "ExtractionVerdict":
-                        report["provider_calls"][-1]["review_rejections"] = {
-                            k: value[k] for k in ('references_future', 'unsupported_claims')}
-                    return value, usage
-                app.state.reader_client._complete_openai = observe_names
                 epub = epub_ncx([(f"c{i}.xhtml", f"Chapter {i}", f"Chapter {i}", escape(t))
                                  for i, t in enumerate(texts, 1)], title=title, language="en")
                 imported = api.post('/api/books', files={'file':('classic.epub',epub,'application/epub+zip')})

@@ -241,6 +241,38 @@ def test_preparation_uses_only_completed_facts_and_normal_reviewed_answer_route(
     assert len(app.state.reader_client.answers.candidates(scope.answer_key, "Berenice")) == 2
 
 
+@pytest.mark.parametrize("failure_status", [502, 429])
+def test_failed_parent_answer_keeps_safe_followup_but_budget_exhaustion_stops(env, monkeypatch, failure_status):
+    from fastapi import HTTPException
+    _, bid, app, _ = env
+    scope = capture(app, bid)
+    app.state.settings.reader_prepare_enabled = True
+    app.state.settings.reader_answer_cache = True
+    app.state.settings.reader_prepare_max_questions = 2
+    questions = ["What happened when Berenice met Aldric?", "Where did Berenice meet Aldric?"]
+    attempted = []
+    def plan(*args, **kwargs):
+        data = json.loads(kwargs["user"])
+        if kwargs["schema"].__name__ == "PreparationReview":
+            return SimpleNamespace(value={"audits": [{"question_id": c["id"],
+                "safe_to_prepare": True, "basis_ids": [1]} for c in data["questions"]]})
+        return SimpleNamespace(value={"questions": [
+            {"question": questions[0], "kind": "event", "basis_ids": [1], "follow_up_to": None},
+            {"question": questions[1], "kind": "follow_up", "basis_ids": [1], "follow_up_to": 1}]})
+    def answer(book_id, body, catalog, store, settings, client, worker):
+        attempted.append(body.question)
+        if len(attempted) == 1:
+            raise HTTPException(failure_status, "controlled failure")
+        client.answers.set((*scope.answer_key, body.question), payload())
+        return payload()
+    monkeypatch.setattr("app.reader_prepare.budgeted_completion", plan)
+    monkeypatch.setattr("app.api.views.ask_the_book", answer)
+    prepare(app, scope)
+    assert attempted == questions[:1 if failure_status == 429 else 2]
+    assert app.state.reader_client.answers.suggestions(scope.answer_key) == (
+        [] if failure_status == 429 else [questions[1]])
+
+
 def test_semantic_reuse_is_unchanged_and_never_considers_future_or_retracted_scope(env, monkeypatch):
     api, bid, app, _ = env
     settings, client = app.state.settings, app.state.reader_client
@@ -260,7 +292,7 @@ def test_semantic_reuse_is_unchanged_and_never_considers_future_or_retracted_sco
         calls.append(question)
         assert len(candidates) == 1 and candidates[0]["reviewed_question"] == original
         return candidates[0]
-    monkeypatch.setattr(jev_tasks, "reuse_answer", choose)
+    monkeypatch.setattr("app.api.views.select_reviewed_response", choose)
     new = "Where was Berenice's meeting with Aldric?"
     value = api.post(f"/api/books/{bid}/ask", json={"question": new}).json()
     assert value["cached"] and value["claims"] == payload()["claims"]
@@ -291,7 +323,7 @@ def test_reuse_failure_runs_full_reviewed_answer_path_instead_of_returning_a_rel
         return original(*args, **kwargs)
     def reject(*args, **kwargs):
         raise JevUnavailable(failure)
-    monkeypatch.setattr(jev_tasks, "reuse_answer", reject)
+    monkeypatch.setattr("app.api.views.select_reviewed_response", reject)
     monkeypatch.setattr(client, "complete", complete)
     value = api.post(f"/api/books/{bid}/ask", json={
         "question": "Who owned a silver compass?"}).json()

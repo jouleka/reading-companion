@@ -58,6 +58,52 @@ def _settings(**overrides):
     })
 
 
+@pytest.mark.parametrize("native,enabled,mode", [(True, True, "local"), (False, True, "local"),
+                                              (True, False, "local"), (True, True, "hosted")])
+def test_fast_reuse_profile_is_isolated_and_bills_the_requested_premium(native, enabled, mode):
+    from app.answer_reuse import reuse_review_client
+    calls = []
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return _response("gpt-6-luna", "Checked.")
+    client = _client(handler, native=native)
+    reviewer = reuse_review_client(client, SimpleNamespace(
+        reader_reuse_fast_review=enabled, deployment_mode=mode))
+    active = native and enabled and mode == "local"
+    assert (reviewer is not client) == active
+    reviewer.complete("Check.", "Evidence.")
+    client.complete("Generate.", "Evidence.")
+    if native:
+        assert calls[0]["reasoning_effort"] == ("none" if active else "medium")
+        assert calls[0]["service_tier"] == ("fast" if active else "default")
+        assert calls[0].get("temperature") == (0 if active else None)
+        assert "temperature" not in calls[1]
+        assert calls[1]["reasoning_effort"] == "medium" and calls[1]["service_tier"] == "default"
+    assert reviewer.billing_model("cheap") == ("fast:gpt-6-luna" if active else "gpt-6-luna")
+
+
+@pytest.mark.parametrize("actual_tier,expected_model", [("default", "gpt-6-luna"),
+                                                     ("fast", "fast:gpt-6-luna")])
+def test_fast_review_reserves_premium_but_settles_reported_service_tier(tmp_path, actual_tier, expected_model):
+    from app.answer_reuse import reuse_review_client
+    catalog = Catalog(str(tmp_path / "catalog.db"))
+    catalog.add_book("b", title="Billing fixture")
+    seen = []
+    def handler(request):
+        [reservation] = catalog.get_cost_reservations("b")
+        seen.append(reservation["model"])
+        return _response("gpt-6-luna", "Checked.", service_tier=actual_tier)
+    client = reuse_review_client(_client(handler), SimpleNamespace(
+        reader_reuse_fast_review=True, deployment_mode="local"))
+    result = budgeted_completion(catalog, _settings(), client, "b", phase="review",
+                                system="Review.", user="Evidence. " * 200, tier="cheap")
+    [settled] = catalog.get_costs("b")
+    assert seen == ["fast:gpt-6-luna"] and result.billing_model == expected_model
+    assert settled["model"] == expected_model
+    assert settled["usd"] == pytest.approx(usd_of(expected_model, {"in":100, "out":20}))
+    assert not catalog.get_cost_reservations("b")
+
+
 @pytest.mark.parametrize("model,reasoning", [("gpt-6-luna", "medium"), ("gpt-6.1-sol", "low")])
 @pytest.mark.parametrize("tier", ["cheap", "large"])
 @pytest.mark.parametrize("schema", [None, Result])

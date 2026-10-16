@@ -82,6 +82,35 @@ def test_name_repair_identifies_all_missing_identities_without_public_disclosure
     assert sum(map(len, error.repair_feedback)) <= 1024
 
 
+def test_observed_object_description_still_needs_full_independent_identity_review():
+    text = "Alice took a jar from a shelf. It was labelled ORANGE MARMALADE."
+    value = {"chapter_summary": "Alice took a jar.", "entities": [{
+        "canonical_name": "jar labelled ORANGE MARMALADE", "type": "object", "aliases": [],
+        "matched_roster": False, "state": None}], "relationships": [], "events": [], "themes": []}
+    assert_observed_entity_names(text, value, [])
+    seen = []
+    def reject(system, user, **kwargs):
+        seen.append(review_payload(user))
+        return canned_grounding_verdict(user, unsupported_claims=["identity not established"]), {}
+    with pytest.raises(ExtractionGroundingRejected):
+        review_extraction(text, value, [], complete=reject)
+    assert len(seen) == 1 and seen[0]["extraction"] == value
+    for changed in ("character", "place", "faction"):
+        value["entities"][0]["type"] = changed
+        with pytest.raises(ExtractionGroundingRejected, match="unobserved"):
+            assert_observed_entity_names(text, value, [])
+
+
+@pytest.mark.parametrize("text", ["A jar was on the shelf. The label was unreadable.",
+    "ORANGE MARMALADE was in a basket. Later she found a jar labelled JAM.",
+    "A jar sat on a shelf. " + "A bird sang. " * 20 + "A box was labelled ORANGE MARMALADE."])
+def test_object_description_cannot_import_missing_reversed_or_distant_name_fragments(text):
+    value = {"entities": [{"canonical_name": "jar labelled ORANGE MARMALADE",
+                          "type": "object", "aliases": []}]}
+    with pytest.raises(ExtractionGroundingRejected, match="unobserved"):
+        assert_observed_entity_names(text, value, [])
+
+
 @pytest.mark.parametrize("mutation", ["roles", "negation", "alias"])
 def test_semantic_rejection_of_roles_negation_and_false_aliases_fails_the_whole_extraction(mutation):
     extraction = deepcopy(EXTRACTION)

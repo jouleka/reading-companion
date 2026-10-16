@@ -38,6 +38,23 @@ def gate(tmp_path):
     return store, client, max_bm
 
 
+def test_metadata_projection_preserves_cache_fingerprint_without_reading_source_bodies(gate):
+    from types import SimpleNamespace
+    from app.eval.spoiler_gate.cache import _KEYED
+    store, _, max_bm = gate
+    with store.book(BOOK_ID) as mem:
+        legacy = SimpleNamespace(_audit_all=mem._audit_all)
+        for frontier in range(1, max_bm+1):
+            assert validity_snapshot(mem, frontier) == validity_snapshot(legacy, frontier)
+        for table, _ in _KEYED:
+            rows = mem._audit_cache_rows(table)
+            assert len(rows) == len(mem._audit_all(table))
+            assert all(not {"text", "vec", "summary", "status_json", "canonical_name"} & set(r.keys())
+                       for r in rows)
+        with pytest.raises(ValueError):
+            mem._audit_cache_rows("book_meta")
+
+
 # =========================================================================== vector 3: synthesis scorer
 def test_scorer_passes_a_grounded_recap(gate):
     store, _, _ = gate

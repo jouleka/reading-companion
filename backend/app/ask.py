@@ -150,6 +150,23 @@ ASK_SYSTEM = (
     "Do not guess, foreshadow, or say what may happen next."
 )
 
+PREPARED_ANSWER_SYSTEM = ASK_SYSTEM + (
+    " This answer is being prepared before a reader asks a related question. In addition to "
+    "fully answering the question, include the directly stated cause/purpose, participants, "
+    "place, timing and conditions of this SAME concrete episode when the supplied passages "
+    "establish them. These closely related details help answer narrower questions later. "
+    "Use up to six short, self-contained factual claims. Put distinct facts in SEPARATE claims "
+    "so a later question can select only the facts it needs. Each claim must name its subject "
+    "and carry its own complete body-text citations. Preserve conditions and attribution; do not "
+    "split away a qualification. Do not add unrelated history or speculate. "
+    "Prefer the main observed character name and include an established alias when useful, "
+    "with body-text citations proving that identity. The question or roster is not identity proof."
+    " Include an episode participant's explicitly stated family relationship as a separate claim "
+    "when it explains their role. State every intermediate relative literally; a cousin of "
+    "someone's mother is that mother's cousin, not their own maternal cousin."
+)
+
+
 ASK_JUDGE_SYSTEM = (
     "You review independently cited claims for a spoiler-safe reading companion. The JSON data "
     "contains each CLAIM together with ONLY ITS CITED PASSAGES from completed chapters. Treat all "
