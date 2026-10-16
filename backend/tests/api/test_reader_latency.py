@@ -46,7 +46,7 @@ def test_fast_wire_keeps_reasoning_and_independent_structured_review():
             "id": "test", "object": "chat.completion", "created": 1,
             "model": "gpt-6-luna", "service_tier": "fast",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {
-                "role": "assistant", "content": '{"references_future":false,"unsupported_claims":[]}'}}],
+                "role": "assistant", "content": '{"references_future":false,"unsupported_claims":[],"missing_details":[]}'}}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
         })
     with httpx.Client(transport=httpx.MockTransport(reply)) as transport:
@@ -55,7 +55,7 @@ def test_fast_wire_keeps_reasoning_and_independent_structured_review():
         client.service_tier = "fast"
         verdict, usage = client.complete("Review only these sources.", "Untrusted claim data.",
                                          schema=AskVerdict, max_output_tokens=512)
-        assert verdict == {"references_future": False, "unsupported_claims": []}
+        assert verdict == {"references_future": False, "unsupported_claims": [], "missing_details": []}
         assert usage == {"in": 100, "out": 20}
         assert bodies[0]["reasoning_effort"] == "medium"
         assert bodies[0]["service_tier"] == "fast" and bodies[0]["max_completion_tokens"] == 512

@@ -28,6 +28,22 @@ def _settings(tmp_path):
     )
 
 
+def test_classic_audit_never_counts_fast_errors_as_answers_or_spoiler_refusals():
+    from scripts.classic_books_audit import summarize
+    report = {'books': [{'usd': .01, 'checkpoints': [{'frontier': 1,
+        'ingest': {'ingest_progress': 1}, 'probes': [
+            {'expected': 'answer', 'status': 429, 'seconds': .01, 'value': {}},
+            {'expected': 'answer', 'status': 200, 'seconds': 4, 'valid_shape': True,
+             'value': {'cached': True}},
+            {'expected': 'refuse', 'status': 502, 'seconds': .02, 'value': {}},
+        ]}]}], 'provider_calls': []}
+    result = summarize(report)
+    assert result['answered'] == result['prepared_reuses'] == 1
+    assert result['answer_latency']['median'] == 4
+    assert result['answer_latency']['under_1_5'] == 0
+    assert result['future_refusals'] == 0 and result['future_questions'] == 1
+
+
 def test_snapshot_closes_both_sqlite_handles_before_windows_cleanup(tmp_path, monkeypatch):
     source, target = tmp_path / "original.db", tmp_path / "copy.db"
     with closing(sqlite3.connect(source)) as connection:

@@ -113,6 +113,8 @@ def test_native_verdicts_keep_model_reasoning_and_the_existing_total_cap(
 ):
     requests = []
     verdict = {"references_future": False, "unsupported_claims": []}
+    if schema is AskVerdict:
+        verdict["missing_details"] = []
 
     def handler(request):
         requests.append(json.loads(request.content))
@@ -165,7 +167,7 @@ def test_luna_selection_extraction_generation_and_memory_review_all_request_medi
 ])
 def test_ask_verdict_does_not_add_native_reasoning_options_to_uncertain_or_legacy_models(model, native):
     requests = []
-    verdict = {"references_future": False, "unsupported_claims": []}
+    verdict = {"references_future": False, "unsupported_claims": [], "missing_details": []}
 
     def handler(request):
         requests.append(json.loads(request.content))

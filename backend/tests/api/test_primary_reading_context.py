@@ -188,7 +188,7 @@ def test_recap_proof_batches_cover_every_sentence_before_final_judge(monkeypatch
     def complete(*args, **kwargs):
         data = json.loads(kwargs['user'].split('(untrusted JSON data):\n')[1])
         if kwargs['schema'].__name__ == 'AskEvidenceReview':
-            assert len(data['claims']) == 1 and len(data['sources']) <= 6
+            assert 1 <= len(data['claims']) <= 3 and len(data['sources']) <= 6
             reviewed.extend(c['text'] for c in data['claims'])
             reply = _supported_citation_audit(data, [data['sources'][0]['source_id']])
             if reject_last and len(reviewed) == 3:

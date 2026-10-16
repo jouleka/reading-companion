@@ -18,7 +18,9 @@ def build_state(settings: Settings) -> dict:
     """Construct the service singletons. RAISES (refusing startup) if the LLM resolves to the stub
     without ALLOW_STUB — the D-A7 fail-loud predicate lives in the client's default-deny."""
     os.makedirs(settings.data_dir, exist_ok=True)
-    client = LLMClient(env=settings.llm_env(), allow_stub=settings.allow_stub)
+    # A reservation covers one wire attempt. SDK retries after ambiguous timeouts can be
+    # billed again; the explicit application repair paths reserve each attempt separately.
+    client = LLMClient(env=settings.llm_env(), allow_stub=settings.allow_stub, max_retries=0)
     if settings.jev_enabled:
         from app.llm.jev import JevClient, JevUnavailable, windows_credential
 

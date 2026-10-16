@@ -1,5 +1,6 @@
 """Bounded, source-scoped complete answers. Only the reviewed route can populate this bank."""
 from collections import OrderedDict
+from concurrent.futures import Future
 from copy import deepcopy
 import hashlib
 import json
@@ -12,7 +13,11 @@ from app.eval.spoiler_gate import validity_snapshot
 from app.preparation_plan import valid_saved_plan
 
 
-ANSWER_VERSION = "reviewed-answer-v3-scene-context"
+ANSWER_VERSION = "reviewed-answer-v5-completeness-kinship"
+
+
+class AnswerBusy(RuntimeError):
+    pass
 
 
 def answer_scope(book_id, eff, state, manifest, *, catalog, store, settings, client):
@@ -57,8 +62,35 @@ class AnswerBank:
         self.rows = OrderedDict()
         self.attempted = OrderedDict()
         self.plans = OrderedDict()
+        self.inflight = {}
         self.lock = threading.Lock()
         self._load()
+
+    def run_once(self, key, operation):
+        """Share an in-flight result, including refusal/failure, without persisting failures.
+
+        Waiters retain their Future after its owner removes the map entry. No provider IO or
+        waiting holds the cache lock; different questions have a bounded concurrency limit.
+        """
+        with self.lock:
+            future = self.inflight.get(key)
+            owner = future is None
+            if owner:
+                if len(self.inflight) >= 8:
+                    raise AnswerBusy("answer preparation is busy")
+                future = self.inflight[key] = Future()
+        if not owner:
+            return deepcopy(future.result()), True
+        try:
+            result = operation()
+            future.set_result(deepcopy(result))
+            return result, False
+        except BaseException as error:
+            future.set_exception(error)
+            raise
+        finally:
+            with self.lock:
+                self.inflight.pop(key, None)
 
     @staticmethod
     def _encoded(value):
@@ -198,9 +230,11 @@ class AnswerBank:
         with self.lock:
             return scope in self.attempted
 
-    def mark_prepared(self, scope):
+    def mark_prepared(self, scope, *, keep_plan=False):
         with self.lock:
-            self.plans.pop(scope, None)
+            if not keep_plan:
+                for key in [k for k in self.plans if k[:2] == scope[:2]]:
+                    self.plans.pop(key, None)
             self.attempted[scope] = True
             self.attempted.move_to_end(scope)
             while len(self.attempted) > self.limit:
@@ -210,8 +244,14 @@ class AnswerBank:
     def plan(self, key, facts_hash):
         with self.lock:
             row = self.plans.get(key)
+            if row is None:
+                # The hash also binds source/frontier and reviewer policy. Only an allowance
+                # change may reuse the same stages under a new admission-attempt key.
+                row = next((v for k, v in reversed(self.plans.items())
+                            if k[:2] == key[:2] and v["facts_hash"] == facts_hash), None)
             if row is not None and row["facts_hash"] == facts_hash and valid_saved_plan(row):
-                self.plans.move_to_end(key)
+                if key in self.plans:
+                    self.plans.move_to_end(key)
                 return deepcopy(row)
             return None
 

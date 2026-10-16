@@ -97,9 +97,11 @@ def partial_audit(args, settings, rows):
                     estimate = len(json.dumps({"state": state, "questions": questions}).encode())+256
                     if report["usd"]+estimate*.042e-6 > .02:
                         raise RuntimeError("Synthetic mixed audit spending cap reached")
+                    reserved = estimate*.042e-6
+                    report["usd"] += reserved
                     answers, usage = client.evaluate(state, questions)
                     decisions.update(answers)
-                    report["usd"] += usage["in"]*.042e-6
+                    report["usd"] += usage["in"]*.042e-6-reserved
                     return answers
                 started = time.perf_counter()
                 result = jev_tasks.evidence_partial(
@@ -170,9 +172,11 @@ def extraction_audit(args, settings, rows):
                 estimate = len(json.dumps({"state": state, "questions": questions}).encode())+256
                 if report["usd"]+estimate*.042e-6 > .02:
                     raise RuntimeError("Extraction screen audit spending cap reached")
+                reserved = estimate*.042e-6
+                report["usd"] += reserved
                 answers, usage = client.evaluate(state, questions)
                 decisions.update(answers)
-                report["usd"] += usage["in"]*.042e-6
+                report["usd"] += usage["in"]*.042e-6-reserved
                 return answers
             payload = json.loads(extraction_review_prompt(text, value, roster).split(
                 "(untrusted JSON data):\n", 1)[1])
@@ -225,10 +229,12 @@ def main():
                         estimate = len(json.dumps({"state": state, "questions": questions}).encode()) + 256
                         if report["estimated_usd"] + estimate * 0.042e-6 > 0.02:
                             raise RuntimeError("Synthetic evaluation budget exhausted")
+                        reserved = estimate * 0.042e-6
+                        report["estimated_usd"] += reserved
                         result, usage = client.evaluate(state, questions)
                         report["usage"]["in"] += usage["in"]
                         report["usage"]["out"] += usage["out"]
-                        report["estimated_usd"] += usage["in"] * 0.042e-6
+                        report["estimated_usd"] += usage["in"] * 0.042e-6 - reserved
                         decisions.append(result)
                         return result
                     started, accepted, failure = time.perf_counter(), False, None

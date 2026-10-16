@@ -22,7 +22,7 @@ from app.retrieval_passages import passage_windows
 from app.eval.spoiler_gate.grounding import content_words
 
 
-PRIMARY_RECAP_VERSION = "primary-recap-v4-source-proof"
+PRIMARY_RECAP_VERSION = "primary-recap-v5-batched-proof"
 
 
 def _complete(*args, **kwargs):
@@ -185,12 +185,25 @@ def review_primary_recap(text, snapshot, frontier, atoms, *, catalog, settings, 
         return complete_ask_context(question, selected, candidates)
     draft, sources = recap_evidence(text, snapshot, frontier, atoms, select_sources=select)
     completed_claims = []
-    for index, claim in enumerate(draft.claims):
-        # One whole sentence, with up to six exact proof/context windows. The evidence audit
-        # still commits at most three proof sources. Never drop a unit or truncate source text.
-        partial = {"insufficient_evidence": False, "claims": [
-            claim.model_dump(mode="json")]}
-        selected = [s for s in sources if index+1 in s["recap_claim_ids"]]
+    from app.evidence_text import field_segments
+    batches, pending, selected, units = [], [], [], 0
+    # Share source text across adjacent sentences where the normal six-source contract and
+    # output allowance permit it. Every complete original unit is still audited independently.
+    unit_limit = max(1, (getattr(settings, "cost_max_output_tokens_per_call", 4096)-512)//140)
+    for index, claim in enumerate(draft.claims, 1):
+        own = [s for s in sources if index in s["recap_claim_ids"]]
+        combined = {s["id"]: s for s in [*selected, *own]}
+        count = len(field_segments(claim.text, "answer"))
+        if pending and (len(combined) > 6 or len(pending) >= 3 or units+count > unit_limit):
+            batches.append((pending, selected))
+            pending, selected, units = [], [], 0
+            combined = {s["id"]: s for s in own}
+        pending.append(claim.model_dump(mode="json"))
+        selected, units = list(combined.values()), units+count
+    if pending:
+        batches.append((pending, selected))
+    for claims, selected in batches:
+        partial = {"insufficient_evidence": False, "claims": claims}
         audit = _complete(
             catalog, settings, client, book_id, phase="recap-primary-evidence", tier="cheap",
             system=ASK_EVIDENCE_SYSTEM, schema=AskEvidenceReview,
@@ -209,7 +222,7 @@ def review_primary_recap(text, snapshot, frontier, atoms, *, catalog, settings, 
         verdict = AskVerdict.model_validate(result.value, strict=True)
     except ValueError as exc:
         raise JudgeUnavailable("recap primary judge was invalid") from exc
-    if verdict.references_future or verdict.unsupported_claims:
+    if verdict.references_future or verdict.unsupported_claims or verdict.missing_details:
         raise JudgeUnavailable("recap primary judge rejected the draft")
     # Reuse an unchanged reviewed sentence for the optional current-chapter affordance. No
     # second memory-only generation may reintroduce an error after the recap was cleared.

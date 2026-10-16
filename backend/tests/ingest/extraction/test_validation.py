@@ -56,7 +56,8 @@ def test_absent_new_name_is_rejected_before_any_review_or_memory_write(tmp_path)
     assert calls == []
     assert rejected.value.repair_feedback
     assert "Berenice" not in str(rejected.value) + repr(rejected.value)
-    assert all("Berenice" not in item for item in rejected.value.repair_feedback)
+    assert "Berenice" in rejected.value.repair_feedback[0]
+    assert "/entities/1" in rejected.value.repair_feedback[0]
     store = Store(data_dir=str(tmp_path))
     try:
         client = LLMClient(provider="stub", allow_stub=True, env={})
@@ -69,6 +70,16 @@ def test_absent_new_name_is_rejected_before_any_review_or_memory_write(tmp_path)
             assert mem.chapter_completion("one", 1, content_hash_of(chapter["text"])) is None
     finally:
         store.close()
+
+
+def test_name_repair_identifies_all_missing_identities_without_public_disclosure():
+    with pytest.raises(ExtractionGroundingRejected) as rejected:
+        assert_observed_entity_names("Nobody was named in this passage.", EXTRACTION, [])
+    error = rejected.value
+    assert "Aldric" not in str(error) and "Berenice" not in repr(error)
+    assert all(name in error.repair_feedback[0] for name in ("Aldric", "Berenice"))
+    assert all(path in error.repair_feedback[0] for path in ("/entities/0", "/entities/1"))
+    assert sum(map(len, error.repair_feedback)) <= 1024
 
 
 @pytest.mark.parametrize("mutation", ["roles", "negation", "alias"])
@@ -478,7 +489,8 @@ def test_identity_roster_evidence_does_not_import_a_state_or_future_database_met
     review_extraction("May arrived at the lighthouse.", value, roster, complete=reviewer)
 
 
-def test_dense_extraction_keeps_explicit_coverage_in_one_call_without_copying_original_text():
+@pytest.mark.parametrize("last_failure", [None, "omitted", "unsupported", "outage", "budget"])
+def test_dense_extraction_batches_every_whole_field_and_withholds_partial_clearance(last_failure):
     """Exercise a realistic-sized payload without equating serialized size with model token usage."""
     names = [f"Reader{index}" for index in range(30)]
     source = " ".join(f"{name} waited in the hall." for name in names)
@@ -498,8 +510,9 @@ def test_dense_extraction_keeps_explicit_coverage_in_one_call_without_copying_or
         verdict = canned_grounding_verdict(user)
         calls.append((payload, verdict))
         assert reviewed_source(user) == source
-        assert len(payload["fields"]) == 101
-        assert len(verdict["field_audits"]) == 101
+        assert 1 <= len(payload["fields"]) <= 24
+        assert len(verdict["field_audits"]) == len(payload["fields"])
+        assert payload["extraction"] == value
         by_id = {field["id"]: field for field in payload["fields"]}
         for audit in verdict["field_audits"]:
             field = by_id[audit["field_id"]]
@@ -508,10 +521,26 @@ def test_dense_extraction_keeps_explicit_coverage_in_one_call_without_copying_or
             ]
             assert "".join(segment["text"] for segment in field["segments"]) == field["text"]
             assert all("text" not in assertion for assertion in audit["assertions"])
+        if payload["fields"][-1]["id"] == 100:
+            if last_failure == "omitted":
+                verdict["field_audits"].pop()
+            elif last_failure == "unsupported":
+                verdict["unsupported_claims"] = ["The final action is unsupported."]
+            elif last_failure == "outage":
+                raise RuntimeError("unavailable")
+            elif last_failure == "budget":
+                from app.cost import CostCeilingExceeded
+                raise CostCeilingExceeded("budget exhausted")
         return verdict, {"in": 100, "out": 100}
 
-    review_extraction(source, value, [], complete=reviewer).assert_matches(source, value)
-    assert len(calls) == 1
+    if last_failure:
+        from app.cost import CostCeilingExceeded
+        with pytest.raises(CostCeilingExceeded if last_failure == "budget" else ExtractionSafetyError):
+            review_extraction(source, value, [], complete=reviewer)
+    else:
+        review_extraction(source, value, [], complete=reviewer).assert_matches(source, value)
+    assert 1 < len(calls) <= 16
+    assert [f["id"] for data, _ in calls for f in data["fields"]] == list(range(101))
 
 
 def test_real_punctuation_and_modifier_boundaries_are_input_references_not_a_copy_task():

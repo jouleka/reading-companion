@@ -108,10 +108,12 @@ def main():
                         estimate = len(json.dumps({"state": state, "questions": choices}).encode()) + 256
                         if report["usd"] + estimate * 0.042e-6 > 0.02:
                             raise RuntimeError("Audit spending cap reached")
+                        reserved = estimate * 0.042e-6
+                        report["usd"] += reserved
                         answers, usage = client.evaluate(state, choices,
                                                          timeout_seconds=settings.reader_reuse_timeout_seconds)
                         decisions.update(answers)
-                        report["usd"] += usage["in"] * 0.042e-6
+                        report["usd"] += usage["in"] * 0.042e-6 - reserved
                         return answers
                     start, accepted = time.perf_counter(), False
                     try:

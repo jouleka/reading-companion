@@ -36,7 +36,8 @@ from app.ask import (
     source_facts,
     validate_ask_draft,
 )
-from app.answer_bank import answer_scope, valid_answer
+from app.answer_bank import AnswerBusy, answer_scope, valid_answer
+from app.answer_reuse import review_reuse
 from app.ask_context import complete_ask_context
 from app.ask_evidence import (
     ASK_EVIDENCE_SYSTEM,
@@ -480,6 +481,32 @@ def ask_the_book(
     client=Depends(get_reader_client),
     worker=Depends(get_worker),
 ):
+    bank = getattr(client, "answers", None)
+    if settings.reader_answer_cache and hasattr(bank, "run_once"):
+        eff, state, manifest = _effective(book_id, body.bookmark, catalog, store, settings, worker)
+        eff = min(eff, state["ingest_progress"])
+        if eff > 0:
+            scope = answer_scope(book_id, eff, state, manifest, catalog=catalog, store=store,
+                                 settings=settings, client=client)
+            cached = bank.get((*scope, body.question))
+            if cached is not None and cached.get("as_of_chapter") == eff and valid_answer(cached):
+                return {**cached, "cached": True, "cost": _ask_cost_payload([])}
+            # A paused background call must not make an interactive request inherit its
+            # cancellation or its smaller preparation ceiling. Share foreground calls only.
+            key = (*scope, body.question, bool(getattr(client, "preparing", False)))
+            try:
+                value, shared = bank.run_once(key, lambda: _ask_the_book(
+                    book_id, body, catalog, store, settings, client, worker))
+            except AnswerBusy as exc:
+                raise HTTPException(503, "answer preparation is busy; retry shortly") from exc
+            if shared:
+                value["cost"] = _ask_cost_payload([])
+                value["cached"] = not value["insufficient_evidence"]
+            return value
+    return _ask_the_book(book_id, body, catalog, store, settings, client, worker)
+
+
+def _ask_the_book(book_id, body, catalog, store, settings, client, worker):
     """Answer only from completed, retrieved passages and return chapter-navigable citations."""
     eff, state, manifest = _effective(book_id, body.bookmark, catalog, store, settings, worker)
     eff = min(eff, state["ingest_progress"])
@@ -526,7 +553,12 @@ def ask_the_book(
                     return result.value
                 try:
                     matched = jev_tasks.reuse_answer(body.question, candidates, run=reuse_run,
-                                                     settings=settings)
+                        settings=settings, review=lambda candidate: review_reuse(
+                            body.question, candidate, frontier=eff, store=store,
+                            atoms={a["key"]: a for a in manifest["atoms"]},
+                            catalog=catalog, settings=settings, client=client, book_id=book_id,
+                            remember=lambda result: remember(result, provider=client.provider,
+                                                             model=client.billing_model("cheap"))))
                     payload = {**matched["payload"], "cached": True,
                                "cost": _ask_cost_payload(calls)}
                     answer_cache.set(answer_key, payload,
@@ -690,6 +722,12 @@ def ask_the_book(
                 "The draft failed the completed-source safety checks. Remove unsupported "
                 "developments or bindings and state only what its own cited passages establish."
             ]
+            if score["prolepsis_hits"]:
+                repair_feedback.append(
+                    "Future-modal wording is blocked even inside indirect speech. Report only "
+                    "the completed statement in past tense with explicit named speakers and "
+                    "subjects: 'Mara instructed Lio to marry', not 'Lio will marry'. Do not "
+                    "change the source's certainty or convert its prediction into an event.")
             continue
 
         used = cited_sources(draft, sources)
@@ -720,6 +758,7 @@ def ask_the_book(
                 frontier=eff,
                 scene_sources=[s for s in candidates if s["ordinal"] == eff]
                     if client.provider != "stub" else (),
+                coverage_sources=sources if client.provider != "stub" else (),
             )
         except CostCeilingExceeded as exc:
             raise HTTPException(429, "book cost ceiling reached") from exc

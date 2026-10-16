@@ -27,7 +27,13 @@ def preparation_key(scope, settings):
     # A larger/new planner gets one new bounded attempt without invalidating already-reviewed
     # answers. Its durable marker survives restart; scrolling cannot repeatedly pay for a plan.
     stamp = hashlib.sha256(json.dumps([scope.answer_key[2], PREPARATION_VERSION,
-                                      settings.reader_prepare_max_questions]).encode()).hexdigest()
+                                      settings.reader_prepare_max_questions,
+                                      settings.cost_max_input_tokens_per_call,
+                                      settings.cost_max_output_tokens_per_call,
+                                      settings.cost_max_input_tokens_per_book,
+                                      settings.cost_max_output_tokens_per_book,
+                                      settings.cost_max_usd_per_book,
+                                      settings.reader_prepare_max_usd_per_book]).encode()).hexdigest()
     return (*scope.answer_key[:2], stamp)
 
 
@@ -150,6 +156,7 @@ def prepare(app, scope):
     attempt_key = preparation_key(scope, st.settings)
     if bank.prepared(attempt_key):
         return
+    finished = False
     try:
         scope.check(app, snapshot=True)
         with st.store.book(scope.book_id) as mem:
@@ -157,7 +164,8 @@ def prepare(app, scope):
                 byte_limit=min(18000, st.settings.cost_max_input_tokens_per_call//2))
         if not facts:
             return
-        facts_hash = hashlib.sha256(bank._encoded(facts)).hexdigest()
+        # Resumable stages may survive a budget change, never a source/model/review change.
+        facts_hash = hashlib.sha256(bank._encoded([scope.answer_key, facts])).hexdigest()
         saved = bank.plan(attempt_key, facts_hash)
         if saved is not None and any(not set(c["basis_ids"]) <= {f["id"] for f in facts}
                                      for c in saved["questions"]):
@@ -175,7 +183,9 @@ def prepare(app, scope):
                     PLAN_OUTPUT_TOKENS, st.settings.cost_max_output_tokens_per_call)}),
                 client, scope.book_id, phase="questions", tier="cheap", schema=PreparedQuestions,
                 system=PLAN_SYSTEM,
-                user=json.dumps({"completed_chapter": scope.frontier, "facts": facts}, ensure_ascii=False),
+                user=json.dumps({"completed_chapter": scope.frontier, "facts": facts,
+                                 "requested_questions": st.settings.reader_prepare_max_questions},
+                                ensure_ascii=False),
             )
             candidates = validated_candidates(plan.value, facts)
             checkpoint(candidates, reviewed=False)
@@ -198,6 +208,7 @@ def prepare(app, scope):
             safe = reviewed_candidates(audit.value, candidates, facts)
             checkpoint(safe, reviewed=True)
         completed = set()
+        failed = False
         for item in diverse_order(safe, limit=st.settings.reader_prepare_max_questions):
             scope.check(app, snapshot=True)
             if item["kind"] == "follow_up" and item["follow_up_to"] not in completed:
@@ -214,6 +225,10 @@ def prepare(app, scope):
                     completed.add(item["id"])
             except Exception:
                 scope.check(app)
+                failed = True
+        finished = not failed
     finally:
         scope.check(app, snapshot=True)
-        bank.mark_prepared(attempt_key)
+        # Persist the attempt to prevent scroll/restart spend loops. A failed stage retains
+        # its plan, which can resume after an explicit change to the configured allowance.
+        bank.mark_prepared(attempt_key, keep_plan=not finished)

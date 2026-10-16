@@ -500,6 +500,7 @@ class IngestWorker:
 
                         clearance = review_extraction(
                             chunk, validated, roster, complete=reviewed_complete,
+                            max_output_tokens=self._settings.cost_max_output_tokens_per_call,
                             screen=(screen_extraction if getattr(self._settings, "jev_extraction_enabled", False)
                                     and getattr(self._client, "jev", None) is not None else None),
                         )
