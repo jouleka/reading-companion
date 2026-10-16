@@ -109,6 +109,13 @@ reviewed answers. Preparation requires answer caching. Optional reader flags rem
 the local Jev profile enables them with eight-question admission. Broader coverage is still bounded
 by available evidence, successful reviews and spend; eight answers are not promised at every chapter.
 
+Paused plans share the existing 2 MiB answer checkpoint, with at most sixteen plans and one current
+plan per book incarnation. A checkpoint binds the exact fact pack and source scope and records
+whether independent question review has finished. Returning to a paused book reuses completed
+planning/review stages and exact cleared answers; pending plans still require the full question
+review before any suggestion is offered. Completed attempts remove their plan. Older answer files
+remain readable, and size pressure evicts saved plans before reviewed answers.
+
 ## Chapter extraction screening
 
 `JEV_EXTRACTION_ENABLED` adds a negative-only screen before the full extraction review. It can
@@ -163,14 +170,20 @@ older mistaken merges. This is an accuracy/background-preparation feature, not a
 
 `RECAP_PREWARM` prepares the normal guarded recap after successful durable ingestion. One background
 consumer and an eight-book queue bound work. Startup also schedules up to eight existing books.
-Page reports notify this same coalesced scheduler; repeated reports within a completed chapter
-do not launch more model calls. The scheduler takes a short snapshot lease and releases it before
+Page reports give the active book priority, including a newly opened unread book. Queued work for
+other books is discarded; returning reconstructs it from the current source scope and checkpoint.
+Ingest/correction notifications cannot steal that focus. Repeated forward/backward reports within
+one completed frontier do not launch more model calls. A newer frontier pauses old preparation and
+waits for grounded ingestion to catch up. The scheduler takes a short snapshot lease and releases it before
 provider IO, allowing position saves, resets and deletion to proceed while preparing. It validates
-incarnation, reset epoch and frontier atomically before paid reservations, and validates the full
+incarnation, reset epoch and the exact current frontier atomically before paid reservations, and validates the full
 source snapshot before publishing. A source correction schedules a fresh snapshot, including when
 it arrives during an active job. It never trusts a queued bookmark, reads ahead, changes the reading position, or bypasses
-review. Existing snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs
-still apply. Queued work is discarded at shutdown; active work finishes before stores close.
+review. Focus changes cooperatively stop new paid phases; a call already sent settles normally.
+Its complete reviewed result can be retained in its original scope if source/epoch/incarnation
+remain valid. Reset, correction, deletion and shutdown still reject stale publication. Existing
+snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs still apply.
+Shutdown stops new phases and settles the in-flight call before stores close.
 
 The hybrid profile strengthens recap generation/review against unsupported location, time and
 causal attachments and withholds unsupported details. Its separate cache identity prevents reuse
@@ -204,6 +217,7 @@ python scripts/reader_preparation_audit.py --run --env-file /path/to/ignored/.en
 python scripts/reader_preparation_audit.py --run --extraction --env-file /path/to/ignored/.env --output extraction-prepared.json
 python scripts/reader_preparation_audit.py --run --broader --extraction --env-file /path/to/ignored/.env --output broader-prepared.json
 python scripts/reader_preparation_audit.py --run --broader --reviewed-fixture --env-file /path/to/ignored/.env --output broader-controlled.json
+python scripts/reader_preparation_audit.py --run --broader --reviewed-fixture --priority --env-file /path/to/ignored/.env --output priority.json
 python scripts/reader_preparation_audit.py --run --premises --env-file /path/to/ignored/.env --output premises.json
 python scripts/reader_preparation_audit.py --run --premises --heldout --env-file /path/to/ignored/.env --output premises-heldout.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
@@ -232,6 +246,21 @@ The direct reuse sample
 had 0 false accepts across 45 development and 24 held-out multi-candidate checks, accepting only
 4 of 24 eligible paraphrases. That limited recall is intentional; these small samples do not
 establish production accuracy or a universal 1.5-second guarantee.
+
+Priority/resume verification: 24 new tests cover full-queue displacement, rapid A/B/A switches,
+unchanged backward pages, ingestion lag, atomic frontier reservations, paused/restarted planning
+stages, mandatory pending-plan review, fact-pack mismatch, stale publication, shutdown settlement
+and bounded backwards-compatible checkpoints. A capped live controlled-extraction trial switched
+to an unread book during actual answer review in 9.7 ms. The sent call settled, its cleared answer
+was retained, and no subsequent provider call ran until return. Planning and independent question
+review each ran once across pause/resume. All eight complete reviewed answers returned in 2.0–3.6
+ms; preparation cost $0.008, restart added no spend, and reset hid advanced answers. No unread
+fixture facts reached recorded provider inputs. This isolates scheduling with hand-authored
+extraction and actual grounding/answer reviews, not general extraction quality or fresh latency.
+The existing local book retained its exact position and four prepared questions; a complete cached
+answer returned in 79 ms with zero provider calls and no new restart spend. During audit setup,
+grounding caught an incomplete fixture and two uncapped instrumentation attempts were rejected by
+the cost guard; the final audit forwards production token caps and records provider failures.
 
 Selective-review verification: 1,368 backend tests passed (83 optional/platform skips). Mixed
 development and held-out checks covered 180 claim judgments with 0 unsupported fast approvals;

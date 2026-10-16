@@ -5,6 +5,7 @@ from pathlib import Path
 import statistics
 import sys
 import tempfile
+import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient
 from app.config import Settings
 from app.main import create_app
-from app.reader_prepare import PreparationScope
+from app.reader_prepare import PreparationScope, preparation_key
 from app.preparation_plan import REVIEW_SYSTEM, PreparationReview, reviewed_candidates
 from app.cost import budgeted_completion
 from live_quality_audit import fixture
@@ -71,6 +72,7 @@ def reviewed_fixture_extraction(first):
                    "Mara put the key in a red tin under the workshop table.")
         events = ["Jonas lent Mara a brass key so she could open the lighthouse workshop.",
                   "Mara put the key in a red tin under the workshop table."]
+        participants = [["Jonas", "Mara", "brass key"], ["Mara", "brass key"]]
     else:
         summary = ("Jonas visited Mara at the lighthouse workshop before noon. Mara returned the brass key "
                    "to Jonas because she had finished repairing the workshop door. Jonas thanked Mara. "
@@ -80,10 +82,13 @@ def reviewed_fixture_extraction(first):
                   "Mara returned the brass key to Jonas because she had finished repairing the workshop door.",
                   "Jonas thanked Mara.", "Jonas put the key in his coat pocket, then left on foot.",
                   "Mara stayed at the workshop to repair a boat."]
+        participants = [["Jonas", "Mara"], ["Mara", "Jonas", "brass key"],
+                        ["Jonas", "Mara"], ["Jonas", "brass key"], ["Mara"]]
     return {"chapter_summary": summary, "entities": [entity("Mara", "character"),
         entity("Jonas", "character"), entity("brass key", "object")],
         "relationships": [{"src": "Mara", "dst": "Jonas", "rel_type": "family", "label": "siblings"}] if first else [],
-        "events": [{"summary": text, "participants": []} for text in events], "themes": []}
+        "events": [{"summary": text, "participants": names}
+                   for text, names in zip(events, participants, strict=True)], "themes": []}
 
 
 def premise_audit(args):
@@ -132,20 +137,24 @@ def main():
     parser.add_argument("--premises", action="store_true", help="Audit the independent question-premise reviewer only")
     parser.add_argument("--heldout", action="store_true")
     parser.add_argument("--reviewed-fixture", action="store_true", help="Isolate planning with hand-authored extraction and actual full grounding reviews")
+    parser.add_argument("--priority", action="store_true", help="Switch books during a paid answer review, then resume its saved plan")
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required for this capped paid audit")
     if args.reviewed_fixture and (not args.broader or args.premises):
         parser.error("--reviewed-fixture requires --broader and is separate from --premises")
+    if args.priority and not args.reviewed_fixture:
+        parser.error("--priority requires --broader --reviewed-fixture")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.premises:
         return premise_audit(args)
     report = {"scope": "Synthetic three-chapter book; only first two chapters completed.",
-              "calls": [], "answers": [], "jev_calls": [], "extraction_screen_enabled": args.extraction,
+              "calls": [], "failures": [], "answers": [], "jev_calls": [], "extraction_screen_enabled": args.extraction,
               "book_cap_usd": 1, "preparation_cap_usd": .25, "broader": args.broader,
               "extraction_generation": "hand-authored; actual grounding review" if args.reviewed_fixture else "configured provider"}
     def save():
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    paused, release = threading.Event(), threading.Event()
     with tempfile.TemporaryDirectory(prefix="reader-preparation-") as scratch:
         settings = Settings(_env_file=str(args.env_file), data_dir=str(Path(scratch)/"data"),
             frontend_dist_dir=None, trusted_hosts="testserver", deployment_mode="local",
@@ -175,8 +184,12 @@ def main():
                     if args.reviewed_fixture and getattr(schema, "__name__", None) == "Extraction":
                         value, usage = reviewed_fixture_extraction("Mara and Jonas are siblings." in user), {"in": 0, "out": 0}
                     else:
+                        # budgeted_completion preserves legacy test doubles without forwarding
+                        # caps. This instrumentation wrapper must still mirror production caps.
+                        cap = {"PreparedQuestions": 2048, "PreparationReview": 1536}.get(
+                            getattr(schema, "__name__", None), settings.cost_max_output_tokens_per_call)
                         value, usage = original(system, user, tier=tier, schema=schema,
-                                                max_output_tokens=max_output_tokens)
+                                                max_output_tokens=max_output_tokens or cap)
                     report["calls"].append({"schema": getattr(schema, "__name__", None),
                         "seconds": time.perf_counter()-started,
                         "unread_fact_in_input": "Velora" in user or "silver compass" in user,
@@ -187,14 +200,25 @@ def main():
                     if getattr(schema, "__name__", None) == "ExtractionVerdict":
                         report["calls"][-1]["unsupported_claims"] = value["unsupported_claims"]
                     save()
+                    if args.priority and getattr(schema, "__name__", None) == "AskVerdict" and not paused.is_set():
+                        paused.set()
+                        if not release.wait(60):
+                            raise RuntimeError("Priority audit did not release the in-flight call")
                     return value, usage
-                finally:
-                    pass
+                except Exception as error:
+                    report["failures"].append({"schema": getattr(schema, "__name__", None),
+                        "error": type(error).__name__, "seconds": time.perf_counter()-started})
+                    save()
+                    raise
             client.complete = observed
             imported = api.post("/api/books", files={"file": (
                 "synthetic.epub", broader_fixture() if args.broader else fixture(), "application/epub+zip")})
             assert imported.status_code == 201, imported.text
             bid = imported.json()["book_id"]
+            if args.priority:
+                other = api.post("/api/books", files={"file": (
+                    "unread.epub", fixture(), "application/epub+zip")}).json()["book_id"]
+                assert other != bid
             atoms = json.loads((Path(settings.data_dir)/"books"/bid/"atoms.json").read_text())["atoms"]
             offset = sum(a["char_len"] for a in atoms[:2])
             started = time.perf_counter()
@@ -223,6 +247,44 @@ def main():
                 assert response.status_code == 200
                 times.append(time.perf_counter()-started)
             report["position_seconds"] = times
+            if args.priority:
+                deadline = time.monotonic()+240
+                while not paused.wait(.2) and app.state.recap_warmer.pending and time.monotonic() < deadline:
+                    pass
+                if not paused.is_set():
+                    report["preparation_cost_ledger"] = app.state.catalog.get_costs(bid)
+                    report["saved_plan_stages"] = [p["reviewed"] for p in client.answers.plans.values()]
+                    save()
+                    raise RuntimeError("No full answer review reached the priority checkpoint")
+                try:
+                    paid_before = len(report["calls"])
+                    started = time.perf_counter()
+                    assert api.put(f"/api/books/{other}/position", json={
+                        "cfi": "unread-start", "offset": 0, "position_epoch": 0}).status_code == 200
+                    switch_seconds = time.perf_counter()-started
+                    assert app.state.catalog.get_cost_reservations(bid)
+                finally:
+                    release.set()
+                api.portal.call(app.state.recap_warmer.queue.join)
+                assert len(report["calls"]) == paid_before
+                assert not app.state.catalog.get_cost_reservations(bid)
+                scope = PreparationScope.capture(app, bid, app.state.catalog.get_book(bid)["incarnation"])
+                key = preparation_key(scope, settings)
+                assert client.answers.plans[key]["reviewed"] is True
+                assert not client.answers.prepared(key)
+                retained = [k for k in client.answers.rows if k[:3] == scope.answer_key]
+                assert retained and not api.get(f"/api/books/{bid}/prepared-questions").json()["questions"]
+                before_counts = {name: sum(r["schema"] == name for r in report["calls"])
+                                 for name in ("PreparedQuestions", "PreparationReview")}
+                assert api.put(f"/api/books/{bid}/position", json={
+                    "cfi": "return-to-book", "offset": offset, "position_epoch": 0}).status_code == 200
+                api.portal.call(app.state.recap_warmer.queue.join)
+                assert before_counts == {name: sum(r["schema"] == name for r in report["calls"])
+                                         for name in before_counts}
+                report["priority"] = {"switch_position_seconds": switch_seconds,
+                    "new_provider_calls_while_paused": 0, "inflight_reviewed_answer_retained": True,
+                    "plan_and_review_calls_total": before_counts,
+                    "plan_resume_without_regeneration": True, "pending_reservations_after_pause": 0}
             api.portal.call(app.state.recap_warmer.queue.join)
             scope = PreparationScope.capture(app, bid, app.state.catalog.get_book(bid)["incarnation"])
             offered = api.get(f"/api/books/{bid}/prepared-questions").json()["questions"]

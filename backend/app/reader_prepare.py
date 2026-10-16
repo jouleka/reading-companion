@@ -1,6 +1,6 @@
 """Short snapshot leases, bounded background spend, and unchanged reviewed answer preparation."""
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 from types import SimpleNamespace
@@ -15,6 +15,10 @@ from app.preparation_plan import (
 
 
 class PreparationStale(RuntimeError):
+    pass
+
+
+class PreparationSuperseded(PreparationStale):
     pass
 
 
@@ -33,6 +37,7 @@ class PreparationScope:
     epoch: int
     frontier: int
     answer_key: tuple
+    cancelled: object = field(default=None, compare=False, repr=False)
 
     @classmethod
     def capture(cls, app, book_id, incarnation):
@@ -49,7 +54,7 @@ class PreparationScope:
                            settings=st.settings, client=st.reader_client)
         return cls(book_id, incarnation, state["position_epoch"], eff, key)
 
-    def check(self, app, *, snapshot=False):
+    def check(self, app, *, snapshot=False, priority=True):
         if getattr(getattr(app.state, "recap_warmer", None), "closed", False):
             raise PreparationStale()
         st = app.state
@@ -58,6 +63,9 @@ class PreparationScope:
                 or state["position_epoch"] != self.epoch
                 or min(state["bookmark"], state["ingest_progress"]) < self.frontier):
             raise PreparationStale()
+        if priority and ((self.cancelled is not None and self.cancelled.is_set())
+                         or state["bookmark"] != self.frontier):
+            raise PreparationSuperseded()
         if snapshot:
             from app.ingest.manifest import load_manifest
             key = answer_scope(self.book_id, self.frontier, state,
@@ -76,7 +84,7 @@ class PreparationCatalog:
         return getattr(self.app.state.catalog, name)
 
     def reserve_cost(self, book_id, **kwargs):
-        self.scope.check(self.app)
+        self.scope.check(self.app, snapshot=True)
         if book_id != self.scope.book_id:
             raise PreparationStale()
         return self.app.state.catalog.reserve_cost(
@@ -100,7 +108,9 @@ class GuardedCache:
         return getattr(self.cache, name)
 
     def set(self, *args, **kwargs):
-        self.scope.check(self.app, snapshot=True)
+        # A fully reviewed call already in flight may finish after a focus change. Retain its
+        # original scoped result, but never publish across reset, deletion or source correction.
+        self.scope.check(self.app, snapshot=True, priority=False)
         return self.cache.set(*args, **kwargs)
 
 
@@ -134,24 +144,44 @@ def prepare(app, scope):
                 byte_limit=min(18000, st.settings.cost_max_input_tokens_per_call//2))
         if not facts:
             return
-        plan = budgeted_completion(
-            catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 2048}),
-            client, scope.book_id, phase="questions", tier="cheap", schema=PreparedQuestions,
-            system=PLAN_SYSTEM,
-            user=json.dumps({"completed_chapter": scope.frontier, "facts": facts}, ensure_ascii=False),
-        )
-        candidates = validated_candidates(plan.value, facts)
-        if not candidates:
-            return
-        scope.check(app, snapshot=True)
-        audit = budgeted_completion(
-            catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 1536}),
-            client, scope.book_id, phase="question-review", tier="large", schema=PreparationReview,
-            system=REVIEW_SYSTEM,
-            user=json.dumps({"completed_chapter": scope.frontier, "facts": facts,
-                             "questions": candidates}, ensure_ascii=False),
-        )
-        safe = reviewed_candidates(audit.value, candidates, facts)
+        facts_hash = hashlib.sha256(bank._encoded(facts)).hexdigest()
+        saved = bank.plan(attempt_key, facts_hash)
+        if saved is not None and any(not set(c["basis_ids"]) <= {f["id"] for f in facts}
+                                     for c in saved["questions"]):
+            saved = None
+
+        def checkpoint(questions, *, reviewed):
+            scope.check(app, snapshot=True, priority=False)
+            if st.catalog.get_state(scope.book_id)["bookmark"] == scope.frontier:
+                bank.set_plan(attempt_key, {"facts_hash": facts_hash, "reviewed": reviewed,
+                                             "questions": questions})
+
+        if saved is None:
+            plan = budgeted_completion(
+                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 2048}),
+                client, scope.book_id, phase="questions", tier="cheap", schema=PreparedQuestions,
+                system=PLAN_SYSTEM,
+                user=json.dumps({"completed_chapter": scope.frontier, "facts": facts}, ensure_ascii=False),
+            )
+            candidates = validated_candidates(plan.value, facts)
+            checkpoint(candidates, reviewed=False)
+        else:
+            candidates = saved["questions"]
+        if saved is not None and saved["reviewed"]:
+            safe = candidates
+        else:
+            if not candidates:
+                return
+            scope.check(app, snapshot=True)
+            audit = budgeted_completion(
+                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 1536}),
+                client, scope.book_id, phase="question-review", tier="large", schema=PreparationReview,
+                system=REVIEW_SYSTEM,
+                user=json.dumps({"completed_chapter": scope.frontier, "facts": facts,
+                                 "questions": candidates}, ensure_ascii=False),
+            )
+            safe = reviewed_candidates(audit.value, candidates, facts)
+            checkpoint(safe, reviewed=True)
         completed = set()
         for item in diverse_order(safe, limit=st.settings.reader_prepare_max_questions):
             scope.check(app, snapshot=True)

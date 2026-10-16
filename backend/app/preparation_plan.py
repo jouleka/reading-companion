@@ -195,3 +195,32 @@ def diverse_order(candidates, *, limit):
                 ordered.append(row)
                 counts["follow_up"] += 1
     return ordered[:limit]
+
+
+def valid_saved_plan(value):
+    """Checkpoint shape only, never semantic clearance. Unreviewed plans still need review."""
+    try:
+        if (set(value) != {"reviewed", "facts_hash", "questions"}
+                or type(value["reviewed"]) is not bool
+                or not isinstance(value["facts_hash"], str) or len(value["facts_hash"]) != 64
+                or any(c not in "0123456789abcdef" for c in value["facts_hash"])
+                or not isinstance(value["questions"], list) or len(value["questions"]) > 12):
+            return False
+        seen, ids, parents = set(), [], set()
+        for row in value["questions"]:
+            index = row["id"]
+            if type(index) is not int or not 1 <= index <= 12 or (ids and index <= ids[-1]):
+                return False
+            item = PlannedQuestion.model_validate({k: v for k, v in row.items() if k != "id"}, strict=True)
+            key = _key(item.question)
+            if (not key or key in seen or len(set(item.basis_ids)) != len(item.basis_ids)
+                    or (item.kind == "follow_up" and item.follow_up_to not in parents)
+                    or (item.kind != "follow_up" and item.follow_up_to is not None)):
+                return False
+            if item.kind != "follow_up":
+                parents.add(index)
+            ids.append(index)
+            seen.add(key)
+        return True
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False

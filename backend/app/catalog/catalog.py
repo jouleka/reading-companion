@@ -382,7 +382,7 @@ class Catalog:
                     ).fetchone()
                     incarnation, epoch, frontier = expected_reading_scope
                     if (current is None or current[0] != incarnation or current[1] != epoch
-                            or min(current[2], current[3]) < frontier):
+                            or current[2] != frontier or current[3] < frontier):
                         raise RuntimeError("reader preparation scope is no longer current")
                 if max_preparation_usd is not None:
                     if not phase.startswith("reader-prepare:"):

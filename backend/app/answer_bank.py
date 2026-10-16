@@ -9,6 +9,7 @@ import threading
 
 from app.ask import AskDraft
 from app.eval.spoiler_gate import validity_snapshot
+from app.preparation_plan import valid_saved_plan
 
 
 ANSWER_VERSION = "reviewed-answer-v2"
@@ -55,6 +56,7 @@ class AnswerBank:
         self.path = Path(persist_path) if persist_path is not None else None
         self.rows = OrderedDict()
         self.attempted = OrderedDict()
+        self.plans = OrderedDict()
         self.lock = threading.Lock()
         self._load()
 
@@ -73,12 +75,15 @@ class AnswerBank:
             data = json.loads(raw)
             rows = data["rows"]
             attempted = data.get("prepared", [])
+            plans = data.get("plans", [])
+            signed = [rows, attempted, plans] if "plans" in data else [rows, attempted]
             if (data["version"] != ANSWER_VERSION or not isinstance(rows, list)
                     or len(rows) > self.limit
                     or not isinstance(attempted, list) or len(attempted) > self.limit
                     or any(not isinstance(k, list) or len(k) != 3
                            or not all(isinstance(p, str) for p in k) for k in attempted)
-                    or hashlib.sha256(self._encoded([rows, attempted])).hexdigest() != data["sha256"]):
+                    or not isinstance(plans, list) or len(plans) > min(self.limit, 16)
+                    or hashlib.sha256(self._encoded(signed)).hexdigest() != data["sha256"]):
                 return
             for key, row in rows:
                 if (not isinstance(key, list) or len(key) != 4
@@ -89,8 +94,13 @@ class AnswerBank:
                         or type(row.get("suggested", False)) is not bool
                         or not valid_answer(row["payload"])):
                     return
+            for key, plan in plans:
+                if (not isinstance(key, list) or len(key) != 3
+                        or not all(isinstance(k, str) for k in key) or not valid_saved_plan(plan)):
+                    return
             self.rows.update((tuple(k), v) for k, v in rows)
             self.attempted.update((tuple(k), True) for k in attempted)
+            self.plans.update((tuple(k), v) for k, v in plans)
         except (OSError, ValueError, KeyError, TypeError, AttributeError):
             pass
 
@@ -101,12 +111,17 @@ class AnswerBank:
         try:
             rows = [[list(k), v] for k, v in self.rows.items()]
             attempted = [list(k) for k in self.attempted]
+            plans = [[list(k), v] for k, v in self.plans.items()]
             while True:
                 raw = self._encoded({"version": ANSWER_VERSION, "rows": rows, "prepared": attempted,
-                                     "sha256": hashlib.sha256(self._encoded([rows, attempted])).hexdigest()})
+                                     "plans": plans,
+                                     "sha256": hashlib.sha256(self._encoded([rows, attempted, plans])).hexdigest()})
                 if len(raw) <= 2 * 1024 * 1024:
                     break
-                rows.pop(0)
+                if plans:
+                    plans.pop(0)
+                else:
+                    rows.pop(0)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_bytes(raw)
             os.replace(temporary, self.path)
@@ -175,6 +190,8 @@ class AnswerBank:
                 del self.rows[key]
             for key in [k for k in self.attempted if k[0] == book_id]:
                 del self.attempted[key]
+            for key in [k for k in self.plans if k[0] == book_id]:
+                del self.plans[key]
             self._save()
 
     def prepared(self, scope):
@@ -183,8 +200,31 @@ class AnswerBank:
 
     def mark_prepared(self, scope):
         with self.lock:
+            self.plans.pop(scope, None)
             self.attempted[scope] = True
             self.attempted.move_to_end(scope)
             while len(self.attempted) > self.limit:
                 self.attempted.popitem(last=False)
+            self._save()
+
+    def plan(self, key, facts_hash):
+        with self.lock:
+            row = self.plans.get(key)
+            if row is not None and row["facts_hash"] == facts_hash and valid_saved_plan(row):
+                self.plans.move_to_end(key)
+                return deepcopy(row)
+            return None
+
+    def set_plan(self, key, plan):
+        if not valid_saved_plan(plan):
+            raise ValueError("invalid preparation checkpoint")
+        with self.lock:
+            # A monotonic frontier/source correction cannot return to a previous scope. Keep
+            # only the current resumable plan per incarnation, without deleting reviewed answers.
+            for prior in [k for k in self.plans if k[:2] == key[:2] and k != key]:
+                del self.plans[prior]
+            self.plans[key] = deepcopy(plan)
+            self.plans.move_to_end(key)
+            while len(self.plans) > min(self.limit, 16):
+                self.plans.popitem(last=False)
             self._save()
