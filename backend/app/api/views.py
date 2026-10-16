@@ -103,7 +103,8 @@ from app.reading_assist import (
     selection_prompt,
 )
 from app.recap_grounding import (
-    PRIMARY_RECAP_VERSION, primary_repair_context, primary_snapshot, review_primary_recap,
+    PRIMARY_RECAP_VERSION, primary_generation_prompt, primary_repair_context,
+    primary_review_preflight, primary_snapshot, review_primary_recap,
 )
 
 router = APIRouter(
@@ -1214,12 +1215,22 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
         if getattr(client, "jev", None) is not None:
             system += jev_tasks.SUMMARY_GROUNDING_RULES
         cumulative_facts = _cumulative_recap_facts(facts)
-        full_review_fits = _recap_input_fits(
+        full_review_fits = not use_primary and _recap_input_fits(
             settings, client, JUDGE_SYSTEM, judge_prompt("", facts), schema=JudgeVerdict,
         )
         recap_final = None
         primary_correction, primary_now = "", None
         atoms = {atom["key"]: atom for atom in manifest["atoms"]}
+        source_prompt = None
+        if use_primary:
+            try:
+                source_prompt = primary_generation_prompt(primary, eff, atoms,
+                    byte_limit=min(18000, settings.cost_max_input_tokens_per_call//2))
+            except JudgeUnavailable as exc:
+                raise HTTPException(502, "completed primary evidence could not be prepared") from exc
+            if not _recap_input_fits(settings, client, ASK_EVIDENCE_SYSTEM,
+                                     primary_review_preflight(source_prompt), schema=AskEvidenceReview):
+                raise HTTPException(429, "recap proof exceeds the per-call input ceiling")
         for attempt in range(2):
             # attempt 0: EVOLVE from recap(N-1) + the delta (non-repetitive). If it fails the gate,
             # attempt 1 falls back to the cumulative synthesis — proven grounded, so the reader still
@@ -1234,6 +1245,8 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
             else:
                 prompt = synth_prompt(eff, cumulative_facts, book_type=book_type)
                 review_facts = cumulative_facts
+            if use_primary:
+                prompt = source_prompt
             prompt += primary_correction
             if use_primary:
                 prompt += ("\nReturn at most six complete sentences, each at most 800 characters. "
@@ -1241,7 +1254,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                            "Every fact must also be verifiable against the completed primary text; "
                            "derived chapter memory may contain old errors.")
             if (not _recap_input_fits(settings, client, system, prompt)
-                    or not _recap_input_fits(settings, client, JUDGE_SYSTEM,
+                    or not use_primary and not _recap_input_fits(settings, client, JUDGE_SYSTEM,
                                             judge_prompt("", review_facts), schema=JudgeVerdict)):
                 raise HTTPException(429, "recap evidence exceeds the per-call input ceiling")
             try:
@@ -1252,7 +1265,16 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 raise HTTPException(429, "book cost ceiling reached") from exc
             with store.book(book_id) as mem:
                 try:
-                    assert_recap_safe(mem, eff, recap, read_text=read_text_upto(mem, eff))
+                    if use_primary:
+                        score = score_recap(mem, eff, recap, read_text=read_text_upto(mem, eff))
+                        if (score["future_entity_leaks"] or score["prolepsis_hits"]
+                                or score["unsupported_event_bindings"]):
+                            continue
+                        # Legacy-memory word overlap cannot validate or veto primary facts.
+                        # Complete positive support is mandatory in the raw-source audits below,
+                        # followed by the independent own-citation judge (the same Ask policy).
+                    else:
+                        assert_recap_safe(mem, eff, recap, read_text=read_text_upto(mem, eff))
                 except SpoilerGateError:
                     # spoiler-bearing details stay server-side (D-A9 pass-2) — never the response
                     continue

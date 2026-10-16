@@ -206,10 +206,14 @@ snapshot/model/prompt/atom-set cache keys, single-flight and negative-cache TTLs
 Shutdown stops new phases and settles the in-flight call before stores close.
 
 All real-provider recaps now require primary-text proof, including recaps based on legacy memory.
-Every original sentence is retained as a whole claim. At most three exact completed-source windows
-per sentence are retrieved locally, with at most eighteen total windows across six sentences.
-A full GPT field/unit evidence audit in batches of at most two whole sentences commits numbered
-source spans, then a separate GPT reviewer
+Generation itself receives only whole exact primary windows from the latest two chapters and
+bounded earlier checkpoints. Old summaries can rank local retrieval windows but are never sent
+to generation as facts. The primary sample is byte-bounded; it is not an exhaustive chapter digest.
+Every original sentence is retained as a whole claim. Jev can select relevant primary proof and
+attribution context from each sentence's fenced candidate pool; uncertain decisions retain
+deterministic candidates for GPT, never an approval. A full GPT field/unit audit reviews one whole
+sentence with up to six exact windows and commits at most three numbered proof sources. A separate
+GPT reviewer
 checks every complete claim against only its own committed citations. Derived summaries and other
 claims cannot supply proof. Invalid coverage, source references, uncertainty and outages fail
 closed. The existing single regeneration can receive exact primary passages for correction; there
@@ -218,6 +222,9 @@ The optional current-chapter line reuses an unchanged cleared sentence only when
 are from that chapter. This avoids another ungrounded generation and two extra calls. Cache
 identity binds the primary-proof version, both model roles and endpoint; old approvals miss.
 Existing extracted memory is preserved, rather than silently rewritten or certified.
+Future-name, prolepsis and event-binding tripwires still apply. The old derived-memory lexical
+overlap signal cannot approve or veto a primary-text fact; the mandatory complete source-span
+audit and independent own-citation judge supply positive support, as in Ask.
 
 Ask retrieval reserves current-chapter candidates even when older scenes have greater lexical
 overlap. Selection and generation receive the completed frontier. The independent own-citation

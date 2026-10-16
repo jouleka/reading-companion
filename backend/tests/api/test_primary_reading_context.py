@@ -14,7 +14,7 @@ from app.config import Settings
 from app.llm.jev_budget import estimate_jev_input
 from app.llm import jev_tasks
 from app.preparation_plan import preparation_facts
-from app.recap_grounding import primary_snapshot, recap_evidence, review_primary_recap
+from app.recap_grounding import primary_generation_prompt, primary_snapshot, recap_evidence, review_primary_recap
 from test_reader_preparation import payload
 from test_views import env as env, _supported_citation_audit
 
@@ -31,6 +31,31 @@ def test_primary_snapshot_and_plan_never_read_an_uncompleted_raw_chapter(env):
         assert "Corvus" not in json.dumps(facts)
         text = " ".join(mem.view(2).raw_text(chapters[0]["chapter_key"]).split())
         assert text  # source came through the visible raw-text funnel
+
+
+def test_recap_generation_uses_raw_text_instead_of_false_legacy_summary():
+    snapshot = ([
+        {'revealed_at': 1, 'chapter_key': 'one', 'summary_hint': 'FALSE_LEGACY_FACT'},
+        {'revealed_at': 2, 'chapter_key': 'two', 'summary_hint': 'Nell inherited everything at twenty.'},
+        {'revealed_at': 3, 'chapter_key': 'three', 'summary_hint': 'UNREAD_CANARY'},
+    ], {'one': 'Nell first received money at twenty.',
+        'two': 'Nell walked home. ' * 150 + 'Four years later Nell discovered that the estate was empty.',
+        'three': 'UNREAD_CANARY'})
+    prompt = primary_generation_prompt(snapshot, 2, {})
+    sources = json.loads(prompt.split('(untrusted JSON data):\n')[1])
+    assert 'FALSE_LEGACY_FACT' not in prompt and 'UNREAD_CANARY' not in prompt
+    assert 'inherited everything' not in prompt and 'Four years later' in prompt
+    assert all(1 <= s['completed_chapter'] <= 2 for s in sources)
+    for source in sources:
+        raw = snapshot[1]['one' if source['completed_chapter'] == 1 else 'two']
+        assert source['text'] in ' '.join(raw.split())
+
+
+@pytest.mark.parametrize('limit', [1, 500])
+def test_recap_generation_does_not_truncate_primary_evidence_to_fit(limit):
+    snapshot = ([{'revealed_at': 1, 'chapter_key': 'one'}], {'one': 'Nell carried a box. ' * 100})
+    with pytest.raises(JudgeUnavailable):
+        primary_generation_prompt(snapshot, 1, {}, byte_limit=limit)
 
 
 def test_plan_keeps_chapter_ending_details_missing_from_legacy_summary(env):
@@ -163,7 +188,7 @@ def test_recap_proof_batches_cover_every_sentence_before_final_judge(monkeypatch
     def complete(*args, **kwargs):
         data = json.loads(kwargs['user'].split('(untrusted JSON data):\n')[1])
         if kwargs['schema'].__name__ == 'AskEvidenceReview':
-            assert 1 <= len(data['claims']) <= 2 and len(data['sources']) <= 6
+            assert len(data['claims']) == 1 and len(data['sources']) <= 6
             reviewed.extend(c['text'] for c in data['claims'])
             reply = _supported_citation_audit(data, [data['sources'][0]['source_id']])
             if reject_last and len(reviewed) == 3:
@@ -184,12 +209,64 @@ def test_recap_proof_batches_cover_every_sentence_before_final_judge(monkeypatch
     assert reviewed == sentences
 
 
+@pytest.mark.parametrize('mode', ['pass', 'outage', 'false_selection'])
+def test_jev_recap_selection_never_clears_primary_claims_or_supplies_future_text(monkeypatch, mode):
+    from app import recap_grounding as module
+    snapshot = ([{'revealed_at': i, 'chapter_key': str(i)} for i in (1, 2, 3)], {
+        '1': 'Nell carried a box.', '2': 'Nell carried a bag.', '3': 'UNREAD_CANARY'})
+    calls, selections = [], []
+    def typed(*args, **kwargs):
+        assert kwargs['phase'] == 'jev-recap-source-selection'
+        state = kwargs['state']
+        assert 'UNREAD_CANARY' not in json.dumps(state)
+        assert all(s['ordinal'] <= 2 for s in state['candidates'])
+        selections.append(state)
+        if mode == 'outage':
+            raise JevUnavailable('unavailable')
+        match = 'bag' if mode == 'false_selection' else 'box'
+        return SimpleNamespace(value={str(s['id']): {
+            'choice': 'direct' if match in s['text'] else 'irrelevant', 'confidence': 1.0,
+            'probabilities': {'direct': float(match in s['text']), 'context': 0.,
+                              'irrelevant': float(match not in s['text'])}}
+            for s in state['candidates']})
+    def complete(*args, **kwargs):
+        data = json.loads(kwargs['user'].split('(untrusted JSON data):\n')[1])
+        assert 'UNREAD_CANARY' not in kwargs['user']
+        calls.append(kwargs['schema'].__name__)
+        if calls[-1] == 'AskEvidenceReview':
+            match = 'bag' if mode == 'false_selection' else 'box'
+            source_id = next(s['source_id'] for s in data['sources']
+                             if any(match in p['text'] for p in s['passages']))
+            return SimpleNamespace(value=_supported_citation_audit(data, [source_id]))
+        assert calls == ['AskEvidenceReview', 'AskVerdict']
+        assert all(('bag' if mode == 'false_selection' else 'box') in s['text']
+                   for s in data['claims'][0]['cited_passages'])
+        return SimpleNamespace(value={'references_future': False,
+            'unsupported_claims': ['wrong object'] if mode == 'false_selection' else []})
+    monkeypatch.setattr(module, 'budgeted_jev', typed)
+    monkeypatch.setattr(module, 'budgeted_completion', complete)
+    args = dict(catalog=None, settings=Settings(_env_file=None),
+                client=SimpleNamespace(jev=SimpleNamespace(model='jev-1.13.0')), book_id='b')
+    if mode == 'false_selection':
+        with pytest.raises(JudgeUnavailable):
+            review_primary_recap('Nell carried a box.', snapshot, 2, {}, **args)
+    else:
+        review_primary_recap('Nell carried a box.', snapshot, 2, {}, **args)
+    assert selections and calls == ['AskEvidenceReview', 'AskVerdict']
+
+
 @pytest.mark.parametrize('mode', ['pass', 'reject', 'repair', 'malformed', 'outage'])
 def test_real_provider_recap_gate_cache_and_generic_failures(env, monkeypatch, mode):
+    from app.api import views
     api, bid, app, _atoms = env
     client = app.state.reader_client
     client.provider = 'openai-compatible'
     client.cheap_model = client.large_model = 'gpt-6-luna'
+    # A legacy-memory lexical mismatch cannot veto primary proof, but it cannot authorize
+    # anything either: every mode below still requires complete proof and an own-citation judge.
+    safe_score = {'future_entity_leaks': [], 'prolepsis_hits': [],
+                  'unsupported_event_bindings': [], 'ungrounded_sentences': ['legacy mismatch']}
+    monkeypatch.setattr(views, 'score_recap', lambda *a, **kw: safe_score)
     text = 'Berenice met Aldric at the forge and they spoke.'
     calls, generations = [], []
     def complete(system, user, tier='cheap', schema=None):
@@ -232,6 +309,14 @@ def test_real_provider_recap_gate_cache_and_generic_failures(env, monkeypatch, m
                 assert refreshed.status_code == 200 and refreshed.json()['cached'] is False
                 assert len(calls) == count + 3  # synthesis, positive proof, independent judge
                 count = len(calls)
+            for gate in ('future_entity_leaks', 'prolepsis_hits', 'unsupported_event_bindings'):
+                score = {**safe_score, gate: ['private-canary']}
+                monkeypatch.setattr(views, 'score_recap', lambda *a, _score=score, **kw: _score)
+                client.base_url += '/changed'
+                before = len(calls)
+                blocked = api.get(f'/api/books/{bid}/catch-me-up')
+                assert blocked.status_code == 502 and 'private-canary' not in blocked.text
+                assert calls[before:] == ['synthesis', 'synthesis']
     else:
         assert app.state.recaps.stats()['entries'] == 0
     assert app.state.catalog.get_cost_reservations(bid) == []

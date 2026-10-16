@@ -187,6 +187,7 @@ def test_current_model_and_provider_identity_invalidate_recap_cache_without_repi
         runtime.client.large_model = "gpt-5.4"
     else:
         runtime.client.provider = "anthropic"  # the fixture adapter remains the pure offline stub
+        runtime.settings.cost_max_input_tokens_per_call = runtime.ingest_input_ceiling
         # This test isolates cache identity. Primary proof has separate adversarial route tests;
         # the crude offline echo is not a factual recap and cannot stand in for that reviewer.
         from app.api import views
