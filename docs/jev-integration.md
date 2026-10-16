@@ -224,7 +224,10 @@ approvals, accepting 19/20 supported questions. The natural live fixture prepare
 reviewed answers in 2–4 ms, kept page-position saves below 7 ms, incurred no new provider spend
 after restart, and rejected advanced answers after reset. Preparation cost $0.0056. A separate
 controlled extraction mode isolates planning while retaining actual independent extraction
-grounding, question review and full answer review; it is not an extraction-quality evaluation.
+grounding, question review and full answer review; it prepared eight answers across all six kinds,
+returning them in 1.6–3.1 ms, with $0.008 preparation spend and no new restart spend. It is not an
+extraction-quality evaluation. Two other natural-ingestion attempts stopped at the extraction
+safety/timeout gates; broader preparation does not establish general extraction reliability.
 The direct reuse sample
 had 0 false accepts across 45 development and 24 held-out multi-candidate checks, accepting only
 4 of 24 eligible paraphrases. That limited recall is intentional; these small samples do not

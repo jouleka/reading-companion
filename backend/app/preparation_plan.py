@@ -51,6 +51,8 @@ include one recap question. Include TWO follow-ups whenever the facts support ad
 of a primary question; label these follow_up, not extra event questions. Do not fill the plan with
 eight event questions. Aim for the full varied coverage, while omitting unsupported categories.
 Every question must be self-contained, name its subject and preserve attribution and uncertainty.
+Write naturally for a reader. Do not refer to memory records, snapshots, fact IDs or review steps;
+use a chapter number when historical context is needed.
 Keep fact ordinals: an earlier state snapshot does not establish that it persists in a later chapter.
 A why-question presupposes an action AND an explained reason: ask it only if both are explicit.
 No invented motives, lasting ownership, hidden relationships, false premises or ambiguous pronouns.
