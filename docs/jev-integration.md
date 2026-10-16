@@ -108,6 +108,11 @@ and configured question count, allowing one bounded upgrade attempt while preser
 reviewed answers. Preparation requires answer caching. Optional reader flags remain off by default;
 the local Jev profile enables them with eight-question admission. Broader coverage is still bounded
 by available evidence, successful reviews and spend; eight answers are not promised at every chapter.
+Preparation also leaves foreground headroom: up to four ordinary call input/output token limits
+and $0.05, each bounded to a quarter of its configured book ceiling. These lower admission ceilings
+include all settled and pending spend atomically. Foreground calls retain the original ceilings;
+this reduces background starvation without increasing any production allowance or guaranteeing
+that a large/repaired answer will fit the remaining budget.
 
 Paused plans share the existing 2 MiB answer checkpoint, with at most sixteen plans and one current
 plan per book incarnation. A checkpoint binds the exact fact pack and source scope and records
@@ -220,6 +225,8 @@ python scripts/reader_preparation_audit.py --run --broader --reviewed-fixture --
 python scripts/reader_preparation_audit.py --run --broader --reviewed-fixture --priority --env-file /path/to/ignored/.env --output priority.json
 python scripts/reader_preparation_audit.py --run --premises --env-file /path/to/ignored/.env --output premises.json
 python scripts/reader_preparation_audit.py --run --premises --heldout --env-file /path/to/ignored/.env --output premises-heldout.json
+python scripts/real_book_audit.py --run --source-data-dir /path/to/existing/data --book-id BOOK_ID --env-file /path/to/ignored/.env --output real-book.json
+python scripts/real_book_audit.py --run --source-data-dir /path/to/existing/data --book-id BOOK_ID --env-file /path/to/ignored/.env --checkpoints 2 --preserve-token-limits --max-new-usd .05 --output real-book-headroom.json
 python scripts/jev_integration_audit.py --run --env-file /path/to/ignored/.env --output paired.json
 python scripts/jev_integration_audit.py --run --partial --repeat 2 --env-file /path/to/ignored/.env --output partial-paired.json
 python scripts/jev_integration_audit.py --run --reader-fast-mode --repeat 3 --env-file /path/to/ignored/.env --output fast.json
@@ -232,6 +239,22 @@ complete claims/citations and call timings, and verifies that a reading reset ca
 cached recap. It includes a complete multi-fact explanation and separately measures identical cached
 answers. Inspect semantic results manually: term matches and a small sample are not accuracy
 certification. Integration scripts delete temporary databases and imported EPUBs when finished.
+
+The real-book audit uses the supplied Brothers Karamazov edition's existing legacy memory, with
+read-only SQLite backups that include live WAL contents. It replays six completed frontiers through
+chapter 72 while unread chapters remain stored. Twenty-four answer questions are frozen from raw
+chapter text before planning; six future-scene questions test refusal. Future-memory canaries cover
+identities, aliases, states, ties, events and summaries, and observers preserve native token caps.
+Each held-out probe starts from the pre-probe answer bank so earlier fresh answers cannot inflate
+preparation hit rate; clicks on generated suggestions are separate controls. Failed HTTP calls are
+never counted as answered questions or successful spoiler refusals. Semantic accuracy still needs
+manual comparison against raw references and returned citations; status/term checks are not proof.
+The disposable replay preserves historical spend and adds a test-only allowance of two million
+input tokens and 200,000 output tokens, capped at $0.50 new spend and the normal $0.25 preparation
+ceiling. `--preserve-token-limits` retains the original lifetime token ceilings for exhaustion checks.
+Original files, reading state and spend are fingerprinted before and after; temporary copies are
+removed. This evaluates preparation/retrieval on one real book, not new extraction quality or
+production-wide accuracy.
 
 Broader preparation verification: forty frozen question-premise judgments had zero unsupported
 approvals, accepting 19/20 supported questions. The natural live fixture prepared five complete

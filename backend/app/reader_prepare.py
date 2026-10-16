@@ -87,8 +87,20 @@ class PreparationCatalog:
         self.scope.check(self.app, snapshot=True)
         if book_id != self.scope.book_id:
             raise PreparationStale()
+        # Preparation must not consume the last allowance needed by a foreground question.
+        # Keep up to four ordinary call token limits and $0.05, bounded to a quarter of each
+        # configured book ceiling. The catalog checks these lower ceilings atomically against
+        # all settled usage AND pending calls; foreground requests retain the original limits.
+        settings = self.app.state.settings
+        limits = dict(kwargs)
+        for name, headroom in (
+            ("max_input_tokens", 4*settings.cost_max_input_tokens_per_call),
+            ("max_output_tokens", 4*settings.cost_max_output_tokens_per_call),
+        ):
+            limits[name] -= min(limits[name]//4, headroom)
+        limits["max_usd"] -= min(limits["max_usd"]/4, .05)
         return self.app.state.catalog.reserve_cost(
-            book_id, **{**kwargs, "phase": "reader-prepare:" + kwargs["phase"]},
+            book_id, **{**limits, "phase": "reader-prepare:" + kwargs["phase"]},
             expected_reading_scope=(self.scope.incarnation, self.scope.epoch, self.scope.frontier),
             max_preparation_usd=self.app.state.settings.reader_prepare_max_usd_per_book,
         )
