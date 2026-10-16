@@ -105,7 +105,10 @@ The preparation admission cap is $0.25 per book, including pending reservations 
 in addition to the ordinary book cap. Scope attempts are persisted to avoid repeated spending on
 unchanged chapters after scrolling or restarting. Attempt identity includes the planner version
 and configured question count, allowing one bounded upgrade attempt while preserving existing
-reviewed answers. Preparation requires answer caching. Optional reader flags remain off by default;
+reviewed answers. Planner v2 allows up to 3,072 output tokens (including reasoning), bounded by the
+configured per-call ceiling; question review uses at most 1,536 under the same ceiling. This avoids
+losing a complete plan at the earlier 2,048-token cap without adding a retry. Preparation requires
+answer caching. Optional reader flags remain off by default;
 the local Jev profile enables them with eight-question admission. Broader coverage is still bounded
 by available evidence, successful reviews and spend; eight answers are not promised at every chapter.
 Preparation also leaves foreground headroom: up to four ordinary call input/output token limits

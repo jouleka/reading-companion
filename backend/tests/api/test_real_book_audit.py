@@ -185,3 +185,21 @@ def test_pending_preparation_cannot_take_foreground_cash_headroom(env):
     assert len(catalog.get_cost_reservations(bid)) == 2
     catalog.settle_cost(bid, first)
     catalog.settle_cost(bid, second)
+
+
+@pytest.mark.parametrize("configured,expected", [(4096, [3072, 1536]), (1000, [1000, 1000])])
+def test_preparation_token_allowance_respects_configured_hard_limit(env, monkeypatch, configured, expected):
+    from app.reader_prepare import prepare
+    _, bid, app, _ = env
+    app.state.settings.reader_prepare_enabled = app.state.settings.reader_answer_cache = True
+    app.state.settings.cost_max_output_tokens_per_call = configured
+    caps = []
+    def complete(catalog, settings, client, book_id, **kwargs):
+        caps.append(settings.cost_max_output_tokens_per_call)
+        if kwargs["schema"].__name__ == "PreparedQuestions":
+            return SimpleNamespace(value={"questions": [{"question": "Who is Berenice?", "kind": "character",
+                "basis_ids": [1], "follow_up_to": None}]})
+        return SimpleNamespace(value={"audits": [{"question_id": 1, "safe_to_prepare": False, "basis_ids": []}]})
+    monkeypatch.setattr("app.reader_prepare.budgeted_completion", complete)
+    prepare(app, capture(app, bid))
+    assert caps == expected

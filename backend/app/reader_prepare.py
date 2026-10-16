@@ -9,7 +9,8 @@ from app.answer_bank import answer_scope, valid_answer
 from app.ask import AskRequest
 from app.cost import budgeted_completion
 from app.preparation_plan import (
-    PLAN_SYSTEM, PREPARATION_VERSION, REVIEW_SYSTEM, PreparedQuestions, PreparationReview,
+    PLAN_OUTPUT_TOKENS, PLAN_SYSTEM, PREPARATION_VERSION, REVIEW_OUTPUT_TOKENS, REVIEW_SYSTEM,
+    PreparedQuestions, PreparationReview,
     diverse_order, preparation_facts, reviewed_candidates, validated_candidates,
 )
 
@@ -170,7 +171,8 @@ def prepare(app, scope):
 
         if saved is None:
             plan = budgeted_completion(
-                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 2048}),
+                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": min(
+                    PLAN_OUTPUT_TOKENS, st.settings.cost_max_output_tokens_per_call)}),
                 client, scope.book_id, phase="questions", tier="cheap", schema=PreparedQuestions,
                 system=PLAN_SYSTEM,
                 user=json.dumps({"completed_chapter": scope.frontier, "facts": facts}, ensure_ascii=False),
@@ -186,7 +188,8 @@ def prepare(app, scope):
                 return
             scope.check(app, snapshot=True)
             audit = budgeted_completion(
-                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": 1536}),
+                catalog, st.settings.model_copy(update={"cost_max_output_tokens_per_call": min(
+                    REVIEW_OUTPUT_TOKENS, st.settings.cost_max_output_tokens_per_call)}),
                 client, scope.book_id, phase="question-review", tier="large", schema=PreparationReview,
                 system=REVIEW_SYSTEM,
                 user=json.dumps({"completed_chapter": scope.frontier, "facts": facts,

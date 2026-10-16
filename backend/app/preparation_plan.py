@@ -7,7 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.unicode_text import normalize_text, word_tokens, words
 
 
-PREPARATION_VERSION = "diverse-reviewed-questions-v1"
+PREPARATION_VERSION = "diverse-reviewed-questions-v2"
+PLAN_OUTPUT_TOKENS = 3072
+REVIEW_OUTPUT_TOKENS = 1536
 KINDS = ("character", "relationship", "event", "motive", "summary", "follow_up")
 
 

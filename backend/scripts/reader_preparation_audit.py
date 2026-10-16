@@ -14,7 +14,9 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.main import create_app
 from app.reader_prepare import PreparationScope, preparation_key
-from app.preparation_plan import REVIEW_SYSTEM, PreparationReview, reviewed_candidates
+from app.preparation_plan import (
+    PLAN_OUTPUT_TOKENS, REVIEW_OUTPUT_TOKENS, REVIEW_SYSTEM, PreparationReview, reviewed_candidates,
+)
 from app.cost import budgeted_completion
 from live_quality_audit import fixture
 
@@ -108,7 +110,8 @@ def premise_audit(args):
                 candidates = [{"id": i, "question": q, "kind": "event", "basis_ids": [1],
                                "follow_up_to": None} for i, q in enumerate((good, bad), 1)]
                 reviewed = budgeted_completion(catalog, settings.model_copy(update={
-                    "cost_max_output_tokens_per_call": 1536}), client, bid,
+                    "cost_max_output_tokens_per_call": min(
+                        REVIEW_OUTPUT_TOKENS, settings.cost_max_output_tokens_per_call)}), client, bid,
                     phase="reader-prepare:question-review", system=REVIEW_SYSTEM,
                     user=json.dumps({"completed_chapter": 1, "facts": facts, "questions": candidates}),
                     tier="large", schema=PreparationReview)
@@ -186,10 +189,10 @@ def main():
                     else:
                         # budgeted_completion preserves legacy test doubles without forwarding
                         # caps. This instrumentation wrapper must still mirror production caps.
-                        cap = {"PreparedQuestions": 2048, "PreparationReview": 1536}.get(
+                        cap = {"PreparedQuestions": PLAN_OUTPUT_TOKENS, "PreparationReview": REVIEW_OUTPUT_TOKENS}.get(
                             getattr(schema, "__name__", None), settings.cost_max_output_tokens_per_call)
                         value, usage = original(system, user, tier=tier, schema=schema,
-                                                max_output_tokens=max_output_tokens or cap)
+                            max_output_tokens=max_output_tokens or min(cap, settings.cost_max_output_tokens_per_call))
                     report["calls"].append({"schema": getattr(schema, "__name__", None),
                         "seconds": time.perf_counter()-started,
                         "unread_fact_in_input": "Velora" in user or "silver compass" in user,
