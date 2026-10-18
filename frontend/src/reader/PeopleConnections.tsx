@@ -42,6 +42,7 @@ type RelationshipStatement = {
 };
 
 const PEOPLE_PREVIEW_LIMIT = 24;
+const CONSTELLATION_LIMIT = 6;
 
 function statementOf(
   relationship: Graph["relationships"][number],
@@ -192,6 +193,7 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
   const [query, setQuery] = useState("");
   const [showAllPeople, setShowAllPeople] = useState(false);
   const [mode, setMode] = useState<"person" | "register">("person");
+  const [showConstellation, setShowConstellation] = useState(true);
   const [registerQuery, setRegisterQuery] = useState("");
   const [registerKind, setRegisterKind] = useState("all");
   const [registerOrder, setRegisterOrder] = useState<"recent" | "alphabetical">(
@@ -693,6 +695,45 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
             )}
           </header>
 
+          <section className="constellation-section" aria-label="Explore connections">
+            <div className="constellation-heading">
+              <div><span className="memory-eyebrow">ONE PERSON. A WHOLE WORLD.</span><h3>Around {focus.canonical_name}</h3></div>
+              <div className="constellation-view" role="group" aria-label="Connection view">
+                <button type="button" aria-pressed={showConstellation} onClick={() => setShowConstellation(true)}>Constellation</button>
+                <button type="button" aria-pressed={!showConstellation} onClick={() => setShowConstellation(false)}>List only</button>
+              </div>
+            </div>
+            {showConstellation && (
+              <figure className="people-constellation" key={focus.entity_id} aria-label={`Known connections around ${focus.canonical_name}`}>
+                <div className="constellation-canvas">
+                  <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" className="constellation-lines">
+                    <ellipse className="constellation-orbit" cx="50" cy="50" rx="35" ry="35" />
+                    {connections.slice(0, CONSTELLATION_LIMIT).map((connection, index, shown) => {
+                      const angle = (index / shown.length) * Math.PI * 2 - Math.PI / 2;
+                      return <line key={connection.entityId} x1="50" y1="50" x2={50 + Math.cos(angle) * 35} y2={50 + Math.sin(angle) * 35} />;
+                    })}
+                  </svg>
+                  <div className="constellation-center"><span>{initialsOf(focus.canonical_name)}</span><strong>{focus.canonical_name}</strong><small>{connections.length} known {connections.length === 1 ? "connection" : "connections"}</small></div>
+                  {connections.slice(0, CONSTELLATION_LIMIT).map((connection, index, shown) => {
+                    const angle = (index / shown.length) * Math.PI * 2 - Math.PI / 2;
+                    return (
+                      <button
+                        type="button"
+                        key={connection.entityId}
+                        className="constellation-person"
+                        data-tone={connection.entityId % 3}
+                        style={{ left: `${50 + Math.cos(angle) * 35}%`, top: `${50 + Math.sin(angle) * 35}%` }}
+                        aria-label={`Explore ${connection.name}’s connections`}
+                        title={connection.statements.map((statement) => `${statement.sourceName} ${statement.text} ${statement.targetName}`).join("; ")}
+                        onClick={() => focusPerson(connection.entityId)}
+                      ><span>{initialsOf(connection.name)}</span><strong>{connection.name}</strong></button>
+                    );
+                  })}
+                </div>
+                <figcaption>{connections.length ? "Choose a person to follow their connections." : "Connections will appear here as you discover them."}{connections.length > CONSTELLATION_LIMIT && ` Showing ${CONSTELLATION_LIMIT} of ${connections.length}; every connection is listed below.`}</figcaption>
+              </figure>
+            )}
+          </section>
           <section className="connection-ledger">
             <div className="connections-heading"><h3 className="smallcaps">known connections</h3><span>{connections.length} {connections.length === 1 ? "person" : "people"}</span></div>
             {connections.length > 0 ? (

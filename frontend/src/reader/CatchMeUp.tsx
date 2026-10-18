@@ -7,6 +7,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type BookType, type CatchMeUp as CMU } from "../api";
 import { Button } from "../ui/Button";
+import { Icon } from "../ui/Icon";
 import { useDialogMotion } from "../ui/useDialogMotion";
 import { presentationFor } from "./bookProfile";
 import { keepTabFocusInside } from "./focusTrap";
@@ -14,6 +15,26 @@ import { NameCard } from "./NameCard";
 import { wrapNames } from "./names";
 import { roman } from "./roman";
 import { recapFailureMessage } from "./recapFailure";
+
+// Keep the reviewed words intact. Long paragraphs become manageable cards at sentence boundaries.
+function recapMoments(text: string): string[] {
+  const paragraphs = text.split(/\n+/).map(value => value.trim()).filter(Boolean);
+  if (typeof Intl.Segmenter !== "function") return paragraphs;
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "sentence" });
+  return paragraphs.flatMap(paragraph => {
+    const moments: string[] = [];
+    let current = "";
+    for (const { segment } of segmenter.segment(paragraph)) {
+      if (current && `${current}${segment}`.trim().split(/\s+/).length > 55) {
+        moments.push(current.trim());
+        current = "";
+      }
+      current += segment;
+    }
+    if (current.trim()) moments.push(current.trim());
+    return moments;
+  });
+}
 
 export function CatchMeUp({
   bookId,
@@ -35,10 +56,13 @@ export function CatchMeUp({
   onClose: () => void;
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
-  const [cmu, setCmu] = useState<CMU | null>(null);
+  const [snapshot, setSnapshot] = useState<{ bookId: string; bookmark: number; data: CMU } | null>(null);
+  const cmu = snapshot?.bookId === bookId && snapshot.bookmark === bookmark ? snapshot.data : null;
   const [err, setErr] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
   const [slow, setSlow] = useState(false);
+  const [beat, setBeat] = useState(0);
+  const [readAll, setReadAll] = useState(false);
   // LIT-30: the open name card (a clicked chip), anchored to it. While a card is open it owns the
   // keyboard; the hero yields (below) so its own Escape/Tab-trap take over.
   const [card, setCard] = useState<{
@@ -98,13 +122,18 @@ export function CatchMeUp({
 
   useEffect(() => {
     let dead = false;
-    setCmu(null);
+    setSnapshot(null);
     setErr(null);
     setSlow(false);
+    setBeat(0);
     const slowTimer = window.setTimeout(() => { if (!dead) setSlow(true); }, 8_000);
     api
       .catchMeUp(bookId, bookmark)
-      .then((d) => !dead && setCmu(d))
+      .then((data) => {
+        if (dead) return;
+        if (data.as_of_chapter > bookmark) throw new Error("This recap could not be verified against your reading position. Please try again.");
+        setSnapshot({ bookId, bookmark, data });
+      })
       .catch((error: unknown) => !dead && setErr(error))
       .finally(() => window.clearTimeout(slowTimer));
     return () => {
@@ -113,14 +142,14 @@ export function CatchMeUp({
     };
   }, [bookId, bookmark, retry]);
 
-  const paras = (cmu?.recap ?? "").split(/\n+/).filter(Boolean);
+  const paras = recapMoments(cmu?.recap ?? "");
   const cast = cmu?.cast ?? []; // bookmark-bounded; wrapNames wraps ONLY these, never a future name
   const asOf = cmu?.as_of_chapter ?? bookmark;
   // a11y: when the hero AUTO-opens after a return gap, fold the welcome-back framing into the dialog's
   // accessible NAME. A freshly-opened dialog announces its name when focus moves in, so this is
   // reliable — unlike a sibling role=status region mounted already-populated, which screen readers drop
   // (a11y review HIGH). The visible .welcome-back banner below is sighted-reader reinforcement only.
-  const empty = cmu != null && (cmu.as_of_chapter === 0 || !cmu.recap);
+  const empty = cmu != null && (cmu.as_of_chapter === 0 || paras.length === 0);
   const presentation = presentationFor(bookType);
   const dialogLabel =
     welcomeBackChapter != null
@@ -166,7 +195,15 @@ export function CatchMeUp({
             {presentation.recapLink}.
           </div>
         )}
-        <div className="hero-asof">
+        <div className="recap-intro">
+          <div>
+            <p className="world-kicker">A little rewind. A way back in.</p>
+            <h1>{bookType === "novel" ? <>Back to<br /><em>the story.</em></> : <>Your reading,<br /><em>remembered.</em></>}</h1>
+          </div>
+          <div className="story-orb" aria-hidden="true"><i /><i /><i /><Icon name="sparkle" size={44} /></div>
+        </div>
+        <div className="hero-asof recap-boundary">
+          <Icon name="shield" size={14} />
           {empty
             ? "nothing read yet"
             : `as of ${presentation.unit} ${roman(asOf)} · ${asOf} of ${totalAtoms}`}
@@ -198,9 +235,10 @@ export function CatchMeUp({
           </div>
         ) : cmu == null ? (
           <section className="recap-loading" role="status">
+            <div className="recap-loading-art" aria-hidden="true"><span /><span /><span /></div>
             <strong>{slow ? "This is taking longer than usual." : "Preparing your recap"}</strong>
-            <p>A new recap needs AI generation and checks against your completed chapters.</p>
-            {slow && <p>You can keep reading while this finishes. A cleared recap is saved for next time.</p>}
+            <p>Gathering the moments from your completed chapters, and checking the details.</p>
+            {slow && <p>You can keep reading while this finishes, and check back when you’re ready.</p>}
             <Button variant="ghost" onClick={requestClose}>Keep reading</Button>
           </section>
         ) : empty ? (
@@ -209,10 +247,18 @@ export function CatchMeUp({
             gather here.
           </p>
         ) : (
-          <div className="hero-body">
-            <div className="hero-recap">
+          <div className="hero-body recap-stage" data-read-all={readAll || undefined}>
+            <div className="recap-story-column">
+              <div className="recap-story-tools">
+                <span>{readAll ? "The complete recap" : `${String(beat + 1).padStart(2, "0")} / ${String(paras.length).padStart(2, "0")} moments`}</span>
+                <button type="button" className="plain" aria-pressed={readAll} onClick={() => setReadAll(value => !value)}>{readAll ? "One moment at a time" : "Read all"}<Icon name={readAll ? "book" : "list"} size={16} /></button>
+              </div>
+              {!readAll && <nav className="recap-segments" aria-label="Recap moments">{paras.map((_, i) => <button key={i} type="button" aria-label={`Go to recap moment ${i + 1}`} aria-current={i === beat ? "step" : undefined} onClick={() => setBeat(i)}><span /></button>)}</nav>}
+              <div className="hero-recap" aria-live="polite" aria-atomic="true">
               {paras.map((p, i) => (
-                <p key={i}>
+                <section key={i} className="recap-beat" hidden={!readAll && i !== beat} aria-label={`Moment ${i + 1}`}>
+                  <span className="recap-beat-number" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+                  <p>
                   {wrapNames(p, cast).map((seg, j) =>
                     // LIT-30: a character name -> a live button that opens its card, anchored to the chip
                     seg.entityId != null ? (
@@ -234,8 +280,14 @@ export function CatchMeUp({
                       <Fragment key={j}>{seg.text}</Fragment>
                     ),
                   )}
-                </p>
+                  </p>
+                </section>
               ))}
+              </div>
+              <div className="recap-controls">
+                {!readAll && <Button icon="arrowLeft" disabled={beat === 0} onClick={() => setBeat(value => value - 1)}>Previous moment</Button>}
+                {!readAll && beat < paras.length - 1 ? <Button variant="primary" icon="arrowRight" onClick={() => setBeat(value => value + 1)}>Next moment</Button> : <Button variant="primary" icon="book" onClick={requestClose}>Back to reading</Button>}
+              </div>
             </div>
             {showPeopleStats && (
               <aside
@@ -246,6 +298,8 @@ export function CatchMeUp({
                     : "people and connections so far"
                 }
               >
+                <span className="world-kicker">Within these pages</span>
+                {cmu.now && <div className="recap-now"><Icon name="bookmark" size={19} /><h2>Where we left off</h2><p>{cmu.now}</p></div>}
                 <div className="stat-line">
                   <span className="smallcaps">{presentation.peopleLabel}</span>
                   <span className="n">{cmu.cast_size}</span>
@@ -256,6 +310,7 @@ export function CatchMeUp({
                   </span>
                   <span className="n">{cmu.open_threads}</span>
                 </div>
+                <p className="recap-side-note">Your memory stops where your reading does.</p>
               </aside>
             )}
           </div>

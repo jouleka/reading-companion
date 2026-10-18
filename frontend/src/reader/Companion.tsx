@@ -329,10 +329,11 @@ export function Companion({
               onOpenAsk ||
               (onOpenCloseout && closeoutReady)))) && (
           <nav className="companion-links" aria-label="the full companion">
-            <span className="companion-section-label">Go a little deeper</span>
+            <span className="companion-section-label">Make yourself at home</span>
             {bookmark != null && bookmark > 0 && onOpenHero && (
               <CompanionAction
                 icon="book"
+                destination="recap"
                 title={presentation.recapLink}
                 detail="Pick up the thread in a moment"
                 onClick={() => launch(onOpenHero)}
@@ -341,6 +342,7 @@ export function Companion({
             {bookmark != null && bookmark > 0 && onOpenAsk && (
               <CompanionAction
                 icon="sparkle"
+                destination="ask"
                 title="Ask the book"
                 detail="Untangle a detail, with cited answers"
                 onClick={() => launch(onOpenAsk)}
@@ -349,6 +351,7 @@ export function Companion({
             {bookmark != null && bookmark > 0 && onOpenCodex && (
               <CompanionAction
                 icon="library"
+                destination="memory"
                 title={presentation.codexLink}
                 detail={`Explore ${presentation.unit === "chapter" ? "chapters" : "sections"}, people & connections`}
                 onClick={() => launch(onOpenCodex)}
@@ -357,6 +360,7 @@ export function Companion({
             {closeoutReady && onOpenCloseout && (
               <CompanionAction
                 icon="check"
+                destination="reflect"
                 title={`Close out chapter ${roman(bookmark)}`}
                 detail="The moments worth remembering"
                 onClick={() => launch(onOpenCloseout)}
@@ -418,14 +422,16 @@ function CompanionAction({
   title,
   detail,
   onClick,
+  destination,
 }: {
   icon: IconName;
   title: string;
   detail: string;
   onClick: () => void;
+  destination: "recap" | "ask" | "memory" | "reflect";
 }) {
   return (
-    <button type="button" className="companion-action" onClick={onClick}>
+    <button type="button" className="companion-action" data-destination={destination} onClick={onClick}>
       <span className="companion-action-icon"><Icon name={icon} size={18} /></span>
       <span className="companion-action-copy">
         <strong>{title}</strong>

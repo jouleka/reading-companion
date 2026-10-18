@@ -47,18 +47,14 @@ export function BookCover({
       aria-hidden="true"
     >
       <span className="cover-edition">THE READING COLLECTION</span>
-      <span className="cover-title">{book.title}</span>
-      <span className="cover-ornament">
-        <span />
-        <svg viewBox="0 0 100 100" width="72" height="72" fill="none">
-          <circle cx="50" cy="50" r="31" />
-          <ellipse cx="50" cy="50" rx="15" ry="39" transform="rotate(35 50 50)" />
-          <ellipse cx="50" cy="50" rx="15" ry="39" transform="rotate(-35 50 50)" />
-          <path d="M11 50h78M50 11v78" />
-          <circle cx="50" cy="50" r="4" fill="currentColor" stroke="none" />
+      <span className="cover-art">
+        <svg viewBox="0 0 160 180" fill="none">
+          <circle className="cover-art-sun" cx="109" cy="49" r="33" />
+          <path className="cover-art-hill" d="M-20 180V116C26 36 76 47 95 110c21-26 57-29 85-5v75Z" />
+          <path className="cover-art-line" d="M-15 154C29 65 83 110 109 144s45 23 67 1M-15 168C29 79 83 124 109 158s45 23 67 1M-15 182C29 93 83 138 109 172s45 23 67 1" />
         </svg>
-        <span />
       </span>
+      <span className="cover-title">{book.title}</span>
       <span className="cover-author">{book.author || "Your collection"}</span>
     </span>
   );
@@ -78,6 +74,7 @@ export function Shelf({
   const [settingsAvailable, setSettingsAvailable] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUtilities, setShowUtilities] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState<string | null>(null);
   const [offlineState, setOfflineState] = useState(() => ({
     owner,
@@ -99,6 +96,8 @@ export function Shelf({
   const recent =
     recentState.owner === owner ? recentState.ids : readRecent(owner);
   const fileInput = useRef<HTMLInputElement>(null);
+  const utilities = useRef<HTMLDivElement>(null);
+  const utilitiesToggle = useRef<HTMLButtonElement>(null);
   const dragDepth = useRef(0);
   const importLock = useRef(false);
   const mounted = useRef(true);
@@ -144,6 +143,29 @@ export function Shelf({
       dead = true;
     };
   }, [books, owner]);
+  useEffect(() => {
+    if (!showUtilities) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowUtilities(false);
+        utilitiesToggle.current?.focus();
+      }
+    };
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !utilities.current?.contains(event.target) && !utilitiesToggle.current?.contains(event.target)) {
+        setShowUtilities(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOutside);
+    };
+  }, [showUtilities]);
+  useEffect(() => {
+    if (showGuide) document.getElementById("companion-guide")?.scrollIntoView?.({ block: "start" });
+  }, [showGuide]);
   const onFile = async (file: File | undefined) => {
     if (!file || importLock.current) return;
     if (!/\.epub$/i.test(file.name) && file.type !== "application/epub+zip") {
@@ -206,6 +228,7 @@ export function Shelf({
   };
   const featured = books?.find((book) => book.book_id === recent[0]);
   const spotlight = featured ?? books?.[0];
+  const backdropBook = books?.find((book) => book.book_id !== spotlight?.book_id);
   const filtered = (books ?? [])
     .filter(
       (book) =>
@@ -254,133 +277,43 @@ export function Shelf({
       <a className="skip-link" href="#library-main">
         Skip to your library
       </a>
-      <aside className="library-sidebar" aria-label="Library navigation">
+      <header className="room-header">
         <a className="brand" href="/" aria-label="Reading Companion home">
-          <span className="brand-mark">
-            <Icon name="book" size={23} />
-          </span>
-          <span>
-            reading
-            <br />
-            <strong>companion</strong>
-          </span>
+          <span className="brand-mark"><Icon name="book" size={24} /></span>
+          <span>reading<span className="brand-second">companion</span></span>
         </a>
-        <button
-          className="studio-utilities-toggle"
-          aria-label="Library settings and account"
-          aria-expanded={showUtilities}
-          aria-controls="library-utilities"
-          onClick={() => setShowUtilities((current) => !current)}
-        >
-          <Icon name={showUtilities ? "close" : "settings"} size={20} />
-        </button>
-        <div className="sidebar-section-label">THE READING ROOM</div>
-        <nav className="library-nav" aria-label="Your books">
-          <button
-            aria-label="All books"
-            aria-current={filter === "all" ? "page" : undefined}
-            onClick={() => setFilter("all")}
-          >
-            <Icon name="library" />
-            <span className="nav-label-full">All books</span>
-            <span className="nav-label-short" aria-hidden="true">
-              All books
-            </span>
-            {books && <span className="nav-count">{books.length}</span>}
-          </button>
-          <button
-            aria-label="Recently opened"
-            aria-current={filter === "recent" ? "page" : undefined}
-            onClick={() => setFilter("recent")}
-          >
-            <Icon name="book" />
-            <span className="nav-label-full">Recently opened</span>
-            <span className="nav-label-short" aria-hidden="true">
-              Recent
-            </span>
-          </button>
-          <button
-            aria-label="Available offline"
-            aria-current={filter === "offline" ? "page" : undefined}
-            onClick={() => setFilter("offline")}
-          >
-            <Icon name="download" />
-            <span className="nav-label-full">Available offline</span>
-            <span className="nav-label-short" aria-hidden="true">
-              Offline
-            </span>
-          </button>
+        <nav className="room-top-links" aria-label="Reading room">
+          <a href="#collection-title" aria-current="page">My library</a>
+          <button aria-expanded={showGuide} aria-controls="companion-guide" onClick={() => setShowGuide((value) => !value)}>Meet your companion <Icon name="sparkle" size={15} /></button>
         </nav>
-        <Button
-          variant="ghost"
-          className="sidebar-import"
-          icon="plus"
-          onClick={() => fileInput.current?.click()}
-          disabled={busy}
-        >
-          Add a book
-        </Button>
-        <div
-          className={`sidebar-bottom ${showUtilities ? "is-open" : ""}`}
-          id="library-utilities"
-        >
-          <AiStatus compact />
-          <div className="sidebar-note">
-            <span className="studio-note-mark"><Icon name="sparkle" size={25} /></span>
-            <strong>A little company.<br />A lot more story.</strong>
-            <p>Characters, connections, and a helping hand. Always within the chapters you’ve read.</p>
-          </div>
-          {settingsAvailable && (
-            <Button
-              variant="ghost"
-              icon="settings"
-              onClick={() => setShowSettings(true)}
-            >
-              AI provider settings
-            </Button>
-          )}
-          <InstallApp />
-          {session?.user && (
-            <span className="account-name">{session.user.display_name}</span>
-          )}
-          {session === null && (
-            <a className="account-link" href="/api/auth/login?return_to=/">
-              Sign in
-            </a>
-          )}
-          {session?.user && (
-            <Button
-              variant="ghost"
-              className="account-signout"
-              icon="arrowRight"
-              aria-label={
-                signingOut ? "Signing out" : "Sign out and erase offline books"
-              }
-              title="Sign out and erase offline books"
-              disabled={signingOut}
-              onClick={() => {
-                void logout();
-              }}
-            >
-              {signingOut ? "Signing out…" : "Sign out and erase offline books"}
-            </Button>
-          )}
+        <div className="room-header-actions">
+          <span className="safe-label"><Icon name="shield" size={15} /> Spoiler safe</span>
+          <button
+            ref={utilitiesToggle}
+            className="studio-utilities-toggle"
+            aria-label="Library settings and account"
+            aria-expanded={showUtilities}
+            aria-controls="library-utilities"
+            onClick={() => setShowUtilities((current) => !current)}
+          ><Icon name={showUtilities ? "close" : "settings"} size={19} /><span>Settings</span></button>
         </div>
-      </aside>
+        <div className="room-utilities" ref={utilities} id="library-utilities" hidden={!showUtilities}>
+          <div className="room-utilities-heading"><span className="eyebrow">YOUR READING SPACE</span><strong>Reading, your way.</strong></div>
+          <AiStatus compact />
+          {settingsAvailable && <Button variant="ghost" icon="settings" onClick={() => { utilitiesToggle.current?.focus(); setShowUtilities(false); setShowSettings(true); }}>AI provider settings</Button>}
+          <InstallApp />
+          {session?.user && <span className="account-name">{session.user.display_name}</span>}
+          {session === null && <a className="account-link" href="/api/auth/login?return_to=/">Sign in</a>}
+          {session?.user && <Button variant="ghost" className="account-signout" icon="arrowRight" aria-label={signingOut ? "Signing out" : "Sign out and erase offline books"} title="Sign out and erase offline books" disabled={signingOut} onClick={() => { void logout(); }}>{signingOut ? "Signing out…" : "Sign out and erase offline books"}</Button>}
+        </div>
+      </header>
       <main id="library-main" className="library-main" tabIndex={-1}>
-        <header className="library-topbar">
-          <span className="studio-breadcrumb"><Icon name="library" size={16} /> Your personal reading room</span>
-          <span className="safe-label">
-            <Icon name="shield" size={15} />
-            Spoiler safe, always
-          </span>
-        </header>
         <div className="library-content">
           <section className="library-intro">
             <div>
-              <p className="eyebrow">A SPACE FOR YOUR STORIES</p>
+              <p className="eyebrow"><span className="room-tiny-star">✦</span> A LITTLE SPACE. A THOUSAND WORLDS.</p>
               <h1>Your reading room<span className="studio-heading-dot">.</span></h1>
-              <p>Get lost in a good book. Keep the whole story with you.</p>
+              <p>Come for the story. Stay a little longer.</p>
             </div>
             <div className="studio-import-action">
               <Button
@@ -419,12 +352,12 @@ export function Shelf({
               aria-label={featured ? "Recently opened book" : "Your next read"}
             >
               <div className="continue-copy">
-                <span className="eyebrow"><span className="studio-live-dot" />{featured ? "YOUR STORY IS WAITING" : "THERE’S A WORLD IN EVERY BOOK"}</span>
+                <span className="eyebrow"><span className="studio-live-dot" />{featured ? "PICK UP WHERE YOU LEFT OFF" : "YOUR NEXT ADVENTURE"}</span>
                 <h2>{spotlight ? spotlight.title : <>A thousand worlds.<br /><em>One quiet place.</em></>}</h2>
                 {spotlight && <p className="continue-author">{spotlight.author || "From your collection"}</p>}
                 <p className="continue-description">
                   {featured
-                    ? "Slip back into the story. Your place, characters, and connections are right where you left them."
+                    ? "Back after a little while? Your place is saved. Open your companion for a quick catch-up, then turn the page."
                     : spotlight
                       ? "Open a new world. Your companion will help you remember the people, places, and details along the way."
                       : "Bring a book you love. We’ll help you follow the characters, connect the details, and find your way back in."}
@@ -437,12 +370,15 @@ export function Shelf({
                 >
                   {featured ? "Continue reading" : spotlight ? "Start reading" : "Bring your first book"}
                 </Button>
-                <span className="studio-hero-footnote"><Icon name="shield" size={13} /> A companion that never reads ahead</span>
+                <span className="studio-hero-footnote"><Icon name="shield" size={13} /> Only the story you’ve read. Never what’s next.</span>
               </div>
               <div className="studio-book-stage" aria-hidden="true">
                 <span className="studio-orbit studio-orbit-one" />
                 <span className="studio-orbit studio-orbit-two" />
                 <span className="studio-orbit-dot" />
+                <span className="studio-stage-glow" />
+                <span className="studio-back-book studio-back-book-one">{backdropBook ? <BookCover book={backdropBook} /> : <span className="studio-blank-book">there’s always<br />another world</span>}</span>
+                <span className="studio-back-book studio-back-book-two"><span className="studio-blank-book">just one<br />more chapter</span></span>
                 <span className="studio-star studio-star-one">✦</span>
                 <span className="studio-star studio-star-two">✧</span>
                 <div className="studio-book-object">
@@ -456,16 +392,24 @@ export function Shelf({
                     </span>
                   )}
                 </div>
-                <span className="studio-stage-caption">A GOOD PLACE TO GET LOST</span>
+                <span className="studio-stage-caption"><span /> A GOOD PLACE TO GET LOST <span /></span>
               </div>
             </section>
           )}
+          <section className="room-guide" id="companion-guide" hidden={!showGuide} aria-label="Meet your companion">
+            <div className="room-guide-heading"><span className="eyebrow">A LITTLE COMPANY BETWEEN THE LINES</span><h2>More story. Less “wait, who?”</h2><p>Open any book, then choose a tool from your companion.</p><button className="room-guide-close" aria-label="Close companion introduction" onClick={() => { setShowGuide(false); document.querySelector<HTMLButtonElement>('[aria-controls="companion-guide"]')?.focus(); }}><Icon name="close" size={18} /></button></div>
+            <div className="room-guide-grid">
+              <article><span className="room-guide-icon"><Icon name="refresh" size={23} /></span><h3>Find your way back</h3><p>Catch up on what you’ve read with a recap built around your place in the story.</p><span>In your companion · Catch me up</span></article>
+              <article><span className="room-guide-icon"><Icon name="sparkle" size={23} /></span><h3>Put the pieces together</h3><p>Explore the people, their relationships, and the details that connect them.</p><span>In your companion · People & connections</span></article>
+              <article><span className="room-guide-icon"><Icon name="search" size={23} /></span><h3>Follow your curiosity</h3><p>Ask about the story or select a passage for an explanation, definition, or translation.</p><span>In your companion · Ask about the book</span></article>
+            </div>
+          </section>
           <section
             className="library-collection"
             aria-labelledby="collection-title"
           >
             <div className="collection-heading">
-              <div className="studio-collection-title"><p className="eyebrow">YOUR COLLECTION</p><h2 id="collection-title">
+              <div className="studio-collection-title"><p className="eyebrow">THE BOOKS YOU BRING WITH YOU</p><h2 id="collection-title">
                 {filter === "recent"
                   ? "Recently opened"
                   : filter === "offline"
@@ -517,6 +461,45 @@ export function Shelf({
                 </div>
               </div>
             </div>
+            <div className="room-browse-row">
+        <nav className="library-nav" aria-label="Your books">
+          <button
+            aria-label="All books"
+            aria-current={filter === "all" ? "page" : undefined}
+            onClick={() => setFilter("all")}
+          >
+            <Icon name="library" />
+            <span className="nav-label-full">All books</span>
+            <span className="nav-label-short" aria-hidden="true">
+              All books
+            </span>
+            {books && <span className="nav-count">{books.length}</span>}
+          </button>
+          <button
+            aria-label="Recently opened"
+            aria-current={filter === "recent" ? "page" : undefined}
+            onClick={() => setFilter("recent")}
+          >
+            <Icon name="book" />
+            <span className="nav-label-full">Recently opened</span>
+            <span className="nav-label-short" aria-hidden="true">
+              Recent
+            </span>
+          </button>
+          <button
+            aria-label="Available offline"
+            aria-current={filter === "offline" ? "page" : undefined}
+            onClick={() => setFilter("offline")}
+          >
+            <Icon name="download" />
+            <span className="nav-label-full">Available offline</span>
+            <span className="nav-label-short" aria-hidden="true">
+              Offline
+            </span>
+          </button>
+        </nav>
+              <span className="room-browse-caption">{filter === "offline" ? "Ready when the world goes offline" : filter === "recent" ? "Your latest literary adventures" : "Good company, all in one place"}</span>
+            </div>
             {books === null && !err ? (
               <div
                 className="library-loading"
@@ -546,7 +529,7 @@ export function Shelf({
                       }
                       onClick={() => openBook(book.book_id)}
                     >
-                      <span className="studio-card-cover"><BookCover book={book} /><span className="studio-open-cue"><Icon name="book" size={15} /> Open book <Icon name="arrowRight" size={15} /></span></span>
+                      <span className="studio-card-cover"><span className="studio-book-plinth" /><BookCover book={book} /><span className="studio-open-cue"><Icon name="book" size={15} /> Open book <Icon name="arrowRight" size={15} /></span></span>
                       <span className="book-metadata">
                         <span
                           className="book-title"
@@ -629,7 +612,7 @@ export function Shelf({
                           ? "Open a book and it will be easy to find here."
                           : "Add a DRM-free EPUB. Your companion will follow along, one chapter at a time."}
                   </p>
-                  {!query && filter === "all" && <div className="studio-empty-steps" aria-label="Getting started"><span><b>01</b> Add an EPUB</span><span><b>02</b> Find your next chapter</span><span><b>03</b> Let your companion follow along</span></div>}
+                  {!query && filter === "all" && <div className="studio-empty-steps" aria-label="Getting started"><span><b>01</b> Bring an EPUB</span><span><b>02</b> Settle into the story</span><span><b>03</b> Ask. Explore. Remember.</span></div>}
                   {query || filter !== "all" ? (
                     <Button
                       onClick={() => {

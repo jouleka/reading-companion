@@ -68,8 +68,10 @@ describe("Shelf import failure", () => {
 
 describe("Shelf a11y", () => {
   test("offers provider settings only when the hosted endpoint is available", async () => {
+    const user = userEvent.setup();
     mocks.providerSettings.mockResolvedValue({ items: [] });
     render(<Shelf onOpen={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Library settings and account" }));
     expect(
       await screen.findByRole("button", { name: /AI provider settings/i }),
     ).toBeTruthy();
@@ -174,6 +176,50 @@ const ownerA = "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67";
 const ownerB = "ae7eb4ca-c15e-4b0e-9476-15e671a005b9";
 
 describe("Library interactions", () => {
+  test("keeps utilities in a keyboard-dismissible disclosure and restores focus", async () => {
+    const user = userEvent.setup();
+    mocks.providerSettings.mockResolvedValue({ items: [] });
+    render(<Shelf onOpen={() => {}} />);
+    const toggle = screen.getByRole("button", { name: "Library settings and account" });
+    expect(screen.queryByRole("button", { name: "AI provider settings" })).toBeNull();
+    await user.click(toggle);
+    const settings = await screen.findByRole("button", { name: "AI provider settings" });
+    settings.focus();
+    await user.keyboard("{Escape}");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "AI provider settings" })).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+  });
+
+  test("introduces the companion on demand without opening a book", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    render(<Shelf onOpen={onOpen} />);
+    const toggle = screen.getByRole("button", { name: "Meet your companion" });
+    expect(screen.queryByRole("region", { name: "Meet your companion" })).toBeNull();
+    await user.click(toggle);
+    expect(screen.getByRole("region", { name: "Meet your companion" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Find your way back" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Close companion introduction" }));
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(toggle);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test("returns from provider settings to the visible utilities trigger", async () => {
+    const user = userEvent.setup();
+    mocks.providerSettings.mockResolvedValue({ items: [] });
+    render(<Shelf onOpen={() => {}} />);
+    const toggle = screen.getByRole("button", { name: "Library settings and account" });
+    await user.click(toggle);
+    await user.click(await screen.findByRole("button", { name: "AI provider settings" }));
+    expect(await screen.findByRole("dialog", { name: "Your providers" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(toggle);
+  });
+
   test("shows loading before books arrive and offers a working retry after an error", async () => {
     const user = userEvent.setup();
     let reject!: (error: Error) => void;

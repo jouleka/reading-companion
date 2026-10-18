@@ -26,7 +26,9 @@ describe("ReaderControls", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /reading appearance/i }),
     );
-    expect(screen.getAllByRole("group")).toHaveLength(2);
+    expect(screen.getAllByRole("group")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: /Candlelight/ }));
+    expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_READER_PREFERENCES, theme: "sepia", typeface: "serif", line_height: "relaxed" });
     expect(screen.queryByRole("radio", { name: "Publisher" })).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /^large$/i }));
     expect(onChange).toHaveBeenCalledWith({
@@ -34,7 +36,7 @@ describe("ReaderControls", () => {
       font_size: "large",
     });
     await user.click(screen.getByText("Customize"));
-    expect(screen.getAllByRole("group")).toHaveLength(6);
+    expect(screen.getAllByRole("group")).toHaveLength(7);
     expect(screen.getByRole("radio", { name: "Publisher" })).toBeTruthy();
     expect(await axeAA(container)).toHaveNoViolations();
   });

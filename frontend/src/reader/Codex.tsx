@@ -1,10 +1,7 @@
-/** The Codex (LIT-31): the deep re-orientation surface — a two-leaf spread where the story broken
- * down (left), People & Connections (right), the foot scrubber, and the layered name card all work
- * together over ONE shared cursor T ∈ 1..bookmark. Every panel renders CLAMPED structured server data only
- * (/graph + /notes + /character — no LLM, no gate); T is clamped ≤ bookmark here AND server-side.
- * Dialog a11y is the proven hero pattern (3ba2970): synchronous trigger capture at render, focus
- * effect keyed [], Tab trap, Escape, card-owns-the-keyboard, synchronous un-inert on card close;
- * ReaderPage's onClose un-inerts the grid synchronously before unmount (WCAG 2.4.3). */
+/** Chapter journey and people constellation, sharing a historical cursor T <= bookmark.
+ * All content comes from the clamped notes/graph/character routes. The completed chapter index stays
+ * stable while people retime; hidden workspace views stay mounted to retain searches and filters.
+ * Dialog focus ownership and late-response checks remain independent of the visual presentation. */
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   api,
@@ -24,6 +21,8 @@ import { NameCard } from "./NameCard";
 import { PeopleConnections } from "./PeopleConnections";
 import { roman } from "./roman";
 import { Scrubber } from "./Scrubber";
+import { Icon } from "../ui/Icon";
+import "./memory-world.css";
 
 type ChapterSnapshot<T> = { bookId: string; chapter: number; data: T };
 
@@ -42,8 +41,8 @@ export function Codex({
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
   const compactShell = useCompactReaderShell();
-  const [mobileTab, setMobileTab] = useState<"chapters" | "people">("chapters");
-  const mobileTabsId = useId();
+  const [activeView, setActiveView] = useState<"chapters" | "people">("chapters");
+  const viewTabsId = useId();
   const chapterTabRef = useRef<HTMLButtonElement>(null);
   const peopleTabRef = useRef<HTMLButtonElement>(null);
   const [t, setT] = useState(bookmark); // the shared cursor: everything renders as-of chapter T
@@ -189,8 +188,8 @@ export function Codex({
   }, [bookId, t, correctionsRetry]);
 
   const jumpToChapter = (chapter: number, activatePanel = true) => {
-    if (compactShell && activatePanel && mobileTab !== "chapters") {
-      setMobileTab("chapters");
+    if (activatePanel && activeView !== "chapters") {
+      setActiveView("chapters");
       // The citation's source becomes hidden. Keep keyboard focus on a visible navigation control.
       chapterTabRef.current?.focus();
     }
@@ -269,16 +268,13 @@ export function Codex({
       ref={rootRef}
     >
       <article
-        className="hero-page codex-page"
+        className="hero-page codex-page memory-world"
         data-compact={compactShell || undefined}
         ref={articleRef}
       >
         <header className="hero-head">
           <span className="smallcaps hero-eyebrow">
             {presentation.codexTitle}
-          </span>
-          <span className="codex-asof smallcaps">
-            as of {presentation.unit} {roman(t)}
           </span>
           <Button
             variant="ghost"
@@ -292,9 +288,18 @@ export function Codex({
         </header>
         {workspaceNavigation}
 
-        {compactShell && !(emptyNovel && notes != null) && (
+        <div className="memory-intro">
+          <div><span className="memory-eyebrow">YOUR BOOK, CONNECTED</span><h2>A world worth remembering.</h2><p>Revisit the moments. Rediscover the people.</p></div>
+          <div className="memory-frontier"><Icon name="shield" size={16} /><span>Only what you’ve read<strong>Through {presentation.unit} {roman(bookmark)}</strong></span></div>
+        </div>
+        <section className="memory-time" aria-label="Memory chapter">
+          <div><span className="memory-eyebrow">MEMORY AT</span><strong>{presentation.unit} {roman(t)}</strong><p>{t < bookmark ? "Looking back. Your reading position stays where it is." : "You’re at the edge of your reading journey."}</p></div>
+          {bookmark > 1 && <Scrubber max={bookmark} value={t} onChange={retime} unit={presentation.unit} />}
+          {t < bookmark && <Button variant="ghost" onClick={() => retime(bookmark)}>Back to latest <Icon name="arrowRight" size={15} /></Button>}
+        </section>
+        {(
           <div
-            className="codex-mobile-tabs"
+            className="codex-mobile-tabs memory-view-switch"
             role="tablist"
             aria-label="Reading memory views"
             onKeyDown={(event) => {
@@ -305,10 +310,10 @@ export function Codex({
                 event.key === "ArrowLeft" ||
                 event.key === "ArrowRight"
               ) {
-                next = mobileTab === "chapters" ? "people" : "chapters";
+                next = activeView === "chapters" ? "people" : "chapters";
               } else return;
               event.preventDefault();
-              setMobileTab(next);
+              setActiveView(next);
               (next === "chapters"
                 ? chapterTabRef
                 : peopleTabRef
@@ -318,48 +323,45 @@ export function Codex({
             <Button
               variant="ghost"
               role="tab"
-              id={`${mobileTabsId}-chapters-tab`}
-              aria-controls={`${mobileTabsId}-chapters`}
-              aria-selected={mobileTab === "chapters"}
-              tabIndex={mobileTab === "chapters" ? 0 : -1}
+              id={`${viewTabsId}-chapters-tab`}
+              aria-label={presentation.unit === "chapter" ? "Chapters" : "Sections"}
+              aria-controls={`${viewTabsId}-chapters`}
+              aria-selected={activeView === "chapters"}
+              tabIndex={activeView === "chapters" ? 0 : -1}
               ref={chapterTabRef}
-              onClick={() => setMobileTab("chapters")}
+              onClick={() => setActiveView("chapters")}
             >
-              {presentation.unit === "chapter" ? "Chapters" : "Sections"}
+              <Icon name="book" size={18} />
+              <span>{presentation.unit === "chapter" ? "Chapters" : "Sections"}<small>Your journey</small></span>
             </Button>
             <Button
               variant="ghost"
               role="tab"
-              id={`${mobileTabsId}-people-tab`}
-              aria-controls={`${mobileTabsId}-people`}
-              aria-selected={mobileTab === "people"}
-              tabIndex={mobileTab === "people" ? 0 : -1}
+              id={`${viewTabsId}-people-tab`}
+              aria-label="People & connections"
+              aria-controls={`${viewTabsId}-people`}
+              aria-selected={activeView === "people"}
+              tabIndex={activeView === "people" ? 0 : -1}
               ref={peopleTabRef}
-              onClick={() => setMobileTab("people")}
+              onClick={() => setActiveView("people")}
             >
-              People &amp; connections
+              <Icon name="sparkle" size={18} />
+              <span>People &amp; connections<small>The story’s constellation</small></span>
             </Button>
           </div>
         )}
 
-        {emptyNovel && notes != null ? (
-          <p className="quiet hero-quiet">
-            No one has stepped onto the page yet.
-          </p>
-        ) : (
-          <div className="codex-spread" data-mobile-tab={mobileTab}>
+        {(
+          <div className="codex-spread" data-mobile-tab={activeView}>
             <section
               className="codex-leaf left"
-              id={`${mobileTabsId}-chapters`}
-              role={compactShell ? "tabpanel" : undefined}
-              aria-label={compactShell ? undefined : "the story broken down"}
-              aria-labelledby={
-                compactShell ? `${mobileTabsId}-chapters-tab` : undefined
-              }
-              hidden={compactShell && mobileTab !== "chapters"}
+              id={`${viewTabsId}-chapters`}
+              role="tabpanel"
+              aria-labelledby={`${viewTabsId}-chapters-tab`}
+              hidden={activeView !== "chapters"}
               aria-busy={notes == null && !notesError}
             >
-              <h2 className="smallcaps codex-leaf-head">
+              <h2 className="sr-only">
                 {presentation.breakdownTitle}
               </h2>
               {notesError ? (
@@ -388,7 +390,7 @@ export function Codex({
                   cast={notes.cast}
                   currentChapter={t}
                   scrollTo={
-                    compactShell && mobileTab !== "chapters" ? null : scrollTo
+                    activeView !== "chapters" ? null : scrollTo
                   }
                   onSelectChapter={retime}
                   onOpenCard={openCard}
@@ -398,13 +400,10 @@ export function Codex({
             </section>
             <section
               className="codex-leaf right"
-              id={`${mobileTabsId}-people`}
-              role={compactShell ? "tabpanel" : undefined}
-              aria-label={compactShell ? undefined : "the cast and their ties"}
-              aria-labelledby={
-                compactShell ? `${mobileTabsId}-people-tab` : undefined
-              }
-              hidden={compactShell && mobileTab !== "people"}
+              id={`${viewTabsId}-people`}
+              role="tabpanel"
+              aria-labelledby={`${viewTabsId}-people-tab`}
+              hidden={activeView !== "people"}
               aria-busy={graph == null && !graphError}
             >
               {graphError ? (
@@ -427,6 +426,8 @@ export function Codex({
                 <p className="quiet hero-quiet" role="status">
                   Gathering the codex…
                 </p>
+              ) : emptyNovel ? (
+                <p className="quiet hero-quiet">No one has stepped onto the page yet.</p>
               ) : peopleUseful ? (
                 <div className="codex-right">
                   <PeopleConnections
@@ -551,16 +552,6 @@ export function Codex({
           </div>
         )}
 
-        {bookmark > 1 && (
-          <div className="codex-foot">
-            <Scrubber
-              max={bookmark}
-              value={t}
-              onChange={retime}
-              unit={presentation.unit}
-            />
-          </div>
-        )}
       </article>
       {card && (
         <NameCard

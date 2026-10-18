@@ -90,6 +90,17 @@ export function ReaderTTS({
           <span className="reader-tool-active" aria-hidden="true" />
         )}
       </button>
+      {!open && mode !== "idle" && (
+        <section className="listening-mini" aria-label="Listening player">
+          <Icon name="headphones" size={18} />
+          <span>{mode === "playing" ? "Reading to you" : "Listening paused"}<small>{rate}× speed</small></span>
+          <Button variant="primary" disabled={inactive} onClick={() => {
+            if (mode === "playing") controllerRef.current?.pause();
+            else void controllerRef.current?.play();
+          }}>{mode === "playing" ? "Pause reading" : "Resume reading"}</Button>
+          <Button variant="ghost" aria-label="Stop listening" onClick={() => controllerRef.current?.stop()}><Icon name="close" size={16} /></Button>
+        </section>
+      )}
       {open && (
         <section
           id={id}

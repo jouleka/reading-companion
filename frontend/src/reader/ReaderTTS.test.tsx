@@ -72,6 +72,11 @@ describe("ReaderTTS", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("region", { name: "Read aloud controls" })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "read aloud" }));
+    expect(screen.getByRole("region", { name: "Listening player" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Pause reading" }));
+    expect(screen.getByRole("button", { name: "Resume reading" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Stop listening" }));
+    expect(screen.queryByRole("region", { name: "Listening player" })).toBeNull();
   });
 
   test("truthfully reports when the browser has no speech service", async () => {

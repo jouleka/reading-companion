@@ -122,137 +122,98 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+const showPeople = () => fireEvent.click(screen.getByRole("tab", { name: "People & connections" }));
+const showChapters = () => fireEvent.click(screen.getByRole("tab", { name: "Chapters" }));
+const castIndex = () => screen.findByRole("navigation", { name: /cast index/i });
+
 describe("Codex", () => {
-  test("opens as-of the bookmark: fetches graph+notes at T=bookmark, shows both leaves", async () => {
+  test("opens the chapter journey at the bookmark and separates the people workspace", async () => {
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    await waitFor(() => expect(screen.getByText("The Leaf 2")).toBeTruthy()); // left leaf entry
+    expect(await screen.findByText("The Leaf 2")).toBeTruthy();
     expect(mocks.graph).toHaveBeenCalledWith("b", 2);
     expect(mocks.notes).toHaveBeenCalledWith("b", 2);
-    const cast = screen.getByRole("navigation", { name: /cast index/i });
-    expect(within(cast).getByRole("button", { name: /Fyodor/ })).toBeTruthy();
-    // the scrubber walks 1..bookmark
+    expect(screen.queryByRole("navigation", { name: /cast index/i })).toBeNull();
     expect((screen.getByRole("slider") as HTMLInputElement).max).toBe("2");
+    showPeople();
+    expect(within(await castIndex()).getByRole("button", { name: /Fyodor/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /The Leaf 2/ })).toBeNull();
   });
 
   test("publishes a named correction at the exact frontier and shows immutable provenance", async () => {
     const user = userEvent.setup();
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    await user.click(
-      await screen.findByRole("button", { name: "Correct this name" }),
-    );
+    showPeople();
+    await user.click(await screen.findByRole("button", { name: "Correct this name" }));
     await user.type(screen.getByLabelText("Correct name"), "Fyodor Pavlovich");
-    await user.type(
-      screen.getByLabelText("Why this is a correction"),
-      "The extracted name was incomplete.",
-    );
+    await user.type(screen.getByLabelText("Why this is a correction"), "The extracted name was incomplete.");
     await user.click(screen.getByRole("button", { name: "Save correction" }));
-    await waitFor(() =>
-      expect(mocks.correctMemory).toHaveBeenCalledWith("b", {
-        source_entity_id: 1,
-        canonical_name: "Fyodor Pavlovich",
-        reason: "The extracted name was incomplete.",
-        bookmark: 2,
-      }),
-    );
-    expect(
-      await screen.findByText("The extracted name was incomplete."),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Effective Chapter II" }),
-    ).toBeTruthy();
+    await waitFor(() => expect(mocks.correctMemory).toHaveBeenCalledWith("b", {
+      source_entity_id: 1, canonical_name: "Fyodor Pavlovich", reason: "The extracted name was incomplete.", bookmark: 2,
+    }));
+    expect(await screen.findByText("The extracted name was incomplete.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Effective Chapter II" })).toBeTruthy();
   });
 
-  test("clicking a chapter re-times graph+cast to that T; the chapter index stays a full ToC", async () => {
+  test("selecting a chapter retimes people while the journey remains the full completed index", async () => {
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    await waitFor(() =>
-      expect(
-        within(
-          screen.getByRole("navigation", { name: /cast index/i }),
-        ).getByRole("button", { name: /Mitya/ }),
-      ).toBeTruthy(),
-    );
+    showPeople();
+    expect(within(await castIndex()).getByRole("button", { name: /Mitya/ })).toBeTruthy();
+    showChapters();
     fireEvent.click(screen.getByRole("button", { name: /The Leaf 1/ }));
     await waitFor(() => expect(mocks.graph).toHaveBeenCalledWith("b", 1));
-    await waitFor(() =>
-      expect(
-        within(
-          screen.getByRole("navigation", { name: /cast index/i }),
-        ).queryByRole("button", { name: /Mitya/ }),
-      ).toBeNull(),
-    ); // as-of 1: Mitya (revealed_at 2) is gone from the cast — scrubbing back never shows more
-    // …but the breakdown does NOT truncate: it is a stable ToC of 1..bookmark (all already read),
-    // fetched once at the frontier — never re-fetched at T (the spec's chosen model)
     expect(screen.getByRole("button", { name: /The Leaf 2/ })).toBeTruthy();
+    showPeople();
+    expect(within(await castIndex()).queryByRole("button", { name: /Mitya/ })).toBeNull();
     expect(mocks.notes).toHaveBeenCalledTimes(1);
     expect(mocks.notes).toHaveBeenCalledWith("b", 2);
   });
 
   test("selecting the current chapter again preserves its loaded memory", async () => {
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    const cast = await screen.findByRole("navigation", { name: /cast index/i });
+    showPeople();
+    const cast = await castIndex();
+    showChapters();
     fireEvent.click(screen.getByRole("button", { name: /The Leaf 2/ }));
-    expect(screen.getByRole("navigation", { name: /cast index/i })).toBe(cast);
+    showPeople();
+    expect(await castIndex()).toBe(cast);
     expect(within(cast).getByRole("button", { name: /Mitya/ })).toBeTruthy();
-    expect(screen.queryByText(/Gathering the codex/i)).toBeNull();
     expect(mocks.graph).toHaveBeenCalledTimes(1);
   });
 
   test("hides the later graph immediately while a scrub-back request is pending", async () => {
     let resolveEarlier!: (value: ReturnType<typeof graphAt>) => void;
-    mocks.graph.mockImplementation((_id: string, t: number) =>
-      t === 1
-        ? new Promise((resolve) => {
-            resolveEarlier = resolve;
-          })
-        : Promise.resolve(graphAt(t)),
-    );
+    mocks.graph.mockImplementation((_id: string, t: number) => t === 1 ? new Promise((resolve) => { resolveEarlier = resolve; }) : Promise.resolve(graphAt(t)));
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    const cast = await screen.findByRole("navigation", { name: /cast index/i });
-    expect(within(cast).getByRole("button", { name: /Mitya/ })).toBeTruthy();
-
-    const chapter = screen.getByRole("button", { name: /The Leaf 1/ });
-    fireEvent.click(chapter);
+    showPeople();
+    expect(within(await castIndex()).getByRole("button", { name: /Mitya/ })).toBeTruthy();
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
     expect(screen.getByText(/Gathering the codex/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Mitya/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /The Leaf 1/ })).toBe(chapter);
-
-    resolveEarlier(graphAt(1));
-    await screen.findByRole("navigation", { name: /cast index/i });
+    await act(async () => resolveEarlier(graphAt(1)));
+    expect(within(await castIndex()).queryByRole("button", { name: /Mitya/ })).toBeNull();
   });
 
   test("an out-of-order chapter response never replaces the current memory", async () => {
     let resolveEarlier!: (value: ReturnType<typeof graphAt>) => void;
-    mocks.graph.mockImplementation((_id: string, t: number) =>
-      t === 1
-        ? new Promise((resolve) => {
-            resolveEarlier = resolve;
-          })
-        : Promise.resolve(graphAt(t)),
-    );
+    mocks.graph.mockImplementation((_id: string, t: number) => t === 1 ? new Promise((resolve) => { resolveEarlier = resolve; }) : Promise.resolve(graphAt(t)));
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    await screen.findByRole("navigation", { name: /cast index/i });
-    fireEvent.click(screen.getByRole("button", { name: /The Leaf 1/ }));
-    fireEvent.click(screen.getByRole("button", { name: /The Leaf 2/ }));
-    await screen.findByRole("navigation", { name: /cast index/i });
+    showPeople();
+    await castIndex();
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "2" } });
+    await castIndex();
     await act(async () => resolveEarlier(graphAt(1)));
-    expect(
-      within(screen.getByRole("navigation", { name: /cast index/i })).getByRole(
-        "button",
-        { name: /Mitya/ },
-      ),
-    ).toBeTruthy();
+    expect(within(await castIndex()).getByRole("button", { name: /Mitya/ })).toBeTruthy();
     expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("2");
   });
 
   test("a memory failure preserves chapter navigation and can be retried", async () => {
     mocks.graph.mockRejectedValueOnce(new Error("offline"));
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    const retry = await screen.findByRole("button", { name: "Retry memory" });
-    expect(screen.getByRole("button", { name: /The Leaf 1/ })).toBeTruthy();
-    fireEvent.click(retry);
-    expect(
-      await screen.findByRole("navigation", { name: /cast index/i }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /The Leaf 1/ })).toBeTruthy();
+    showPeople();
+    fireEvent.click(await screen.findByRole("button", { name: "Retry memory" }));
+    expect(await castIndex()).toBeTruthy();
     expect(mocks.notes).toHaveBeenCalledTimes(1);
   });
 
@@ -260,159 +221,102 @@ describe("Codex", () => {
     mocks.notes.mockRejectedValueOnce(new Error("offline"));
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
     await screen.findByRole("button", { name: "Retry chapter notes" });
-    expect(
-      await screen.findByRole("navigation", { name: /cast index/i }),
-    ).toBeTruthy();
+    showPeople();
+    expect(await castIndex()).toBeTruthy();
     fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
     await waitFor(() => expect(mocks.graph).toHaveBeenCalledWith("b", 1));
-    expect(
-      screen.getByRole("button", { name: "Retry chapter notes" }),
-    ).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Retry chapter notes" }),
-    );
-    expect(
-      await screen.findByRole("button", { name: /The Leaf 1/ }),
-    ).toBeTruthy();
+    showChapters();
+    fireEvent.click(screen.getByRole("button", { name: "Retry chapter notes" }));
+    expect(await screen.findByRole("button", { name: /The Leaf 1/ })).toBeTruthy();
   });
 
   test("an unavailable correction history is distinct from an empty history and can be retried", async () => {
     mocks.memoryCorrections.mockRejectedValueOnce(new Error("offline"));
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: /Memory correction history/ }),
-    );
-    const retry = await screen.findByRole("button", {
-      name: "Retry correction history",
-    });
-    expect(
-      screen.queryByText("No corrections are visible at this chapter."),
-    ).toBeNull();
+    showPeople();
+    fireEvent.click(await screen.findByRole("button", { name: /Memory correction history/ }));
+    const retry = await screen.findByRole("button", { name: "Retry correction history" });
+    expect(screen.queryByText("No corrections are visible at this chapter.")).toBeNull();
     fireEvent.click(retry);
-    expect(
-      await screen.findByText("No corrections are visible at this chapter."),
-    ).toBeTruthy();
+    expect(await screen.findByText("No corrections are visible at this chapter.")).toBeTruthy();
     expect(mocks.graph).toHaveBeenCalledTimes(1);
   });
 
   test("a correction finishing after a rewind cannot insert frontier memory into the earlier chapter", async () => {
-    let resolveCorrection!: (value: {
-      as_of_chapter: number;
-      target_entity_id: number;
-      items: [];
-    }) => void;
-    mocks.correctMemory.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveCorrection = resolve;
-        }),
-    );
+    let resolveCorrection!: (value: { as_of_chapter: number; target_entity_id: number; items: [] }) => void;
+    mocks.correctMemory.mockImplementation(() => new Promise((resolve) => { resolveCorrection = resolve; }));
     const user = userEvent.setup();
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    await user.click(
-      await screen.findByRole("button", { name: "Correct this name" }),
-    );
+    showPeople();
+    await user.click(await screen.findByRole("button", { name: "Correct this name" }));
     await user.type(screen.getByLabelText("Correct name"), "Fyodor Pavlovich");
-    await user.type(
-      screen.getByLabelText("Why this is a correction"),
-      "The name was incomplete.",
-    );
+    await user.type(screen.getByLabelText("Why this is a correction"), "The name was incomplete.");
     await user.click(screen.getByRole("button", { name: "Save correction" }));
-    fireEvent.click(screen.getByRole("button", { name: /The Leaf 1/ }));
-    await screen.findByRole("navigation", { name: /cast index/i });
-    await act(async () =>
-      resolveCorrection({ as_of_chapter: 2, target_entity_id: 3, items: [] }),
-    );
-    expect(
-      within(
-        screen.getByRole("navigation", { name: /cast index/i }),
-      ).queryByRole("button", { name: /Mitya/ }),
-    ).toBeNull();
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
+    await castIndex();
+    await act(async () => resolveCorrection({ as_of_chapter: 2, target_entity_id: 3, items: [] }));
+    expect(within(await castIndex()).queryByRole("button", { name: /Mitya/ })).toBeNull();
     expect(screen.getByRole("heading", { name: "Fyodor" })).toBeTruthy();
     expect((screen.getByRole("slider") as HTMLInputElement).value).toBe("1");
   });
 
-  test("a cast click opens the chosen character's relationship entry", async () => {
+  test("a cast click opens the chosen character’s relationship entry", async () => {
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    const cast = await screen.findByRole("navigation", { name: /cast index/i });
-    fireEvent.click(within(cast).getByRole("button", { name: /Mitya/ }));
+    showPeople();
+    fireEvent.click(within(await castIndex()).getByRole("button", { name: /Mitya/ }));
     expect(screen.getByRole("heading", { name: "Mitya" })).toBeTruthy();
-    expect(
-      screen.getByRole("list", { name: /known connections for Mitya/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("list", { name: /known connections for Mitya/i })).toBeTruthy();
   });
 
-  test("Tab traverses interior controls instead of jumping from close to the scrubber", async () => {
+  test("Tab traverses the chapter context, view switch, search, and journey controls", async () => {
     const user = userEvent.setup();
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
     await screen.findByText("The Leaf 2");
-    const close = screen.getByRole("button", { name: /close/i });
-    expect(document.activeElement).toBe(close);
-
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /close/i }));
     await user.tab();
-    expect(document.activeElement).toBe(
-      screen.getByRole("searchbox", { name: /find a chapter/i }),
-    );
-
+    expect(document.activeElement).toBe(screen.getByRole("slider"));
     await user.tab();
-    expect(document.activeElement).toBe(
-      screen.getByRole("button", { name: /The Leaf 1/ }),
-    );
-
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "Chapters" }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: /find a chapter/i }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /The Leaf 1/ }));
+    showPeople();
     const search = screen.getByRole("searchbox", { name: /find a person/i });
     search.focus();
     await user.tab();
-    expect(document.activeElement).toBe(
-      within(screen.getByRole("navigation", { name: /cast index/i })).getByRole(
-        "button",
-        { name: /Fyodor/ },
-      ),
-    );
+    expect(document.activeElement).toBe(within(await castIndex()).getByRole("button", { name: /Fyodor/ }));
   });
 
-  test("Escape closes; no axe violations", async () => {
+  test("Escape closes; both workspace views have no axe violations", async () => {
     const onClose = vi.fn();
-    const { container } = render(
-      <Codex bookId="b" bookmark={2} onClose={onClose} />,
-    );
-    await waitFor(() => expect(screen.getByText("The Leaf 2")).toBeTruthy());
+    const { container } = render(<Codex bookId="b" bookmark={2} onClose={onClose} />);
+    await screen.findByText("The Leaf 2");
+    expect(await axeAA(container)).toHaveNoViolations();
+    showPeople();
+    await castIndex();
     expect(await axeAA(container)).toHaveNoViolations();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalled();
   });
 
-  test("a reference book with no people keeps section notes and explains the omitted people panel", async () => {
-    mocks.graph.mockResolvedValue({
-      as_of_chapter: 2,
-      characters: [],
-      relationships: [],
-    });
-    render(
-      <Codex bookId="b" bookmark={2} bookType="reference" onClose={() => {}} />,
-    );
+  test("a reference book keeps section notes and explains an empty people view", async () => {
+    mocks.graph.mockResolvedValue({ as_of_chapter: 2, characters: [], relationships: [] });
+    render(<Codex bookId="b" bookmark={2} bookType="reference" onClose={() => {}} />);
     expect(await screen.findByText("The Leaf 2")).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: /section by section/i }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("navigation", { name: /cast index/i }),
-    ).toBeNull();
-    expect(
-      screen.getByText(/people and plot sections stay out of the way/i),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /section by section/i })).toBeTruthy();
+    showPeople();
+    expect(screen.queryByRole("navigation", { name: /cast index/i })).toBeNull();
+    expect(screen.getByText(/people and plot sections stay out of the way/i)).toBeTruthy();
   });
 
-  test("the established empty-novel state remains unchanged", async () => {
-    mocks.graph.mockResolvedValue({
-      as_of_chapter: 2,
-      characters: [],
-      relationships: [],
-    });
+  test("a novel without extracted people still exposes completed chapter notes", async () => {
+    mocks.graph.mockResolvedValue({ as_of_chapter: 2, characters: [], relationships: [] });
     render(<Codex bookId="b" bookmark={2} onClose={() => {}} />);
-    expect(
-      await screen.findByText("No one has stepped onto the page yet."),
-    ).toBeTruthy();
-    expect(screen.queryByText("The Leaf 2")).toBeNull();
+    expect(await screen.findByText("The Leaf 2")).toBeTruthy();
+    showPeople();
+    expect(await screen.findByText("No one has stepped onto the page yet.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /The Leaf 2/ })).toBeNull();
   });
 
   test("compact views retain search state when switching tabs and support tab keyboard navigation", async () => {
