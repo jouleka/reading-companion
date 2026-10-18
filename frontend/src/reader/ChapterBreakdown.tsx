@@ -1,13 +1,11 @@
-/** ChapterBreakdown (LIT-31): the codex's left leaf — the story broken down, chapter by chapter. Each
- * entry is its summary + highlights (who first appears + that chapter's events); character names are
- * chips that open the LIT-30 card (reusing wrapNames). The chapter head is a button that re-times the
- * whole spread (the shared T cursor); the current chapter carries aria-current. `scrollTo` is an
- * explicit request so choosing the same citation twice still scrolls that entry into view.
- * The full index (1..bookmark) is always shown — it is a stable table of contents, all already-read. */
+/** A stable rail of completed chapters and one selected chapter spotlight. Summary, events and
+ * names are rendered verbatim from clamped notes. Explicit citation requests reveal their chapter
+ * after clearing search, while the caller controls the historical memory cursor. */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { CastMember, ChapterNote } from "../api";
 import { wrapNames } from "./names";
 import { roman } from "./roman";
+import { Icon } from "../ui/Icon";
 
 export function ChapterBreakdown({
   chapters,
@@ -26,7 +24,7 @@ export function ChapterBreakdown({
   onOpenCard: (entityId: number, anchorRect: DOMRect) => void;
   unit?: "chapter" | "scene" | "section";
 }) {
-  const entryRefs = useRef<Record<number, HTMLLIElement | null>>({});
+  const entryRefs = useRef<Record<number, HTMLElement | null>>({});
   const handledScrollRequest = useRef<number | null>(null);
   const [jumpedChapter, setJumpedChapter] = useState<number | null>(null);
   const [expandedChapter, setExpandedChapter] = useState<number | null>(
@@ -110,89 +108,89 @@ export function ChapterBreakdown({
       </p>
     );
 
+  const selected = visibleChapters.find((chapter) => chapter.revealed_at === expandedChapter);
+  const selectedIndex = chapters.findIndex((chapter) => chapter.revealed_at === expandedChapter);
+  const select = (chapter: ChapterNote) => {
+    setExpandedChapter(chapter.revealed_at);
+    onSelectChapter(chapter.revealed_at);
+  };
+
   return (
-    <>
-      <label className="chapter-search">
-        <span className="sr-only">Find a chapter</span>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={`Find a ${unit}…`}
-        />
-      </label>
+    <div className="journey-workspace">
+      <div className="journey-toolbar">
+        <div><span className="memory-eyebrow">THE PATH YOU’VE TAKEN</span><p>{chapters.length} completed {unit}{chapters.length === 1 ? "" : "s"}. Every detail is yours to revisit.</p></div>
+        <label className="chapter-search">
+          <Icon name="search" size={17} />
+          <span className="sr-only">Find a chapter</span>
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Find a ${unit}…`} />
+        </label>
+      </div>
       {visibleChapters.length === 0 ? (
-        <p className="quiet chapter-search-empty" role="status">
-          No {unit}s match “{query}”.
-        </p>
+        <p className="quiet chapter-search-empty" role="status">No {unit}s match “{query}”.</p>
       ) : (
-        <ol className="chapter-breakdown">
-          {visibleChapters.map((ch) => {
-            const expanded = expandedChapter === ch.revealed_at;
-            return (
-              <li
-                key={ch.chapter_key}
-                className={`chapter-entry${ch.revealed_at === currentChapter ? " is-current" : ""}${ch.revealed_at === jumpedChapter ? " is-jump-target" : ""}`}
-                ref={(el) => {
-                  entryRefs.current[ch.revealed_at] = el;
-                }}
-              >
+        <>
+          <ol className="chapter-breakdown journey-rail" aria-label="Completed chapters">
+            {visibleChapters.map((chapter) => (
+              <li key={chapter.chapter_key} className={`chapter-entry${chapter.revealed_at === expandedChapter ? " is-current" : ""}`}>
                 <button
+                  type="button"
                   className="chapter-head plain"
-                  aria-current={
-                    ch.revealed_at === currentChapter ? "true" : undefined
-                  }
-                  aria-expanded={expanded}
-                  onClick={() => {
-                    setExpandedChapter(ch.revealed_at);
-                    onSelectChapter(ch.revealed_at);
-                  }}
+                  aria-label={`${unit[0].toUpperCase() + unit.slice(1)} ${roman(chapter.revealed_at)}${chapter.title ? ` — ${chapter.title}` : ""}`}
+                  aria-current={chapter.revealed_at === currentChapter ? "true" : undefined}
+                  aria-expanded={expandedChapter === chapter.revealed_at}
+                  onClick={() => select(chapter)}
                 >
-                  <span className="chapter-num smallcaps">
-                    {unit[0].toUpperCase() + unit.slice(1)}{" "}
-                    {roman(ch.revealed_at)}
-                  </span>
-                  {ch.title && (
-                    <span className="chapter-title">{ch.title}</span>
-                  )}
+                  <span className="journey-stop" aria-hidden="true">{roman(chapter.revealed_at)}</span>
+                  <span className="journey-stop-label">{unit} {chapter.revealed_at}</span>
+                  <span className="journey-stop-detail">{chapter.events.length} {chapter.events.length === 1 ? "moment" : "moments"}</span>
                 </button>
-                {expanded && ch.summary && (
-                  <p className="chapter-summary">{renderText(ch.summary)}</p>
-                )}
-                {expanded && ch.new_characters.length > 0 && (
-                  <p className="chapter-new">
-                    <span className="smallcaps">new here:</span>{" "}
-                    {ch.new_characters.map((nc, k) => (
-                      <Fragment key={nc.entity_id}>
-                        {k > 0 ? ", " : ""}
-                        <button
-                          type="button"
-                          className="name-chip"
-                          onClick={(e) =>
-                            onOpenCard(
-                              nc.entity_id,
-                              e.currentTarget.getBoundingClientRect(),
-                            )
-                          }
-                        >
-                          {nc.name}
-                        </button>
-                      </Fragment>
-                    ))}
-                  </p>
-                )}
-                {expanded && ch.events.length > 0 && (
-                  <ul className="chapter-events">
-                    {ch.events.map((e, k) => (
-                      <li key={k}>{renderText(e)}</li>
-                    ))}
-                  </ul>
-                )}
               </li>
-            );
-          })}
-        </ol>
+            ))}
+          </ol>
+          {selected ? (
+            <article
+              className={`journey-spotlight${selected.revealed_at === jumpedChapter ? " is-jump-target" : ""}`}
+              key={selected.chapter_key}
+              ref={(element) => { entryRefs.current[selected.revealed_at] = element; }}
+              aria-label={`${unit} ${selected.revealed_at} details`}
+            >
+              <header className="journey-chapter-heading">
+                <div><span className="memory-eyebrow">{unit.toUpperCase()} {roman(selected.revealed_at)}</span><h3>{selected.title || `${unit[0].toUpperCase() + unit.slice(1)} ${roman(selected.revealed_at)}`}</h3></div>
+                <span className="journey-chapter-number" aria-hidden="true">{String(selected.revealed_at).padStart(2, "0")}</span>
+              </header>
+              {selected.summary && <p className="chapter-summary">{renderText(selected.summary)}</p>}
+              <div className="journey-details">
+                {selected.events.length > 0 && (
+                  <section className="journey-moments">
+                    <h4><Icon name="sparkle" size={16} /> Moments to remember</h4>
+                    <ol className="chapter-events">
+                      {selected.events.map((event, index) => <li key={index}><span className="journey-event-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><p>{renderText(event)}</p></li>)}
+                    </ol>
+                  </section>
+                )}
+                {selected.new_characters.length > 0 && (
+                  <section className="journey-arrivals">
+                    <h4>New to the story</h4>
+                    <p>The people you met in this {unit}.</p>
+                    <div className="chapter-new">
+                      {selected.new_characters.map((person) => (
+                        <button type="button" className="journey-person name-chip" key={person.entity_id} onClick={(event) => onOpenCard(person.entity_id, event.currentTarget.getBoundingClientRect())}>
+                          <span aria-hidden="true">{person.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}</span>{person.name}<Icon name="arrowRight" size={14} />
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+              <footer className="journey-step-controls">
+                <button type="button" disabled={selectedIndex <= 0} onClick={() => select(chapters[selectedIndex - 1])}><Icon name="arrowLeft" size={16} /> Previous {unit}</button>
+                <span>{selectedIndex + 1} of {chapters.length} remembered</span>
+                <button type="button" disabled={selectedIndex >= chapters.length - 1} onClick={() => select(chapters[selectedIndex + 1])}>Next {unit}<Icon name="arrowRight" size={16} /></button>
+              </footer>
+            </article>
+          ) : <p className="journey-choose">Choose a {unit} above to step back into the story.</p>}
+        </>
       )}
-    </>
+    </div>
   );
 }

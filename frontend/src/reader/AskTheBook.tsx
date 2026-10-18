@@ -17,10 +17,15 @@ import { ProviderCost } from "./ProviderCost";
 import { roman } from "./roman";
 import { Icon } from "../ui/Icon";
 import { activeOfflineOwner } from "../pwa/offline";
+import "./ask-reflect-world.css";
+
+type AskExchange = { question: string; answer: AskAnswer };
 
 type AskSnapshot = {
   question: string;
   answer: AskAnswer | null;
+  exchanges: AskExchange[];
+  pendingQuestion: string | null;
   busy: boolean;
   error: string;
 };
@@ -36,7 +41,7 @@ export type AskSession = {
 };
 
 function createAskSession(bookId: string, bookmark: number, owner: string): AskSession {
-  let snapshot: AskSnapshot = { question: "", answer: null, busy: false, error: "" };
+  let snapshot: AskSnapshot = { question: "", answer: null, exchanges: [], pendingQuestion: null, busy: false, error: "" };
   const listeners = new Set<() => void>();
   return {
     bookId,
@@ -82,7 +87,7 @@ export function AskTheBook({
     retainedSession.current = createAskSession(bookId, bookmark, owner);
   }
   const session = retainedSession.current;
-  const { question, answer, busy, error } = useSyncExternalStore(
+  const { question, answer, exchanges, pendingQuestion, busy, error } = useSyncExternalStore(
     session.subscribe,
     session.getSnapshot,
     session.getSnapshot,
@@ -98,6 +103,20 @@ export function AskTheBook({
     triggerRef.current = document.activeElement as HTMLElement | null;
   const titleId = useId();
   const helpId = useId();
+  const conversationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const conversation = conversationRef.current;
+    if (!conversation) return;
+    if (busy) {
+      conversation.scrollTop = conversation.scrollHeight;
+    } else {
+      // Only move the conversation viewport. A long answer's opening must remain
+      // visible, including when returning to a retained reading session.
+      const latest = conversation.querySelector<HTMLElement>("[data-latest-exchange]");
+      conversation.scrollTop = latest?.offsetTop ?? 0;
+    }
+  }, [exchanges.length, busy]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -136,13 +155,13 @@ export function AskTheBook({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (retainedSession.current !== session || owner !== activeOfflineOwner()) {
-      session.update({ question: "", answer: null, busy: false, error: "" });
+      session.update({ question: "", answer: null, exchanges: [], pendingQuestion: null, busy: false, error: "" });
       return;
     }
     const snapshot = session.getSnapshot();
     const value = snapshot.question.trim();
     if (value.length < 2 || snapshot.busy) return;
-    session.update({ busy: true, error: "", answer: null });
+    session.update({ busy: true, error: "", pendingQuestion: value });
     const isCurrentSession = () =>
       retainedSession.current === session && owner === activeOfflineOwner();
     try {
@@ -150,7 +169,12 @@ export function AskTheBook({
       if (isCurrentSession()) {
         if (result.as_of_chapter > bookmark)
           throw new Error("The answer could not be verified against your completed chapters. Please try again.");
-        session.update({ answer: result });
+        session.update({
+          answer: result,
+          exchanges: [...session.getSnapshot().exchanges, { question: value, answer: result }],
+          question: "",
+          pendingQuestion: null,
+        });
       }
     } catch (reason) {
       if (isCurrentSession()) {
@@ -161,15 +185,12 @@ export function AskTheBook({
         });
       }
     } finally {
-      if (isCurrentSession()) session.update({ busy: false });
+      if (isCurrentSession()) session.update({ busy: false, pendingQuestion: null });
     }
   };
 
-  const citationById = new Map(
-    answer?.citations.map((citation) => [citation.id, citation]),
-  );
   const openCitation = (citation: AskCitation | undefined) => {
-    if (citation) onNavigate(citation);
+    if (citation && retainedSession.current === session && owner === activeOfflineOwner()) onNavigate(citation);
   };
 
   return (
@@ -181,7 +202,7 @@ export function AskTheBook({
       aria-labelledby={titleId}
       ref={rootRef}
     >
-      <article className="hero-page ask-page ask-studio">
+      <article className="hero-page ask-page ask-world">
         <header className="hero-head">
           <span className="smallcaps hero-eyebrow"><Icon name="sparkle" size={15} /> ROOM FOR CURIOSITY</span>
           <Button
@@ -194,27 +215,99 @@ export function AskTheBook({
           </Button>
         </header>
         {workspaceNavigation}
-        <div className="ask-heading">
+        <header className="ask-world-heading">
           <div>
             <h2 id={titleId}>Ask the Book</h2>
-            <p className="ask-tagline">Follow your curiosity.<br /> Keep the mystery.</p>
+            <p>A little curiosity goes a long way.</p>
           </div>
-          <div className="ask-spark" aria-hidden="true"><Icon name="sparkle" size={42} /></div>
-        </div>
-        <div className="ask-boundary"><Icon name="shield" size={14} /> Spoiler safe through chapter {roman(bookmark)}</div>
-        <p id={helpId} className="quiet ask-intro">
-          Explore a person, a moment, or an idea from your completed chapters.
-          Every answer points back to the pages. When there is not enough evidence, we’ll say so.
+          <span className="world-boundary"><Icon name="shield" size={14} /> Through chapter {roman(bookmark)}</span>
+        </header>
+        <p id={helpId} className="sr-only">
+          Ask about your completed chapters. Answers include passages from your book.
+          Questions are answered individually and kept together for this reading session.
         </p>
-        <AiStatus compact />
-        <form className="ask-form" onSubmit={(event) => void submit(event)}>
+
+        <div className="ask-conversation" ref={conversationRef} role="region" aria-label="Book conversation">
+          {exchanges.length === 0 && !busy && (
+            <section className="ask-invitation" aria-label="Explore your book">
+              <div className="ask-orbit" aria-hidden="true"><span /><Icon name="sparkle" size={35} /><span /></div>
+              <p className="world-kicker">THERE'S MORE BETWEEN THE LINES</p>
+              <h3>What has you<br /><em>wondering?</em></h3>
+              <p>Untangle a connection. Revisit a moment.<br />Find an answer in the pages you've read.</p>
+              <div className="ask-suggestions" aria-label="Suggested questions">
+                {suggestions.map((prompt) => (
+                  <Button key={prompt} variant="ghost" onClick={() => { setQuestion(prompt); inputRef.current?.focus(); }}>
+                    <span>{prompt}</span><Icon name="arrowRight" size={15} />
+                  </Button>
+                ))}
+              </div>
+            </section>
+          )}
+          {exchanges.map((exchange, exchangeIndex) => {
+            const citationById = new Map(exchange.answer.citations.map((citation) => [citation.id, citation]));
+            return (
+              <section className="ask-exchange" key={exchangeIndex} data-latest-exchange={exchangeIndex === exchanges.length - 1 || undefined} aria-label={`Question ${exchangeIndex + 1}`}>
+                <div className="ask-question-bubble"><span>You wondered</span><p>{exchange.question}</p></div>
+                <section className="ask-answer world-answer" aria-label="Answer">
+                  <h3><Icon name={exchange.answer.insufficient_evidence ? "book" : "sparkle"} size={16} /> {exchange.answer.insufficient_evidence ? "The story hasn't told us yet" : "From the pages you've read"}</h3>
+                  {exchange.answer.insufficient_evidence ? (
+                    <p>The pages you have completed do not establish an answer yet.</p>
+                  ) : (
+                    <>
+                      {exchange.answer.claims.map((claim, index) => (
+                        <p key={`${index}-${claim.text}`}>
+                          {claim.text}{" "}
+                          <span className="ask-citation-links" aria-label={`Citations for claim ${index + 1}`}>
+                            {claim.citation_ids.map((citationId) => {
+                              const citation = citationById.get(citationId);
+                              return (
+                                <button key={citationId} type="button" className="citation-link" aria-label={`Open citation ${citationId} in ${citation?.title ?? "the book"}`} onClick={() => openCitation(citation)}>
+                                  {citationId}
+                                </button>
+                              );
+                            })}
+                          </span>
+                        </p>
+                      ))}
+                      <details className="ask-evidence">
+                        <summary><Icon name="book" size={15} /> {exchange.answer.citations.length} cited {exchange.answer.citations.length === 1 ? "passage" : "passages"}<span>Explore the evidence</span></summary>
+                        <ol className="ask-sources" aria-label="Cited passages">
+                          {exchange.answer.citations.map((citation) => (
+                            <li key={citation.id}>
+                              <button type="button" className="plain" onClick={() => openCitation(citation)}>
+                                <span className="ask-source-location"><span className="ask-source-number" aria-hidden="true">{citation.id}</span><span>{citation.title || `Chapter ${roman(citation.ordinal)}`}</span><Icon name="arrowRight" size={14} /></span>
+                                <q>{citation.excerpt}</q>
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    </>
+                  )}
+                  <ProviderCost cost={exchange.answer.cost} />
+                </section>
+              </section>
+            );
+          })}
+          {busy && pendingQuestion && (
+            <div className="ask-exchange ask-pending">
+              <div className="ask-question-bubble"><span>You wondered</span><p>{pendingQuestion}</p></div>
+              <div className="ask-thinking" aria-hidden="true"><span /><span /><span /><p>Finding the thread in your book</p></div>
+            </div>
+          )}
+        </div>
+
+        <div className="ask-status" role="status" aria-live="polite" aria-atomic="true" data-busy={busy || undefined} data-error={error ? true : undefined}>
+          {busy ? "Searching only the chapters you have completed…" : error || (answer ? answer.insufficient_evidence ? "There is not enough evidence in your completed chapters yet." : "Your cited answer is ready." : "")}
+        </div>
+        <form className="ask-form world-composer" onSubmit={(event) => void submit(event)}>
           <div className="ask-composer-head"><label htmlFor={`${titleId}-question`}>Your question</label><span>{question.length} / 500</span></div>
           <textarea
             ref={inputRef}
             id={`${titleId}-question`}
             aria-describedby={helpId}
-            rows={3}
-            placeholder="Ask about a person, a moment, or an idea…"
+            rows={2}
+            placeholder={exchanges.length ? "What else are you curious about?" : "Ask about a person, a moment, or an idea…"}
             minLength={2}
             maxLength={500}
             value={question}
@@ -222,7 +315,7 @@ export function AskTheBook({
             onChange={(event) => setQuestion(event.currentTarget.value)}
           />
           <div className="ask-composer-footer">
-            <span><Icon name="book" size={14} /> Grounded in your book</span>
+            <span><Icon name="shield" size={14} /> Only what you've read</span>
             <Button
               type="submit"
               variant="primary"
@@ -238,96 +331,7 @@ export function AskTheBook({
             </Button>
           </div>
         </form>
-
-        {!answer && !busy && (
-          <section className="ask-starters" aria-label="Suggested questions">
-            <h3>A place to begin</h3>
-            <div className="ask-suggestions">
-              {suggestions.map((prompt) => (
-                <Button
-                  key={prompt}
-                  variant="ghost"
-                  onClick={() => {
-                    setQuestion(prompt);
-                    inputRef.current?.focus();
-                  }}
-                >
-                  <span>{prompt}</span><Icon name="arrowRight" size={15} />
-                </Button>
-              ))}
-            </div>
-          </section>
-        )}
-
-        <div
-          className="ask-status"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          data-busy={busy || undefined}
-          data-error={error ? true : undefined}
-        >
-          {busy
-            ? "Searching only the chapters you have completed…"
-            : error ||
-              (answer
-                ? answer.insufficient_evidence
-                  ? "There is not enough evidence in your completed chapters yet."
-                  : "Your cited answer is ready."
-                : "")}
-        </div>
-
-        {answer?.insufficient_evidence && (
-          <section className="ask-answer" aria-label="Answer">
-            <span className="ask-answer-eyebrow"><Icon name="book" size={15} /> A little more reading may reveal it</span>
-            <p>The pages you have completed do not establish an answer yet.</p>
-          </section>
-        )}
-        {answer && !answer.insufficient_evidence && (
-          <section className="ask-answer" aria-label="Answer">
-            <h3><Icon name="sparkle" size={15} /> From what you have read</h3>
-            {answer.claims.map((claim, index) => (
-              <p key={`${index}-${claim.text}`}>
-                {claim.text}{" "}
-                <span
-                  className="ask-citation-links"
-                  aria-label={`Citations for claim ${index + 1}`}
-                >
-                  {claim.citation_ids.map((citationId) => {
-                    const citation = citationById.get(citationId);
-                    return (
-                      <button
-                        key={citationId}
-                        type="button"
-                        className="citation-link"
-                        aria-label={`Open citation ${citationId} in ${citation?.title ?? "the book"}`}
-                        onClick={() => openCitation(citation)}
-                      >
-                        [{citationId}]
-                      </button>
-                    );
-                  })}
-                </span>
-              </p>
-            ))}
-            <div className="ask-sources-heading"><h4>Back to the pages</h4><span>{answer.citations.length} cited {answer.citations.length === 1 ? "passage" : "passages"}</span></div>
-            <ol className="ask-sources" aria-label="Cited passages">
-              {answer.citations.map((citation) => (
-                <li key={citation.id}>
-                  <button
-                    type="button"
-                    className="plain"
-                    onClick={() => openCitation(citation)}
-                  >
-                    <span className="ask-source-location"><span className="ask-source-number" aria-hidden="true">{citation.id}</span><span>{citation.title || `Chapter ${roman(citation.ordinal)}`}</span><Icon name="arrowRight" size={14} /></span>
-                    <q>{citation.excerpt}</q>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </section>
-        )}
-        {answer && <ProviderCost cost={answer.cost} />}
+        <div className="ask-world-footnote"><AiStatus compact /><span>Questions stay here during this reading session.</span></div>
       </article>
     </div>
   );

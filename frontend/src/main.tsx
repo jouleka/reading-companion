@@ -2,7 +2,6 @@ import "@fontsource/eb-garamond/400.css";
 import "@fontsource/eb-garamond/400-italic.css";
 import "@fontsource/fraunces/400.css";
 import "./styles.css";
-import "./experience.css";
 
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
@@ -12,6 +11,7 @@ import { Shelf } from "./shelf/Shelf";
 import { Icon } from "./ui/Icon";
 import { Button } from "./ui/Button";
 import { AiRuntimeProvider } from "./ui/AiStatus";
+import "./experience.css";
 
 // Router-less view switch for the shelf and reader.
 const currentBookId = () =>

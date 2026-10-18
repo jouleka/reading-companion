@@ -22,6 +22,33 @@ const graph: Graph = {
 };
 
 describe("PeopleConnections", () => {
+  test("the constellation exposes only direct known connections and lets a reader change focus", () => {
+    const onFocus = vi.fn();
+    render(<PeopleConnections graph={graph} focusId={1} onFocus={onFocus} onOpenCard={vi.fn()} onJumpToChapter={vi.fn()} />);
+    const constellation = screen.getByRole("figure", { name: "Known connections around Fyodor" });
+    expect(within(constellation).getAllByRole("button")).toHaveLength(2);
+    expect(within(constellation).queryByRole("button", { name: /Grigory|Isolated/ })).toBeNull();
+    fireEvent.click(within(constellation).getByRole("button", { name: /Explore Mitya/ }));
+    expect(onFocus).toHaveBeenCalledWith(2);
+    fireEvent.click(screen.getByRole("button", { name: "List only" }));
+    expect(screen.queryByRole("figure")).toBeNull();
+    expect(within(screen.getByRole("list", { name: /known connections for Fyodor/i })).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "List only" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("caps the visual constellation while preserving every known connection in the text view", () => {
+    const peers = Array.from({ length: 8 }, (_, index) => ({ entity_id: index + 10, canonical_name: `Person ${index + 1}`, type: "character", revealed_at: 1 }));
+    const expanded: Graph = {
+      as_of_chapter: 5,
+      characters: [graph.characters[0], ...peers],
+      relationships: peers.map((person, index) => ({ edge_id: index + 100, src_entity: 1, dst_entity: person.entity_id, rel_type: "knows", label: "knows", revealed_at: 1, invalid_at: null })),
+    };
+    render(<PeopleConnections graph={expanded} focusId={1} onFocus={vi.fn()} onOpenCard={vi.fn()} onJumpToChapter={vi.fn()} />);
+    expect(within(screen.getByRole("figure")).getAllByRole("button")).toHaveLength(6);
+    expect(screen.getByText(/Showing 6 of 8/)).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: /known connections for Fyodor/i })).getAllByRole("listitem")).toHaveLength(8);
+  });
+
   test("renders one bundled relationship row per person for the selected character", () => {
     render(
       <PeopleConnections

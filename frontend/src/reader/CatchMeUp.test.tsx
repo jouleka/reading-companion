@@ -30,6 +30,42 @@ afterEach(() => {
 });
 
 describe("CatchMeUp hero", () => {
+  test("splits a long paragraph at sentence boundaries without losing reviewed words", async () => {
+    const text = "The traveler returned to the village with a letter that she had carried across the hills for many days. Her friend opened the letter and read the message aloud to everyone who had gathered beside the quiet market square. They agreed to meet again in the morning and walked home along the path beside the river before night arrived.";
+    mocks.catchMeUp.mockResolvedValue({ ...recap, recap: text });
+    const { container } = render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    await screen.findByRole("button", { name: "Next moment" });
+    expect(Array.from(container.querySelectorAll(".recap-beat p"), el => el.textContent).join(" ")).toBe(text);
+    fireEvent.click(screen.getByRole("button", { name: "Next moment" }));
+    expect(screen.getByRole("region", { name: "Moment 2" }).textContent).toContain("They agreed to meet again");
+  });
+  test("does not display a recap beyond the requested reading boundary", async () => {
+    mocks.catchMeUp.mockResolvedValue({ ...recap, as_of_chapter: 5 });
+    render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    await screen.findByRole("button", { name: "Try recap again" });
+    expect(screen.queryByText("Fyodor married twice.")).toBeNull();
+  });
+  test("treats whitespace-only recaps as an empty reading memory", async () => {
+    mocks.catchMeUp.mockResolvedValue({ ...recap, recap: " \n  " });
+    render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    expect(await screen.findByText(/Finish a chapter/)).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Recap moments" })).toBeNull();
+  });
+  test("steps through unchanged recap moments and offers the complete recap", async () => {
+    mocks.catchMeUp.mockResolvedValue(recap);
+    render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    await screen.findByText("Fyodor married twice.");
+    expect(screen.getByRole("region", { name: "Moment 1" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Moment 2" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next moment" }));
+    expect(screen.getByRole("region", { name: "Moment 2" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Moment 1" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to reading" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Read all" }));
+    expect(screen.getByRole("region", { name: "Moment 1" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Moment 2" })).toBeTruthy();
+    expect(mocks.catchMeUp).toHaveBeenCalledTimes(1);
+  });
   test("explains a slow recap and keeps a reading exit available", async () => {
     vi.useFakeTimers();
     mocks.catchMeUp.mockReturnValue(new Promise(() => {}));
@@ -277,7 +313,7 @@ describe("CatchMeUp hero", () => {
       <CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />,
     );
     await screen.findByRole("button", { name: "Fyodor" });
-    expect(container.querySelector(".hero-recap")!.textContent).toBe(
+    expect(container.querySelector(".hero-recap p")!.textContent).toBe(
       "Fyodor raised Alyosha well.",
     );
   });

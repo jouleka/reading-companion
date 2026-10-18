@@ -83,7 +83,8 @@ describe("AskTheBook", () => {
     expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
     expect(screen.getByText(/Provider cost: \$0\.000012 USD/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /open citation 1 in chapter ii/i })).toBeTruthy();
-    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("Where did they meet?");
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByText("Where did they meet?")).toBeTruthy();
     expect(mocks.askBook).toHaveBeenCalledTimes(1);
   });
 
@@ -107,6 +108,67 @@ describe("AskTheBook", () => {
     expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
     expect(screen.getByText(/Provider cost: \$0\.000012 USD/i)).toBeTruthy();
     expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  test("keeps earlier questions and cited answers while a new question is pending, then retains the whole conversation", async () => {
+    let finish!: (value: typeof answer) => void;
+    mocks.askBook.mockResolvedValueOnce(answer)
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "What did they discuss?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    expect(screen.getByText("Where did they meet?")).toBeTruthy();
+    expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
+    expect(screen.getByText("What did they discuss?", { selector: "p" })).toBeTruthy();
+    await act(async () => { finish({ ...answer, claims: [{ text: "They discussed the missing letter.", citation_ids: [1] }] }); });
+    first.unmount();
+    render(<AskTheBook {...props} />);
+    expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
+    expect(screen.getByText(/^They discussed the missing letter\.$/)).toBeTruthy();
+    expect(screen.getAllByRole("region", { name: /^Question [12]$/ })).toHaveLength(2);
+    expect(mocks.askBook).toHaveBeenCalledTimes(2);
+  });
+
+  test("clears completed conversation history when the reading boundary changes", async () => {
+    mocks.askBook.mockResolvedValue(answer);
+    const props = { bookId: "b", bookmark: 2, sessionRef: { current: null as AskSession | null }, onNavigate: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    rerender(<AskTheBook {...props} bookmark={1} />);
+    expect(screen.queryByText("Where did they meet?")).toBeNull();
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+  });
+
+  test("shows the start of a completed or restored exchange instead of scrolling past its answer", async () => {
+    let finish!: (value: typeof answer) => void;
+    mocks.askBook.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const offsetTop = vi.spyOn(HTMLElement.prototype, "offsetTop", "get")
+      .mockImplementation(function (this: HTMLElement) { return this.hasAttribute("data-latest-exchange") ? 420 : 0; });
+    const props = { bookId: "scroll", bookmark: 2, sessionRef: { current: null as AskSession | null }, onNavigate: vi.fn(), onClose: vi.fn() };
+    try {
+      const first = render(<AskTheBook {...props} />);
+      const conversation = screen.getByRole("region", { name: "Book conversation" });
+      Object.defineProperty(conversation, "scrollHeight", { configurable: true, value: 1600 });
+      fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+      fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+      expect(conversation.scrollTop).toBe(1600);
+      await act(async () => { finish(answer); });
+      expect(conversation.scrollTop).toBe(420);
+      expect(conversation.querySelector<HTMLDetailsElement>(".ask-evidence")?.open).toBe(false);
+      first.unmount();
+      render(<AskTheBook {...props} />);
+      expect(screen.getByRole("region", { name: "Book conversation" }).scrollTop).toBe(420);
+      expect(mocks.askBook).toHaveBeenCalledTimes(1);
+    } finally {
+      offsetTop.mockRestore();
+    }
   });
 
   test("retains a question that finishes while Ask is unmounted", async () => {

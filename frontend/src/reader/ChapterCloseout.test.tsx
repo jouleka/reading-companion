@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { axeAA } from "../test-a11y";
@@ -86,6 +86,51 @@ describe("ChapterCloseout", () => {
     expect(screen.queryByText(/Berenice met/)).toBeNull();
   });
 
+  test("lets readers step through takeaways, revisit one, or read them together", async () => {
+    mocks.chapterCloseout.mockResolvedValue({ ...answer, claims: [
+      ...answer.claims,
+      { text: "The letter changes what Berenice knows.", citation_ids: [1] },
+      { text: "Aldric agrees to help.", citation_ids: [1] },
+    ] });
+    const onClose = vi.fn();
+    render(<ChapterCloseout bookId="journey" chapter={2} onNavigate={vi.fn()} onClose={onClose} />);
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    expect(screen.queryByText("The letter changes what Berenice knows.")).toBeNull();
+    expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Next takeaway" }));
+    expect(screen.getByText("The letter changes what Berenice knows.")).toBeTruthy();
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Go to takeaway 3" }));
+    expect(screen.getByText("Aldric agrees to help.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Next takeaway" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "All takeaways" }));
+    expect(screen.getAllByRole("article", { name: /takeaway \d of 3/i })).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "One at a time" }));
+    expect(screen.getByText("Aldric agrees to help.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back to reading" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  test("discards late reflections after the chapter changes", async () => {
+    let finish!: (value: typeof answer) => void;
+    mocks.chapterCloseout.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockResolvedValueOnce({ ...answer, chapter: 1, as_of_chapter: 1, claims: [{ text: "The journey begins.", citation_ids: [] }], citations: [] });
+    const props = { bookId: "late", chapter: 2, onNavigate: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<ChapterCloseout {...props} />);
+    rerender(<ChapterCloseout {...props} chapter={1} />);
+    await screen.findByText("The journey begins.");
+    await act(async () => { finish(answer); });
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+    expect(screen.getByText("The journey begins.")).toBeTruthy();
+  });
+
+  test("does not show a reflection returned beyond the completed chapter", async () => {
+    mocks.chapterCloseout.mockResolvedValue({ ...answer, as_of_chapter: 3 });
+    render(<ChapterCloseout bookId="future" chapter={2} onNavigate={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText(/could not be verified against your completed chapter/i);
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+  });
+
   test("retries a failed closeout and announces the completed result", async () => {
     mocks.chapterCloseout
       .mockRejectedValueOnce(new Error("Provider is offline."))
@@ -108,5 +153,14 @@ describe("ChapterCloseout", () => {
       "Your chapter closeout is ready.",
     );
     expect(mocks.chapterCloseout).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(["answer evidence review could not be cleared", "chapter closeout could not be cleared against the completed chapter"])("explains a failed review without exposing the internal error: %s", async (message) => {
+    mocks.chapterCloseout.mockRejectedValue(new Error(message));
+    render(<ChapterCloseout bookId="review-failure" chapter={2} onNavigate={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByText(/We couldn’t verify this reflection against the chapter/);
+    expect(screen.queryByText(message)).toBeNull();
+    expect(screen.getByRole("button", { name: "Try closeout again" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to reading" })).toBeTruthy();
   });
 });

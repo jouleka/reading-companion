@@ -32,6 +32,15 @@ const props = {
 };
 
 describe("ReaderMarks", () => {
+  test("finds saved words within the selected notebook filter", () => {
+    render(<ReaderMarks {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Notebook" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search your notebook" }), { target: { value: "missing" } });
+    expect(screen.queryByRole("button", { name: /highlight · chapter 1/i })).toBeNull();
+    expect(screen.getByText("No saved passages match your search.")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search your notebook" }), { target: { value: "DANGEROUS" } });
+    expect(screen.getByRole("button", { name: /highlight · chapter 1/i })).toBeTruthy();
+  });
   test("selection actions preserve text, save a color and note, and pass axe", async () => {
     const onHighlight = vi.fn();
     const onAnnotate = vi.fn();

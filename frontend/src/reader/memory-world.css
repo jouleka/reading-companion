@@ -1,0 +1,223 @@
+/* The memory workspace: a chapter journey and a navigable constellation of known people. */
+.codex-page.memory-world {
+  --sans: var(--font-ui);
+  --memory-night: #15172d;
+  --memory-ink: #26283e;
+  --memory-muted: #66647a;
+  --memory-lilac: #c7b9f7;
+  --memory-peach: #f4c9ab;
+  width: min(1180px, calc(100vw - 48px));
+  height: calc(100dvh - 48px);
+  max-height: none;
+  display: block;
+  overflow-y: auto;
+  padding: 22px 34px 32px;
+  color: #f2effc;
+  background: radial-gradient(ellipse at 90% 0, #343053 0, transparent 46%), var(--memory-night);
+}
+.memory-world .hero-head { border-color: #ffffff20; }
+.memory-world .hero-head, .memory-world .hero-close { color: #e9e3fb; }
+.memory-world .memory-eyebrow { display: block; color: #a99bd3; font: 600 10px/1.5 var(--sans); letter-spacing: .15em; }
+.memory-world .memory-intro { display: flex; align-items: center; justify-content: space-between; gap: 25px; padding: 17px 0; }
+.memory-world .memory-intro h2 { margin: 5px 0 6px; font: 400 clamp(27px, 2.7vw, 34px)/1.12 var(--display); letter-spacing: -.04em; color: #f7f2ff; }
+.memory-world .memory-intro p { margin: 0; color: #bcb7d1; font: 400 12px/1.5 var(--sans); }
+.memory-world .memory-frontier { display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; color: #d6c8f6; font: 400 11px/1.6 var(--sans); }
+.memory-world .memory-frontier svg { margin-top: 3px; }
+.memory-world .memory-frontier strong { display: block; font-weight: 500; color: #f0eafb; }
+.memory-world .memory-time { display: flex; align-items: center; gap: 24px; padding: 12px 18px; border: 1px solid #ffffff1c; border-radius: 18px; background: #ffffff06; }
+.memory-world .memory-time > div:first-child { flex: 0 0 32%; }
+.memory-world .memory-time strong { display: block; text-transform: capitalize; font: 400 20px/1.2 var(--display); color: #f0eafb; margin-top: 2px; }
+.memory-world .memory-time p { margin: 5px 0 0; color: #b3adc8; font: 400 11px/1.6 var(--sans); }
+.memory-world .memory-time .scrubber-wrap { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 9px; padding: 0; border: 0; }
+.memory-world .memory-time .scrubber-label { width: auto; color: #c9c0e2; font-size: 10px; }
+.memory-world .memory-time .scrubber { width: 100%; min-width: 0; background: #4b435f; accent-color: #d2bdf5; }
+.memory-world .memory-time .scrubber::-webkit-slider-thumb { background: #e4d7ff; border-radius: 50%; box-shadow: 0 0 0 5px #cab1ff15; }
+.memory-world .memory-time .scrubber::-moz-range-thumb { background: #e4d7ff; border-radius: 50%; }
+.memory-world .memory-time > button { color: #e2d5ff; border: 1px solid #ffffff25; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+.memory-world .memory-view-switch { display: flex; flex: none; gap: 10px; border: 0; padding: 14px 0; margin: 0; }
+.memory-world .memory-view-switch > button { display: flex; align-items: center; gap: 12px; width: auto; flex: 1; padding: 10px 16px; text-align: left; border: 1px solid #ffffff1b; border-radius: 14px; color: #c2bcd5; background: transparent; font: 500 13px/1.4 var(--sans); transition: background .2s ease, border-color .2s ease; }
+.memory-world .memory-view-switch > button small { display: block; color: #aaa2bf; font-size: 10px; font-weight: 400; margin-top: 3px; }
+.memory-world .memory-view-switch > button[aria-selected="true"] { background: #cbb9ff18; border-color: #cbb9ff60; color: #eee6ff; box-shadow: inset 0 0 0 1px #cbb9ff10; }
+.memory-world .memory-view-switch > button[aria-selected="true"] > svg { color: #d8b7a1; }
+.memory-world .codex-spread, .memory-world[data-compact] > .codex-spread { display: block; flex: none; min-height: 0; overflow: visible; padding: 0; margin: 0; grid-row: auto; }
+.memory-world .codex-leaf.left, .memory-world .codex-leaf.right { display: block; width: auto; overflow: visible; padding: 0; border: 0; min-height: 0; }
+.memory-world .codex-leaf[hidden] { display: none; }
+.memory-world .codex-leaf-head { margin: 0 0 14px; font: 500 11px/1.5 var(--sans); letter-spacing: .1em; color: #bdb1db; }
+.memory-world .codex-right { display: block; overflow: visible; min-height: 0; border: 0; background: transparent; }
+.memory-world .journey-toolbar { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+.memory-world .journey-toolbar p { margin: 5px 0 0; color: #bdb7cf; font: 400 11px/1.6 var(--sans); }
+.memory-world .chapter-search { display: flex; align-items: center; gap: 8px; width: 235px; flex: 0 0 auto; margin: 0; padding: 0 13px; border: 1px solid #ffffff25; border-radius: 12px; color: #c5b8df; background: #ffffff05; }
+.memory-world .chapter-search input { width: 100%; min-width: 0; padding: 12px 0; border: 0; background: transparent; color: #eee8fb; font: 400 12px/1.4 var(--sans); }
+.memory-world .chapter-search input::placeholder { color: #b6accd; }
+.memory-world .journey-rail { display: flex; list-style: none; gap: 0; overflow-x: auto; padding: 14px 2px 17px; margin: 0; scrollbar-width: thin; scrollbar-color: #68607b transparent; }
+.memory-world .journey-rail .chapter-entry { position: relative; flex: 0 0 104px; padding: 0; margin: 0; border: 0; background: transparent; }
+.memory-world .journey-rail .chapter-entry::before { content: ""; position: absolute; height: 1px; top: 21px; left: 0; right: 0; background: #5f556f; }
+.memory-world .journey-rail .chapter-entry:first-child::before { left: 50%; }
+.memory-world .journey-rail .chapter-entry:last-child::before { right: 50%; }
+.memory-world .journey-rail .chapter-head { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 6px; color: #c5bbd7; text-align: center; background: none; border: 0; }
+.memory-world .journey-stop { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid #686077; border-radius: 50%; background: #222239; color: #c7bddb; font: 400 19px/1 var(--display); transition: transform .25s, background .25s, box-shadow .25s; }
+.memory-world .journey-stop-label { font: 500 10px/1.3 var(--sans); text-transform: capitalize; margin-top: 3px; }
+.memory-world .journey-stop-detail { color: #a79ebd; font: 400 9px/1.3 var(--sans); }
+.memory-world .is-current .journey-stop { color: #312343; background: #d9c5f4; border-color: #e2d2fa; box-shadow: 0 0 0 5px #ccaff51c, 0 8px 24px #0003; }
+.memory-world .journey-rail button:hover .journey-stop { transform: translateY(-3px); border-color: #e9d9fa; }
+.memory-world .journey-spotlight, .memory-world .people-studio, .memory-world .memory-correction-history {
+  --surface: #f9f7fd; --accent-wash: #e8def7; --madder: #6450a5; --accent-hover: #4d3e81; --wash: #eeebf5; --ink: #26283e; --ink-soft: #5e5c73; --ink-muted: #6c697d; --paper: #f9f7fd; --paper-deep: #eeebf6; --canvas: #eeebf5; --hairline: #ddd8e9; --accent: #6450a5;
+  color: var(--ink); background: var(--paper); border-radius: 22px;
+  --on-accent: #fff; --selection: #dcd0ef; --hairline-strong: #bfb1d1;
+  --danger: #963d45; --danger-wash: #f9e8e9;
+  color-scheme: light;
+}
+.memory-world .journey-spotlight { padding: 32px; animation: memory-enter .35s ease both; overflow: hidden; }
+.memory-world .journey-spotlight .memory-eyebrow { color: #75618d; }
+.memory-world .journey-chapter-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.memory-world .journey-chapter-heading h3 { margin: 7px 0 0; color: #28273e; font: 400 clamp(26px, 3vw, 38px)/1.2 var(--display); letter-spacing: -.03em; }
+.memory-world .journey-chapter-number { color: #dcd4e7; font: 400 65px/1 var(--display); letter-spacing: -.05em; }
+.memory-world .chapter-summary { max-width: 800px; margin: 22px 0 28px; padding: 0; color: #454257; font: 400 21px/1.7 var(--serif); }
+.memory-world .journey-spotlight .name-chip { color: #6651a1; background: #e8def76b; border-radius: 4px; text-decoration: none; border-bottom: 1px solid #bdacd7; }
+.memory-world .journey-details { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(190px, 1fr); gap: 26px; }
+.memory-world .journey-details h4 { display: flex; gap: 7px; align-items: center; margin: 0 0 16px; color: #5e5275; font: 600 11px/1.5 var(--sans); letter-spacing: .04em; }
+.memory-world .journey-moments:only-child { grid-column: 1 / -1; }
+.memory-world .chapter-events { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.memory-world .chapter-events li { display: flex; gap: 14px; padding: 14px 16px; border: 1px solid #e5deec; background: #f0ecf6; border-radius: 12px; }
+.memory-world .chapter-events li p { margin: 0; color: #484459; font: 400 15px/1.65 var(--serif); }
+.memory-world .journey-event-number { color: #756187; font: 500 10px/1.8 var(--sans); padding-top: 3px; }
+.memory-world .journey-arrivals { padding: 18px; background: #f4e8df; border-radius: 15px; align-self: start; }
+.memory-world .journey-arrivals h4 { margin-bottom: 4px; color: #805b49; }
+.memory-world .journey-arrivals > p { margin: 0 0 15px; font: 400 11px/1.6 var(--sans); color: #7a5b4c; }
+.memory-world .chapter-new { display: grid; gap: 8px; margin: 0; }
+.memory-world .journey-person.name-chip { display: flex; align-items: center; gap: 8px; padding: 8px; width: 100%; border: 1px solid #d8bca84d; border-radius: 9px; background: #fff8f0aa; color: #6f4f3f; font: 500 11px/1.4 var(--sans); text-align: left; }
+.memory-world .journey-person > span { display: grid; place-items: center; flex: 0 0 28px; height: 28px; background: #e7cbb7; border-radius: 50%; font: 400 13px/1 var(--display); }
+.memory-world .journey-person > svg { margin-left: auto; flex-shrink: 0; }
+.memory-world .journey-step-controls { display: flex; gap: 16px; justify-content: space-between; align-items: center; padding-top: 23px; margin-top: 27px; border-top: 1px solid #dfd7e8; font: 400 10px/1.5 var(--sans); color: #7b7289; }
+.memory-world .journey-step-controls button { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 5px 0; color: #655081; background: transparent; border: 0; font: 500 11px/1.4 var(--sans); }
+.memory-world .journey-step-controls button:disabled { opacity: .35; cursor: default; }
+.memory-world .journey-choose, .memory-world .chapter-search-empty { padding: 30px 0; color: #c5bad9; }
+.memory-world .people-studio { display: grid; grid-template-columns: 225px minmax(0, 1fr); overflow: hidden; }
+.memory-world .people-studio .people-index { padding: 24px 12px; background: #eeebf5; border-right: 1px solid #ded7e8; border-bottom: 0; min-width: 0; }
+.memory-world .people-studio .people-index header { padding: 0 8px 18px; }
+.memory-world .people-studio .people-index h2 { font-size: 25px; color: #38314c; }
+.memory-world .people-studio .people-index-kicker { color: #7b6599; }
+.memory-world .people-studio .people-index ul { display: block; max-height: 650px; overflow-y: auto; padding: 3px; margin: -3px; }
+.memory-world .people-studio .people-index li { min-width: 0; }
+.memory-world .people-studio .people-index li > button { width: 100%; display: flex; gap: 10px; padding: 12px 9px; font-size: 12px; border-radius: 12px; }
+.memory-world .people-studio .people-index li > button[aria-current] { background: #fcf9ff; border-color: #bfaed5; box-shadow: 0 4px 14px #6650800d; }
+.memory-world .people-studio .people-index li > button small { font-size: 9px; }
+.memory-world .people-studio .person-monogram { width: 35px; height: 38px; border-radius: 11px; background: #e0d4ef; color: #665080; font-size: 15px; flex: 0 0 35px; }
+.memory-world .people-studio .person-entry, .memory-world .people-studio .relationship-register { min-width: 0; padding: 28px; border: 0; }
+.memory-world .people-studio .person-entry-head h2 { font-size: 35px; color: #302c45; }
+.memory-world .people-studio .person-entry-head { border-bottom: 1px solid #e1dbea; padding-bottom: 20px; }
+.memory-world .people-studio .person-monogram-large { width: 56px; height: 62px; flex-basis: 56px; font-size: 25px; background: #e9d4c4; color: #87694e; }
+.memory-world .people-studio .person-entry-kicker { color: #79628e; }
+.memory-world .people-studio .person-entry-actions { display: flex; flex-wrap: wrap; gap: 7px 14px; }
+.memory-world .people-studio .person-entry-actions > button { color: #70598d; font-size: 10px; min-height: 30px; }
+.memory-world .people-studio .constellation-section { margin: 24px 0; }
+.memory-world .constellation-heading { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.memory-world .constellation-heading .memory-eyebrow { font-size: 9px; color: #76618b; }
+.memory-world .constellation-heading h3 { margin: 5px 0 0; font: 400 23px/1.2 var(--display); color: #40364f; }
+.memory-world .constellation-view { display: flex; gap: 3px; padding: 4px; border: 1px solid #e1d9ed; background: #eeebf5; border-radius: 9px; flex-shrink: 0; }
+.memory-world .constellation-view button { padding: 6px 8px; min-height: 30px; border: 0; border-radius: 6px; background: transparent; color: #716581; font: 500 9px/1.4 var(--sans); }
+.memory-world .constellation-view button[aria-pressed="true"] { background: #fff; color: #54416f; box-shadow: 0 2px 5px #00000008; }
+.memory-world .people-constellation { --accent: #d7c4f2; --madder: #d7c4f2; color-scheme: dark; margin: 18px 0 0; overflow: hidden; border-radius: 18px; background: radial-gradient(ellipse at 40% 55%, #47405f 0, #25243d 65%); border: 1px solid #38334d; animation: memory-enter .4s ease both; }
+.memory-world .constellation-canvas { height: 360px; position: relative; }
+.memory-world .constellation-lines { position: absolute; width: 100%; height: 100%; inset: 0; overflow: visible; }
+.memory-world .constellation-lines line { stroke: #a696bf; stroke-width: .18; opacity: .55; stroke-dasharray: 1 1; }
+.memory-world .constellation-orbit { fill: none; stroke: #9d8eb0; stroke-width: .12; stroke-dasharray: .5 2; opacity: .25; }
+.memory-world .constellation-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 140px; text-align: center; color: #f3e9fa; }
+.memory-world .constellation-center > span { display: grid; place-items: center; width: 68px; height: 68px; margin: 0 auto 8px; background: #e7c4a7; border: 5px solid #3e344f; border-radius: 50%; box-shadow: 0 0 0 1px #bb9cc259, 0 0 0 10px #c2a0ca0c; font: 400 26px/1 var(--display); color: #5d4149; }
+.memory-world .constellation-center strong { display: block; font: 500 11px/1.5 var(--sans); }
+.memory-world .constellation-center small { display: block; color: #b0a3c6; font: 400 9px/1.5 var(--sans); }
+.memory-world .constellation-person { position: absolute; transform: translate(-50%, -50%); width: 116px; padding: 3px; border: 0; background: transparent; color: #e8ddf5; text-align: center; transition: filter .2s; }
+.memory-world .constellation-person > span { display: grid; place-items: center; width: 43px; height: 43px; margin: 0 auto 6px; border-radius: 50%; border: 3px solid #322c44; box-shadow: 0 0 0 1px #c1a6df; background: #b9a6d8; color: #4d3e62; font: 400 18px/1 var(--display); transition: transform .25s, box-shadow .25s; }
+.memory-world .constellation-person[data-tone="1"] > span { background: #becac7; color: #485853; box-shadow: 0 0 0 1px #b6cac5; }
+.memory-world .constellation-person[data-tone="2"] > span { background: #e0b6a4; color: #6b4b40; box-shadow: 0 0 0 1px #d4a997; }
+.memory-world .constellation-person > strong { display: block; max-width: 116px; font: 500 10px/1.35 var(--sans); overflow-wrap: anywhere; text-shadow: 0 2px 8px #171020; }
+.memory-world .constellation-person:hover > span, .memory-world .constellation-person:focus-visible > span { transform: scale(1.12); box-shadow: 0 0 0 4px #d8c0ef30, 0 0 20px #d8c0ef35; }
+.memory-world .people-constellation figcaption { padding: 11px 17px 14px; color: #bcb0cd; text-align: center; font: 400 10px/1.6 var(--sans); }
+.memory-world .people-studio .connection-ledger > ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.memory-world .people-studio .connection-ledger > ul > li { display: block; padding: 16px; background: #efebf5; border: 1px solid #e0d8e9; border-radius: 13px; }
+.memory-world .people-studio .connection-person { color: #675082; font-size: 12px; }
+.memory-world .people-studio .connection-labels { margin-top: 8px; }
+.memory-world .people-studio .connection-statement { font-size: 11px; line-height: 1.7; color: #6b5e79; }
+.memory-world .people-studio .connection-proposition em { color: #4d405b; }
+.memory-world .people-studio .connection-statement > button { font-size: 9px; color: #725691; }
+.memory-world .people-studio .thread-reader { background: #eeebf5; border-color: #ded4e9; }
+.memory-world .memory-correction-history { margin-top: 16px; padding: 18px 22px; background: #efebf5; font-size: 12px; }
+.memory-world .memory-correction-history h3 { margin: 0; }
+.memory-world .memory-correction-history h3 button { color: #76618e; min-height: 28px; font: 500 11px/1.5 var(--sans); }
+.memory-world .memory-correction-history ol { padding-left: 20px; }
+.memory-world .memory-correction-history .quiet { color: #6e607c; }
+.memory-world .codex-state, .memory-world .hero-quiet { padding: 28px; color: #d1c5e2; }
+.memory-world .codex-state .quiet, .memory-world .codex-state button { color: #d1c5e2; }
+@keyframes memory-enter { from { opacity: .3; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 900px) {
+  .codex-page.memory-world { width: calc(100vw - 24px); height: calc(100dvh - 24px); padding: 22px; }
+  .memory-world .memory-intro { padding: 17px 0; }
+  .memory-world .memory-frontier { display: none; }
+  .memory-world .people-studio { grid-template-columns: 185px minmax(0, 1fr); }
+  .memory-world .people-studio .person-entry, .memory-world .people-studio .relationship-register { padding: 22px; }
+  .memory-world .constellation-heading { align-items: flex-start; flex-direction: column; }
+  .memory-world .constellation-canvas { height: 330px; }
+  .memory-world .constellation-person { width: 95px; }
+  .memory-world .constellation-person > strong { font-size: 9px; }
+  .memory-world .people-studio .connection-ledger > ul { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 650px) {
+  .codex-page.memory-world { width: 100vw; height: 100dvh; border-radius: 0; padding: 18px 16px 30px; }
+  .memory-world .memory-intro h2 { font-size: 32px; }
+  .memory-world .memory-time { flex-wrap: wrap; gap: 14px; padding: 16px; }
+  .memory-world .memory-time > div:first-child { flex: 1 1 100%; }
+  .memory-world .memory-time .scrubber-wrap { flex: 1 1 50%; }
+  .memory-world .memory-time p { font-size: 10px; }
+  .memory-world .memory-view-switch { gap: 7px; padding: 13px 0; }
+  .memory-world .memory-view-switch > button { padding: 13px 11px; font-size: 11px; gap: 8px; }
+  .memory-world .memory-view-switch > button small { font-size: 9px; }
+  .memory-world .memory-view-switch > button > svg { display: none; }
+  .memory-world .journey-toolbar { display: block; }
+  .memory-world .chapter-search { width: 100%; margin-top: 15px; box-sizing: border-box; }
+  .memory-world .journey-rail .chapter-entry { flex-basis: 87px; }
+  .memory-world .journey-spotlight { padding: 22px 19px; border-radius: 17px; }
+  .memory-world .journey-chapter-heading h3 { font-size: 28px; }
+  .memory-world .journey-chapter-number { font-size: 46px; }
+  .memory-world .chapter-summary { font-size: 19px; line-height: 1.65; }
+  .memory-world .journey-details { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .memory-world .journey-step-controls { gap: 8px; }
+  .memory-world .journey-step-controls > span { display: none; }
+  .memory-world .people-studio { grid-template-columns: minmax(0, 1fr); }
+  .memory-world .people-studio .people-index { padding: 18px; border-right: 0; border-bottom: 1px solid #dfd8e9; }
+  .memory-world .people-studio .people-index header { padding: 0 0 14px; }
+  .memory-world .people-studio .people-index ul { display: flex; gap: 6px; max-height: none; overflow-x: auto; }
+  .memory-world .people-studio .people-index li { flex: 0 0 165px; }
+  .memory-world .people-studio .people-index li + li { margin: 0; }
+  .memory-world .people-studio .person-entry, .memory-world .people-studio .relationship-register { padding: 21px 17px; }
+  .memory-world .people-studio .person-entry-head h2 { font-size: 31px; }
+  .memory-world .constellation-canvas { height: 320px; }
+  .memory-world .constellation-person { width: 88px; }
+  .memory-world .constellation-person > strong { max-width: 88px; }
+  .memory-world .constellation-person > span { width: 37px; height: 37px; font-size: 16px; }
+  .memory-world .constellation-center { width: 110px; }
+  .memory-world .constellation-center > span { width: 58px; height: 58px; font-size: 23px; }
+  .memory-world .constellation-center strong { font-size: 10px; }
+  .memory-world .constellation-center small { font-size: 8px; }
+  .memory-world .people-studio .relationship-register-tools { grid-template-columns: 1fr 1fr; }
+  .memory-world .people-studio .relationship-register > ul > li { grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 14px; border-radius: 12px; background: #eeebf5; margin-top: 10px; }
+  .memory-world .people-studio .relationship-register > ul > li > button:last-child { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-world *, .memory-world *::before, .memory-world *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+.memory-world .journey-spotlight.is-jump-target { box-shadow: 0 0 0 3px #cab8ec66; }
+
+/* Keep the book content ahead of the workspace chrome, including when shared shell CSS loads later. */
+.codex-page.memory-world > .companion-workspace-nav { margin: 12px 0 0; }
+.codex-page.memory-world .companion-workspace-nav > button[aria-current] { background: #cbbfff; color: #24213a; box-shadow: 0 3px 9px #0002; }
+.codex-page.memory-world .memory-view-switch > button[aria-selected="true"] { background: #cbbfff; border-color: #cbbfff; color: #24213a; }
+.codex-page.memory-world .memory-view-switch > button[aria-selected="true"] small { color: #5b5079; }
+.codex-page.memory-world .memory-view-switch > button[aria-selected="true"] > svg { color: #635089; }
+.memory-world .people-studio .person-entry-actions > button { background: #eae3f2; color: #654b82; border: 1px solid #d9cde6; border-radius: 8px; padding: 6px 9px; text-decoration: none; }
+.memory-world .people-studio .person-entry-actions > button:hover { background: #e0d5ec; color: #49385e; }
+@media (min-width: 901px) {
+  .codex-page.memory-world .memory-time > div:first-child { display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 9px; flex-basis: 34%; }
+  .codex-page.memory-world .memory-time > div:first-child > strong { margin: 0; }
+  .codex-page.memory-world .memory-time > div:first-child > p { grid-column: 1 / -1; font-size: 10px; margin-top: 3px; }
+}

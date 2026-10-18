@@ -15,6 +15,7 @@ never carry the rejected recap or a future name). Cached in-process by the full 
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
 from copy import copy, deepcopy
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import logging
 
@@ -47,7 +48,9 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    evidence_review_batches,
     merge_evidence_audits,
+    validate_evidence_audit,
 )
 from app.ask_selection import (
     SOURCE_SELECTION_SYSTEM,
@@ -423,8 +426,10 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
     draft = AskDraft.model_validate(value)
     if draft.insufficient_evidence or client.provider == "stub":
         return complete_ask_citations(draft, sources, known_names=known_names)
-    review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources, question=question)
+    draftdict = draft.model_dump(mode="json")
+    evidence_prompt(draftdict, sources, question=question)  # Validate before any paid review.
     approved = None
+    remaining = list(range(1, len(draft.claims) + 1))
     jev = getattr(client, "jev", None)
     if jev is not None and settings.jev_evidence_enabled:
         def run(state, questions):
@@ -436,36 +441,68 @@ def _complete_citation_evidence(value, sources, *, catalog, settings, client, bo
         try:
             audit_fn = (jev_tasks.evidence_partial if settings.jev_partial_evidence_enabled
                         else jev_tasks.evidence)
-            audit = audit_fn(draft.model_dump(mode="json"), sources,
+            audit = audit_fn(draftdict, sources,
                              question=question, run=run, settings=settings)
             approved_ids = [c["claim_id"] for c in audit["claim_audits"]]
             remaining = [i for i in range(1, len(draft.claims)+1) if i not in approved_ids]
             if not remaining:
-                reviewed = complete_evidence_citations(draft.model_dump(mode="json"), sources, audit)
+                reviewed = complete_evidence_citations(draftdict, sources, audit)
                 return complete_ask_citations(AskDraft.model_validate(reviewed), sources,
                                               known_names=known_names, include_context=False)
             if approved_ids:
                 approved = audit
-                review_prompt = evidence_prompt(draft.model_dump(mode="json"), sources,
-                                                question=question, claim_ids=remaining)
         except JevUnavailable:
             pass  # Existing complete positive-evidence audit remains the bounded fallback.
-    try:
-        audited = budgeted_completion(
+
+    batches = evidence_review_batches(
+        draftdict, sources, claim_ids=remaining,
+        max_output_tokens=getattr(settings, "cost_max_output_tokens_per_call", 4096),
+    )
+
+    def audit_batch(claim_ids):
+        return budgeted_completion(
             catalog, settings, client, book_id, phase="citation-review", system=ASK_EVIDENCE_SYSTEM,
-            user=review_prompt, tier="cheap", schema=AskEvidenceReview,
+            user=evidence_prompt(draftdict, sources, question=question, claim_ids=claim_ids),
+            tier="cheap", schema=AskEvidenceReview,
         )
-    except (CostCeilingExceeded, ProviderUnavailable):
-        raise
-    except Exception:
-        # SDK parse/refusal/truncation failures are unavailable reviews, not draft criticism.
-        # The budget layer already retains their conservative failed-call charge.
-        raise AskEvidenceError(repairable=False) from None
-    remember(audited)
-    audit_value = (merge_evidence_audits(draft.model_dump(mode="json"), sources, approved, audited.value)
-                   if approved is not None else audited.value)
+
+    audits = []
+    # Two-call waves bound paid concurrency without queuing more work after a failed review.
+    # Every started call is joined and accounted for before raising or releasing the route lease.
+    with ThreadPoolExecutor(max_workers=min(2, len(batches)), thread_name_prefix="answer-proof") as pool:
+        for start in range(0, len(batches), 2):
+            requested = batches[start:start + 2]
+            futures = [pool.submit(audit_batch, claim_ids) for claim_ids in requested]
+            errors, completed = [], []
+            for claim_ids, future in zip(requested, futures, strict=True):
+                try:
+                    audited = future.result()
+                except (CostCeilingExceeded, ProviderUnavailable) as exc:
+                    errors.append(exc)
+                except Exception:
+                    # SDK refusal/parse/truncation is unavailable review, never draft criticism.
+                    # The budget layer retains its conservative failed-call charge.
+                    errors.append(AskEvidenceError(repairable=False))
+                else:
+                    remember(audited)
+                    completed.append((claim_ids, audited.value))
+            for claim_ids, audit in completed:
+                try:
+                    validate_evidence_audit(draftdict, sources, audit, claim_ids=claim_ids)
+                except AskEvidenceError as exc:
+                    errors.append(exc)
+            if errors:
+                # A malformed sibling must not be disguised as repairable criticism from a
+                # different valid audit. No partial result or new wave can escape this failure.
+                raise next((exc for exc in errors if not getattr(exc, "repairable", False)),
+                           errors[0]) from None
+            for _claim_ids, audit in completed:
+                audits.extend(audit["claim_audits"])
+    audit_value = {"claim_audits": audits}
+    if approved is not None:
+        audit_value = merge_evidence_audits(draftdict, sources, approved, audit_value)
     reviewed = AskDraft.model_validate(complete_evidence_citations(
-        draft.model_dump(mode="json"), sources, audit_value,
+        draftdict, sources, audit_value,
     ))
     # A positive reviewer can mistake an inline chapter label for a speaker attribution.
     # Add only missing named-body context from this same selected pool, within the existing

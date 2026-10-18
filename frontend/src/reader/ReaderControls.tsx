@@ -175,6 +175,16 @@ export function ReaderControls({
             </div>
             <span className="appearance-preview-caption">Make the page feel like yours.</span>
           </div>
+          <fieldset className="reading-moods">
+            <legend>Set the mood</legend>
+            <div>
+              {([
+                { name: "Daylight", detail: "Clear & spacious", theme: "paper", typeface: "serif", line_height: "comfortable" },
+                { name: "Candlelight", detail: "Warm & unhurried", theme: "sepia", typeface: "serif", line_height: "relaxed" },
+                { name: "After hours", detail: "A softer night", theme: "night", typeface: "sans", line_height: "relaxed" },
+              ] as const).map(mood => <button key={mood.name} type="button" data-mood={mood.theme} aria-pressed={preferences.theme === mood.theme && preferences.typeface === mood.typeface && preferences.line_height === mood.line_height} onClick={() => onChange({ ...preferences, theme: mood.theme, typeface: mood.typeface, line_height: mood.line_height })}><span aria-hidden="true">Aa</span><strong>{mood.name}</strong><small>{mood.detail}</small></button>)}
+            </div>
+          </fieldset>
           <div className="appearance-groups appearance-essentials">
             {renderGroup(GROUPS.find((group) => group.key === "theme")!)}
             {renderGroup(GROUPS.find((group) => group.key === "font_size")!)}

@@ -44,9 +44,13 @@ export function ReaderMarks({
   const [label, setLabel] = useState("");
   const [selectionTool, setSelectionTool] = useState<"highlight" | "note" | "understand" | null>(null);
   const [filter, setFilter] = useState<"all" | ReaderMark["kind"]>("all");
+  const [query, setQuery] = useState("");
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const busy = /^(saving|deleting)\b/.test(status);
-  const visibleMarks = marks.filter((mark) => filter === "all" || mark.kind === filter);
+  const visibleMarks = marks.filter((mark) =>
+    (filter === "all" || mark.kind === filter) &&
+    `${mark.selected_text ?? ""} ${mark.body ?? ""} ${mark.label ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  ).sort((a, b) => a.anchor.atom - b.anchor.atom);
 
   // A failed save keeps its passage and draft. Only a new passage or a cleared
   // selection starts a new draft; opening another tool does not discard it.
@@ -210,6 +214,10 @@ export function ReaderMarks({
               <Icon name="close" />
             </Button>
           </header>
+          <label className="notebook-search">
+            <Icon name="search" size={17} />
+            <input type="search" aria-label="Search your notebook" placeholder="Find a thought or a passage…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
           <div className="notebook-filters" role="group" aria-label="Filter notebook">
             {([
               ["all", "All"], ["highlight", "Highlights"],
@@ -247,8 +255,9 @@ export function ReaderMarks({
           </p>
           {visibleMarks.length ? (
             <ol className="marks-list">
-              {visibleMarks.map((mark) => (
+              {visibleMarks.map((mark, index) => (
                 <li key={`${mark.kind}-${mark.id}`} data-mark-kind={mark.kind} data-mark-color={mark.kind === "highlight" ? mark.color : undefined}>
+                  {(index === 0 || visibleMarks[index - 1].anchor.atom !== mark.anchor.atom) && <h3 className="notebook-chapter">Chapter {mark.anchor.atom}<span>{visibleMarks.filter(item => item.anchor.atom === mark.anchor.atom).length} saved</span></h3>}
                   <button
                     type="button"
                     className="plain mark-location"
@@ -285,7 +294,7 @@ export function ReaderMarks({
             </ol>
           ) : (
             <p className="quiet">
-              {marks.length ? "Nothing saved in this view yet." : "Your favorite words belong here. Highlight a passage, add a thought, or bookmark a page as you read."}
+              {query.trim() ? "No saved passages match your search." : marks.length ? "Nothing saved in this view yet." : "Your favorite words belong here. Highlight a passage, add a thought, or bookmark a page as you read."}
             </p>
           )}
           <a

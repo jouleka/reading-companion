@@ -77,7 +77,8 @@ class AskClaimEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     claim_id: StrictInt = Field(ge=1, description=(
-        "Exact supplied claim_id. Return EVERY claim once, in its original order."
+        "Exact supplied claim_id from the requested claims list. Return EVERY requested claim "
+        "once in its supplied order. Never renumber IDs or audit additional answer_context claims."
     ))
     units: list[AskEvidenceUnit] = Field(min_length=1, max_length=512)
 
@@ -86,7 +87,8 @@ class AskEvidenceReview(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     claim_audits: list[AskClaimEvidence] = Field(max_length=6, description=(
-        "Mandatory ordered positive-evidence audit of all original claims and all their units. "
+        "Mandatory ordered positive-evidence audit of ONLY the requested claims list and all "
+        "their original units. answer_context is context, not an additional review request. "
         "No implicit approval, omissions, rewritten claims, or two-field verdict substitutes."
     ))
 
@@ -125,7 +127,9 @@ ASK_EVIDENCE_SYSTEM = (
     "Check contextual bindings implied by answering it too, including whose property, statement or "
     "event the answer describes, even when the claim abbreviates the question. "
     "Do not use outside knowledge, remembered plot or an extracted roster. "
-    "Audit every immutable claim unit in order with the WHOLE ORIGINAL CLAIM still visible. "
+    "Audit ONLY the requested claims list, retaining its exact claim_id values and order. "
+    "answer_context may show additional claims for meaning; do not return audits for those claims. "
+    "Audit every immutable unit of each requested claim with the WHOLE ORIGINAL CLAIM still visible. "
     "The unit boundaries are mechanical display slices, not proof that meaning is atomic. "
     "Every asserted part needs support: actions, common objects and containers, who spoke or acted, "
     "formal roles, pronoun referents, identity links, quantities, time, location, cause, negation "
@@ -256,18 +260,55 @@ def _request(draft, sources):
             "narrative_continuations": narrative_continuations(sources)}, available
 
 
+def _requested_claims(payload, claim_ids):
+    if claim_ids is None:
+        return payload["claims"]
+    available_ids = [claim["claim_id"] for claim in payload["claims"]]
+    if (not isinstance(claim_ids, list) or not claim_ids
+            or any(type(i) is not int for i in claim_ids)
+            or claim_ids != [i for i in available_ids if i in claim_ids]):
+        raise _invalid("Selective evidence review claim IDs are invalid.")
+    return [claim for claim in payload["claims"] if claim["claim_id"] in claim_ids]
+
+
+def evidence_review_batches(draftdict, sources, *, max_output_tokens, claim_ids=None) -> list[list[int]]:
+    """Bound output work without splitting claims, renumbering IDs, or raising provider limits.
+
+    Leave 1024 tokens for reasoning/structure and allow 384 per contextual unit, up to eight
+    units and two claims. This is a conservative work bound, not a token-fit guarantee. A
+    dense indivisible claim needs a smaller draft, never a silently partial evidence audit.
+    """
+    payload, _available = _request(draftdict, sources)
+    claims = _requested_claims(payload, claim_ids)
+    if type(max_output_tokens) is not int or max_output_tokens < 1:
+        raise _invalid("Evidence review output allowance is invalid.")
+    unit_limit = max(1, min(8, (max_output_tokens - 1024) // 384))
+    batches, pending, units = [], [], 0
+    for claim in claims:
+        count = len(claim["units"])
+        if count > unit_limit:
+            raise AskEvidenceError(repairable=True, review_feedback=(
+                f'Claim {claim["claim_id"]} is too complex for the bounded evidence review; '
+                'write shorter, narrower claims without dropping needed evidence.',
+            ))
+        if pending and (len(pending) == 2 or units + count > unit_limit):
+            batches.append(pending)
+            pending, units = [], 0
+        pending.append(claim["claim_id"])
+        units += count
+    if pending:
+        batches.append(pending)
+    return batches
+
+
 def evidence_prompt(draftdict, sources, *, question=None, claim_ids=None) -> str:
     payload, _available = _request(draftdict, sources)
+    selected = _requested_claims(payload, claim_ids)
     if claim_ids is not None:
-        available_ids = [claim["claim_id"] for claim in payload["claims"]]
-        if (not isinstance(claim_ids, list) or not claim_ids
-                or any(type(i) is not int for i in claim_ids)
-                or claim_ids != [i for i in available_ids if i in claim_ids]):
-            raise _invalid("Selective evidence review claim IDs are invalid.")
         # Preserve complete answer context and original IDs. Context is never source evidence,
         # and the reviewer receives no other model's verdicts to bias its own assessment.
         payload["answer_context"] = payload["claims"]
-        payload["claims"] = [c for c in payload["claims"] if c["claim_id"] in claim_ids]
+        payload["claims"] = selected
         payload["review_scope"] = (
             "Audit ONLY claims, keeping their supplied claim_id and unit_id values. "
             "answer_context shows the complete original answer solely to resolve meaning; "
@@ -319,16 +360,30 @@ def complete_evidence_citations(draftdict, sources, reviewdict) -> dict:
     Neither a positive audit nor source-reference integrity establishes semantic correctness.
     """
     payload, available = _request(draftdict, sources)
+    citations = _review_citations(payload["claims"], available, reviewdict)
+    return {"insufficient_evidence": draftdict["insufficient_evidence"], "claims": [
+        {"text": claim["text"], "citation_ids": ids}
+        for claim, ids in zip(draftdict["claims"], citations, strict=True)
+    ]}
+
+
+def validate_evidence_audit(draftdict, sources, reviewdict, *, claim_ids) -> None:
+    """Check exact requested coverage and references without producing a partial answer."""
+    payload, available = _request(draftdict, sources)
+    _review_citations(_requested_claims(payload, claim_ids), available, reviewdict)
+
+
+def _review_citations(claims, available, reviewdict):
     try:
         checked = AskEvidenceReview.model_validate(reviewdict, strict=True)
     except (ValidationError, TypeError, ValueError):
         raise _invalid("Evidence review structure is invalid.") from None
     if [claim.claim_id for claim in checked.claim_audits] != [
-        claim["claim_id"] for claim in payload["claims"]
+        claim["claim_id"] for claim in claims
     ]:
         raise _invalid("Evidence review does not cover every original claim in order.")
     issues, citations = [], []
-    for claim, audit in zip(payload["claims"], checked.claim_audits, strict=True):
+    for claim, audit in zip(claims, checked.claim_audits, strict=True):
         if [unit.unit_id for unit in audit.units] != [unit["unit_id"] for unit in claim["units"]]:
             raise _invalid("Evidence review does not cover every original claim unit in order.")
         proof_ids = []
@@ -353,7 +408,4 @@ def complete_evidence_citations(draftdict, sources, reviewdict) -> dict:
         citations.append(proof_ids)
     if issues:
         raise AskEvidenceError(review_feedback=issues, repairable=True)
-    return {"insufficient_evidence": draftdict["insufficient_evidence"], "claims": [
-        {"text": claim["text"], "citation_ids": ids}
-        for claim, ids in zip(draftdict["claims"], citations, strict=True)
-    ]}
+    return citations
