@@ -293,8 +293,9 @@ def test_broader_preparation_never_offers_failed_or_stale_questions(env, monkeyp
     except Exception:
         assert failure in {"review_invalid", "reset", "correction", "delete"}
     assert app.state.reader_client.answers.suggestions(scope.answer_key) == []
-    # Follow-ups never run when their parent answer did not clear.
-    assert "Where did Berenice meet Aldric?" not in calls
+    # A safe, self-contained follow-up gets its own answer gates after a parent answer failure.
+    # Rejected premises and stale reading/source scopes still suppress it entirely.
+    assert ("Where did Berenice meet Aldric?" in calls) == (failure in {"answer_fails", "answer_refuses"})
 
 
 def test_eight_safe_answers_use_normal_route_and_only_reviewed_questions_are_offered(

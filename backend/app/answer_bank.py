@@ -13,7 +13,7 @@ from app.eval.spoiler_gate import validity_snapshot
 from app.preparation_plan import valid_saved_plan
 
 
-ANSWER_VERSION = "reviewed-answer-v5-completeness-kinship"
+ANSWER_VERSION = "reviewed-answer-v8-cited-question-bindings"
 
 
 class AnswerBusy(RuntimeError):
@@ -31,6 +31,7 @@ def answer_scope(book_id, eff, state, manifest, *, catalog, store, settings, cli
                 settings.jev_min_probability, settings.jev_min_confidence,
                 settings.reader_reuse_min_probability, settings.reader_reuse_min_confidence,
                 ANSWER_VERSION]
+    identity.append(settings.reader_reuse_fast_review)
     return (book_id, catalog.get_book(book_id)["incarnation"],
             hashlib.sha256(json.dumps(identity).encode()).hexdigest())
 
@@ -153,7 +154,10 @@ class AnswerBank:
                 if plans:
                     plans.pop(0)
                 else:
-                    rows.pop(0)
+                    # Repeated paraphrases must not evict the broader original episode first.
+                    index = next((i for i, (key, row) in enumerate(rows)
+                                  if key[3] != row["reviewed_question"]), 0)
+                    rows.pop(index)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             temporary.write_bytes(raw)
             os.replace(temporary, self.path)
@@ -185,7 +189,9 @@ class AnswerBank:
                                   and prior.get("reviewed_question") == key[3])}
             self.rows.move_to_end(key)
             while len(self.rows) > self.limit:
-                self.rows.popitem(last=False)
+                victim = next((k for k, r in self.rows.items() if k[3] != r["reviewed_question"]),
+                              next(iter(self.rows)))
+                self.rows.pop(victim)
             self._save()
 
     def candidates(self, scope, question, *, limit=4):
@@ -196,7 +202,11 @@ class AnswerBank:
             unique = {}
             for key, row in reversed(self.rows.items()):
                 if key[:3] == scope:
-                    unique.setdefault(row["reviewed_question"], row)
+                    # A reuse may return a smaller, independently reviewed claim subset. Prefer
+                    # the original complete answer when it is still present; never lose its facts
+                    # merely because a narrower paraphrase was requested more recently.
+                    if key[3] == row["reviewed_question"] or row["reviewed_question"] not in unique:
+                        unique[row["reviewed_question"]] = row
             ranked = sorted(unique.values(), key=lambda r: len(
                 words & content_words(r["reviewed_question"] + " " +
                     " ".join(c["text"] for c in r["payload"]["claims"]))), reverse=True)

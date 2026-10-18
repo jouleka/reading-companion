@@ -48,8 +48,11 @@ def validity_snapshot(db, bm):
     parts = []
     live_events = set()
     live_entities = set()
+    # Production projects only these fingerprints. The reference/spike audit API remains
+    # compatible, and the membership/filter/hash algorithm below is unchanged.
+    audit_rows = getattr(db, "_audit_cache_rows", db._audit_all)
     for table, idcol in _KEYED:
-        for r in db._audit_all(table):
+        for r in audit_rows(table):
             k = r.keys()
             if "revealed_at" in k and r["revealed_at"] > bm:
                 continue
@@ -69,7 +72,7 @@ def validity_snapshot(db, bm):
             parts.append(f"{table}:{r[idcol]}:{inv}:{fp}:{extra}")
     # Participant links gained their own reveal frontier in LIT-10: a correction can attach a new
     # identity to an old event without making that identity/link visible at earlier bookmarks.
-    for r in db._audit_all("event_participants"):
+    for r in audit_rows("event_participants"):
         if (r["event_id"] in live_events and r["entity_id"] in live_entities
                 and r["revealed_at"] <= bm):
             parts.append(f"event_participants:{r['event_id']}-{r['entity_id']}")

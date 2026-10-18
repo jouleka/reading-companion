@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from app.answer_bank import answer_scope, valid_answer
 from app.ask import AskRequest
-from app.cost import budgeted_completion
+from app.cost import CostCeilingExceeded, budgeted_completion
 from app.preparation_plan import (
     PLAN_OUTPUT_TOKENS, PLAN_SYSTEM, PREPARATION_VERSION, REVIEW_OUTPUT_TOKENS, REVIEW_SYSTEM,
     PreparedQuestions, PreparationReview,
@@ -95,14 +95,16 @@ class PreparationCatalog:
         if book_id != self.scope.book_id:
             raise PreparationStale()
         # Preparation must not consume the last allowance needed by a foreground question.
-        # Keep up to four ordinary call token limits and $0.05, bounded to a quarter of each
-        # configured book ceiling. The catalog checks these lower ceilings atomically against
+        # Keep one maximum-sized review call and $0.05, bounded to a quarter of each
+        # configured book ceiling. Prepared reuse now completes in one independently reviewed
+        # call. Reserving four maximum-sized calls blocked preparation while substantial usable
+        # allowance remained. The catalog checks these lower ceilings atomically against
         # all settled usage AND pending calls; foreground requests retain the original limits.
         settings = self.app.state.settings
         limits = dict(kwargs)
         for name, headroom in (
-            ("max_input_tokens", 4*settings.cost_max_input_tokens_per_call),
-            ("max_output_tokens", 4*settings.cost_max_output_tokens_per_call),
+            ("max_input_tokens", settings.cost_max_input_tokens_per_call),
+            ("max_output_tokens", settings.cost_max_output_tokens_per_call),
         ):
             limits[name] -= min(limits[name]//4, headroom)
         limits["max_usd"] -= min(limits["max_usd"]/4, .05)
@@ -144,17 +146,21 @@ def prepare(app, scope):
     client.answers = GuardedCache(st.reader_client.answers, app, scope)
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(
         recaps=GuardedCache(st.recaps, app, scope))))
-    if st.settings.recap_prewarm:
+    def warm_recap():
+        if not st.settings.recap_prewarm:
+            return
         try:
             catch_me_up(scope.book_id, request, scope.frontier, catalog, st.store,
                         st.settings, client, st.worker)
         except Exception:
             scope.check(app)  # A failed recap does not prevent independently reviewed answers.
     if not st.settings.reader_prepare_enabled or not st.settings.reader_answer_cache:
+        warm_recap()
         return
     bank = st.reader_client.answers
     attempt_key = preparation_key(scope, st.settings)
     if bank.prepared(attempt_key):
+        warm_recap()
         return
     finished = False
     try:
@@ -207,12 +213,12 @@ def prepare(app, scope):
             )
             safe = reviewed_candidates(audit.value, candidates, facts)
             checkpoint(safe, reviewed=True)
-        completed = set()
         failed = False
         for item in diverse_order(safe, limit=st.settings.reader_prepare_max_questions):
             scope.check(app, snapshot=True)
-            if item["kind"] == "follow_up" and item["follow_up_to"] not in completed:
-                continue
+            # The independent question review already established this self-contained follow-up's
+            # premises and parent. A failure to generate the parent's answer is not evidence that
+            # the follow-up is unsafe; skipping it lost useful coverage after unrelated failures.
             try:
                 question = item["question"]
                 value = ask_the_book(scope.book_id, AskRequest(question=question, bookmark=scope.frontier),
@@ -222,13 +228,16 @@ def prepare(app, scope):
                 if value.get("as_of_chapter") == scope.frontier and valid_answer(value):
                     scope.check(app, snapshot=True)
                     bank.mark_suggestion((*scope.answer_key, question))
-                    completed.add(item["id"])
-            except Exception:
+            except Exception as error:
                 scope.check(app)
                 failed = True
+                if isinstance(error, CostCeilingExceeded) or getattr(error, "status_code", None) == 429:
+                    break  # Do not spend small retrieval calls on later answers that cannot finish.
         finished = not failed
     finally:
         scope.check(app, snapshot=True)
         # Persist the attempt to prevent scroll/restart spend loops. A failed stage retains
         # its plan, which can resume after an explicit change to the configured allowance.
         bank.mark_prepared(attempt_key, keep_plan=not finished)
+        # Publish the first independently cleared answers before starting a slower full recap.
+        warm_recap()

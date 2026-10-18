@@ -170,6 +170,7 @@ class BudgetedResult:
     usage: dict
     usd: float
     reservation_id: str
+    billing_model: str | None = None
 
 
 def _production_complete(client, system, user, *, tier, schema, max_output_tokens):
@@ -234,11 +235,18 @@ def budgeted_completion(catalog, settings, client, book_id, *, phase, system, us
     missing_usage = actual == {"in": 0, "out": 0} and getattr(client, "provider", None) != "stub"
     if missing_usage:
         actual = reserved_usage                         # missing real-provider usage fails conservative
-    actual_usd = reserved_usd_of(model, actual) if missing_usage else usd_of(model, actual)
+    actual_model = model
+    if (not missing_usage and getattr(client, "_is_native_openai", False)
+            and model.startswith("fast:") and usage.get("service_tier") == "default"):
+        # Fast may be served at Standard priority. Reserve the premium beforehand, but settle
+        # the explicitly reported processing tier without changing the shared client's profile.
+        actual_model = model.removeprefix("fast:")
+    actual_usd = reserved_usd_of(model, actual) if missing_usage else usd_of(actual_model, actual)
     try:
         catalog.note_reservation_actual(
             book_id, reservation_id, input_tokens=actual["in"], output_tokens=actual["out"],
             usd=actual_usd,
+            **({"model": actual_model} if actual_model != model else {}),
         )
     except ValueError as exc:
         raise RuntimeError("cost reservation disappeared while provider call was in flight") from exc
@@ -247,7 +255,7 @@ def budgeted_completion(catalog, settings, client, book_id, *, phase, system, us
         raise CostCeilingExceeded("provider usage exceeded its reserved hard limit")
     if not defer_settlement:
         catalog.settle_cost(book_id, reservation_id)
-    return BudgetedResult(value, actual, actual_usd, reservation_id)
+    return BudgetedResult(value, actual, actual_usd, reservation_id, actual_model)
 
 
 def budgeted_embedding(catalog, settings, client, book_id, *, phase, texts, chapter_ordinal=None):

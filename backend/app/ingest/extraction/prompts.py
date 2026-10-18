@@ -25,6 +25,9 @@ _FACTUAL_MEMORY_GUIDANCE = (
     "only atmosphere suggests them. Placing or storing an item does not imply hiding it, secrecy, or "
     "concealment. A shut door does not establish secret intent. Do not add words such as 'briefly' or "
     "'secretly' unless their meaning is supported by the text."
+    " Keep event statements atomic. Adjacent events do not establish that they happened in the "
+    "same place or that one caused the next. Attribute each reported detail only to its actual "
+    "speaker; do not extend a person's report to facts introduced later in a conversation."
 )
 
 _FINAL_EXTRACTION_CHECK = (
@@ -42,6 +45,8 @@ _FINAL_EXTRACTION_CHECK = (
     "source calls someone only 'his wife', use that exact identifying phrase rather than 'Mrs' "
     "plus the husband's surname. If repair flags a name, remove that unobserved form completely "
     "and use an exact source phrase consistently in the identity, states and event participants."
+    " The same restriction applies to the chapter summary and EVERY free-text field, not just "
+    "entity records."
 )
 
 EXTRACT_SYSTEM = (
