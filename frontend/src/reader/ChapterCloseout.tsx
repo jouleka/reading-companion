@@ -82,7 +82,7 @@ export function ChapterCloseout({
         if (!cancelled && owner === activeOfflineOwner())
           setError(
             reason instanceof Error
-              ? reason.message === "answer evidence review could not be cleared"
+              ? ["answer evidence review could not be cleared", "chapter closeout could not be cleared against the completed chapter"].includes(reason.message)
                 ? "We couldn’t verify this reflection against the chapter. Try again, or keep reading for now."
                 : reason.message
               : "Chapter closeout is unavailable.",

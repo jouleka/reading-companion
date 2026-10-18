@@ -155,11 +155,11 @@ describe("ChapterCloseout", () => {
     expect(mocks.chapterCloseout).toHaveBeenCalledTimes(2);
   });
 
-  test("explains a failed evidence review without exposing the internal error", async () => {
-    mocks.chapterCloseout.mockRejectedValue(new Error("answer evidence review could not be cleared"));
+  test.each(["answer evidence review could not be cleared", "chapter closeout could not be cleared against the completed chapter"])("explains a failed review without exposing the internal error: %s", async (message) => {
+    mocks.chapterCloseout.mockRejectedValue(new Error(message));
     render(<ChapterCloseout bookId="review-failure" chapter={2} onNavigate={vi.fn()} onClose={vi.fn()} />);
     await screen.findByText(/We couldn’t verify this reflection against the chapter/);
-    expect(screen.queryByText("answer evidence review could not be cleared")).toBeNull();
+    expect(screen.queryByText(message)).toBeNull();
     expect(screen.getByRole("button", { name: "Try closeout again" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back to reading" })).toBeTruthy();
   });

@@ -114,7 +114,7 @@ async def book_lifecycle(book_id: str, request: Request):
         position_write = method == "PUT" and path.endswith("/position")
         shared_read = (getattr(request, "recap_preparation", False)
                        or method == "GET"
-                       or (method == "POST" and path.endswith("/ask"))
+                       or (method == "POST" and path.endswith(("/ask", "/chapter-closeout")))
                        or position_write)
         if shared_read:
             async with entry.lock:

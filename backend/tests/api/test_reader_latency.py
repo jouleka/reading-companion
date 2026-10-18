@@ -104,7 +104,8 @@ def test_reviewed_answer_cache_is_free_and_frontier_and_reset_scoped(env, monkey
     assert reset["as_of_chapter"] == 0 and reset["claims"] == []
 
 
-def test_preparation_and_answers_share_reads_but_reset_waits_and_cancel_releases():
+@pytest.mark.parametrize("assist_path", ["/ask", "/chapter-closeout"])
+def test_preparation_and_answers_share_reads_but_reset_waits_and_cancel_releases(assist_path):
     async def scenario():
         app = SimpleNamespace(state=SimpleNamespace(book_request_locks={}))
         gate = asynccontextmanager(book_lifecycle)
@@ -119,7 +120,7 @@ def test_preparation_and_answers_share_reads_but_reset_waits_and_cancel_releases
                 warm_entered.set()
                 await release_warm.wait()
         async def ask():
-            async with gate("book", request("POST", "/api/books/book/ask")):
+            async with gate("book", request("POST", "/api/books/book" + assist_path)):
                 answer_entered.set()
                 await release_answer.wait()
         async def reset():
@@ -231,8 +232,9 @@ def test_recap_and_progress_share_lifecycle_but_mutations_wait_and_cancellation_
 
 
 @pytest.mark.parametrize("mutation", ["reset", "delete"])
+@pytest.mark.parametrize("experience", ["recap", "reflection"])
 def test_slow_recap_does_not_block_reader_status_or_progress_but_lifecycle_mutation_waits(
-    env, monkeypatch, mutation,
+    env, monkeypatch, mutation, experience,
 ):
     api, bid, app, atoms = env
     client = app.state.reader_client
@@ -240,7 +242,8 @@ def test_slow_recap_does_not_block_reader_status_or_progress_but_lifecycle_mutat
     entered, release = threading.Event(), threading.Event()
 
     def slow_recap(system, user, tier="cheap", schema=None, **kwargs):
-        if tier == "large" and schema is None:
+        if tier == "large" and (schema is None if experience == "recap"
+                                else getattr(schema, "__name__", "") == "AskDraft"):
             entered.set()
             assert release.wait(5), "test did not release the simulated recap provider"
         return original_complete(system, user, tier=tier, schema=schema, **kwargs)
@@ -251,7 +254,9 @@ def test_slow_recap_does_not_block_reader_status_or_progress_but_lifecycle_mutat
     async def scenario():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://testserver") as requests:
-            recap = asyncio.create_task(requests.get(f"/api/books/{bid}/catch-me-up"))
+            recap = asyncio.create_task(
+                requests.get(f"/api/books/{bid}/catch-me-up") if experience == "recap" else
+                requests.post(f"/api/books/{bid}/chapter-closeout", json={"chapter": 2}))
             mutation_request = None
             try:
                 assert await asyncio.to_thread(entered.wait, 2)

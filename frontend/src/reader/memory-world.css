@@ -63,6 +63,9 @@
 .memory-world .journey-spotlight, .memory-world .people-studio, .memory-world .memory-correction-history {
   --surface: #f9f7fd; --accent-wash: #e8def7; --madder: #6450a5; --accent-hover: #4d3e81; --wash: #eeebf5; --ink: #26283e; --ink-soft: #5e5c73; --ink-muted: #6c697d; --paper: #f9f7fd; --paper-deep: #eeebf6; --canvas: #eeebf5; --hairline: #ddd8e9; --accent: #6450a5;
   color: var(--ink); background: var(--paper); border-radius: 22px;
+  --on-accent: #fff; --selection: #dcd0ef; --hairline-strong: #bfb1d1;
+  --danger: #963d45; --danger-wash: #f9e8e9;
+  color-scheme: light;
 }
 .memory-world .journey-spotlight { padding: 32px; animation: memory-enter .35s ease both; overflow: hidden; }
 .memory-world .journey-spotlight .memory-eyebrow { color: #75618d; }
@@ -77,10 +80,10 @@
 .memory-world .chapter-events { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .memory-world .chapter-events li { display: flex; gap: 14px; padding: 14px 16px; border: 1px solid #e5deec; background: #f0ecf6; border-radius: 12px; }
 .memory-world .chapter-events li p { margin: 0; color: #484459; font: 400 15px/1.65 var(--serif); }
-.memory-world .journey-event-number { color: #907caa; font: 500 10px/1.8 var(--sans); padding-top: 3px; }
+.memory-world .journey-event-number { color: #756187; font: 500 10px/1.8 var(--sans); padding-top: 3px; }
 .memory-world .journey-arrivals { padding: 18px; background: #f4e8df; border-radius: 15px; align-self: start; }
 .memory-world .journey-arrivals h4 { margin-bottom: 4px; color: #805b49; }
-.memory-world .journey-arrivals > p { margin: 0 0 15px; font: 400 11px/1.6 var(--sans); color: #886a59; }
+.memory-world .journey-arrivals > p { margin: 0 0 15px; font: 400 11px/1.6 var(--sans); color: #7a5b4c; }
 .memory-world .chapter-new { display: grid; gap: 8px; margin: 0; }
 .memory-world .journey-person.name-chip { display: flex; align-items: center; gap: 8px; padding: 8px; width: 100%; border: 1px solid #d8bca84d; border-radius: 9px; background: #fff8f0aa; color: #6f4f3f; font: 500 11px/1.4 var(--sans); text-align: left; }
 .memory-world .journey-person > span { display: grid; place-items: center; flex: 0 0 28px; height: 28px; background: #e7cbb7; border-radius: 50%; font: 400 13px/1 var(--display); }
@@ -104,17 +107,17 @@
 .memory-world .people-studio .person-entry-head h2 { font-size: 35px; color: #302c45; }
 .memory-world .people-studio .person-entry-head { border-bottom: 1px solid #e1dbea; padding-bottom: 20px; }
 .memory-world .people-studio .person-monogram-large { width: 56px; height: 62px; flex-basis: 56px; font-size: 25px; background: #e9d4c4; color: #87694e; }
-.memory-world .people-studio .person-entry-kicker { color: #7f6a98; }
+.memory-world .people-studio .person-entry-kicker { color: #79628e; }
 .memory-world .people-studio .person-entry-actions { display: flex; flex-wrap: wrap; gap: 7px 14px; }
 .memory-world .people-studio .person-entry-actions > button { color: #70598d; font-size: 10px; min-height: 30px; }
 .memory-world .people-studio .constellation-section { margin: 24px 0; }
 .memory-world .constellation-heading { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
-.memory-world .constellation-heading .memory-eyebrow { font-size: 9px; color: #8a759d; }
+.memory-world .constellation-heading .memory-eyebrow { font-size: 9px; color: #76618b; }
 .memory-world .constellation-heading h3 { margin: 5px 0 0; font: 400 23px/1.2 var(--display); color: #40364f; }
 .memory-world .constellation-view { display: flex; gap: 3px; padding: 4px; border: 1px solid #e1d9ed; background: #eeebf5; border-radius: 9px; flex-shrink: 0; }
 .memory-world .constellation-view button { padding: 6px 8px; min-height: 30px; border: 0; border-radius: 6px; background: transparent; color: #716581; font: 500 9px/1.4 var(--sans); }
 .memory-world .constellation-view button[aria-pressed="true"] { background: #fff; color: #54416f; box-shadow: 0 2px 5px #00000008; }
-.memory-world .people-constellation { margin: 18px 0 0; overflow: hidden; border-radius: 18px; background: radial-gradient(ellipse at 40% 55%, #47405f 0, #25243d 65%); border: 1px solid #38334d; animation: memory-enter .4s ease both; }
+.memory-world .people-constellation { --accent: #d7c4f2; --madder: #d7c4f2; color-scheme: dark; margin: 18px 0 0; overflow: hidden; border-radius: 18px; background: radial-gradient(ellipse at 40% 55%, #47405f 0, #25243d 65%); border: 1px solid #38334d; animation: memory-enter .4s ease both; }
 .memory-world .constellation-canvas { height: 360px; position: relative; }
 .memory-world .constellation-lines { position: absolute; width: 100%; height: 100%; inset: 0; overflow: visible; }
 .memory-world .constellation-lines line { stroke: #a696bf; stroke-width: .18; opacity: .55; stroke-dasharray: 1 1; }
@@ -142,7 +145,7 @@
 .memory-world .memory-correction-history h3 { margin: 0; }
 .memory-world .memory-correction-history h3 button { color: #76618e; min-height: 28px; font: 500 11px/1.5 var(--sans); }
 .memory-world .memory-correction-history ol { padding-left: 20px; }
-.memory-world .memory-correction-history .quiet { color: #776b85; }
+.memory-world .memory-correction-history .quiet { color: #6e607c; }
 .memory-world .codex-state, .memory-world .hero-quiet { padding: 28px; color: #d1c5e2; }
 .memory-world .codex-state .quiet, .memory-world .codex-state button { color: #d1c5e2; }
 @keyframes memory-enter { from { opacity: .3; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }

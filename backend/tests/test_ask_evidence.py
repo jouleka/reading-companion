@@ -11,8 +11,10 @@ from app.ask_evidence import (
     AskEvidenceReview,
     complete_evidence_citations,
     evidence_prompt,
+    evidence_review_batches,
     merge_evidence_audits,
     source_name_text,
+    validate_evidence_audit,
 )
 from app.evidence_text import field_segments, source_passages
 
@@ -71,6 +73,37 @@ def test_selective_prompt_rejects_invalid_subsets(ids):
         evidence_prompt(_draft("Nell received a key.", "Orin left.", "Nell waited."),
                         [_source(1, "Nell received a key. Orin left. Nell waited.")], claim_ids=ids)
     assert not caught.value.repairable
+
+
+def test_evidence_batches_keep_whole_claims_original_ids_and_conservative_unit_budget():
+    texts = ["Nell returned to the workshop, where Orin was waiting; she placed the key on the desk."
+             for _ in range(6)]
+    draft = _draft(*texts)
+    sources = [_source(1, texts[0])]
+    before = copy.deepcopy((draft, sources))
+    assert evidence_review_batches(draft, sources, max_output_tokens=4096) == [[1, 2], [3, 4], [5, 6]]
+    assert evidence_review_batches(draft, sources, max_output_tokens=4096,
+                                   claim_ids=[2, 4, 5, 6]) == [[2, 4], [5, 6]]
+    assert evidence_review_batches(draft, sources, max_output_tokens=2560) == [[i] for i in range(1, 7)]
+    assert (draft, sources) == before
+
+
+def test_dense_claim_is_never_split_or_silently_partially_audited_to_fit_budget():
+    draft = _draft("Nell waited. " * 9)
+    sources = [_source(1, "Nell waited.")]
+    with pytest.raises(AskEvidenceError) as caught:
+        evidence_review_batches(draft, sources, max_output_tokens=4096)
+    assert caught.value.repairable and "Claim 1" in caught.value.review_feedback[0]
+    assert draft["claims"][0]["text"] == "Nell waited. " * 9
+
+
+def test_batch_validation_requires_exact_scope_without_producing_a_partial_answer():
+    draft, sources, approved, review = partial_fixture()
+    assert validate_evidence_audit(draft, sources, review, claim_ids=[2]) is None
+    for wrong in [approved, _canned(draft, sources), {"claim_audits": []}]:
+        with pytest.raises(AskEvidenceError) as caught:
+            validate_evidence_audit(draft, sources, wrong, claim_ids=[2])
+        assert not caught.value.repairable
 
 
 def partial_fixture():
