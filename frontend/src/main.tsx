@@ -2,6 +2,7 @@ import "@fontsource/eb-garamond/400.css";
 import "@fontsource/eb-garamond/400-italic.css";
 import "@fontsource/fraunces/400.css";
 import "./styles.css";
+import "./experience.css";
 
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";

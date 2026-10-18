@@ -74,9 +74,9 @@ const TYPEFACE: Record<TypefacePreset, string | null> = {
 };
 export const READER_THEME_COLORS = {
   paper: {
-    background: "#ffffff",
-    text: "#242824",
-    link: "#52644b",
+    background: "#fffcf5",
+    text: "#252431",
+    link: "#5552cb",
     scheme: "light",
   },
   sepia: {
@@ -86,9 +86,9 @@ export const READER_THEME_COLORS = {
     scheme: "light",
   },
   night: {
-    background: "#1a1e1a",
-    text: "#e7ebe1",
-    link: "#b5c99c",
+    background: "#1c1c29",
+    text: "#eceaf3",
+    link: "#bab3ff",
     scheme: "dark",
   },
 } as const;

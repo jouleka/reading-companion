@@ -6,7 +6,7 @@ describe("book-type presentation", () => {
     expect(presentationFor("novel")).toMatchObject({
       unit: "chapter",
       recapLink: "the story so far",
-      codexLink: "the codex",
+      codexLink: "People & chapters",
       peopleMode: "primary",
     });
   });

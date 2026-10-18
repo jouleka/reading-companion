@@ -137,12 +137,16 @@ describe("ReaderPage a11y shell", () => {
     expect(await axeAA(container)).toHaveNoViolations();
   });
 
-  test("LIT-29: a return after a gap auto-surfaces the story-so-far with a welcome-back framing", async () => {
+  test("a return after a gap offers a refresher without interrupting reading", async () => {
     // last seen 5h ago at chapter 1 -> beyond the ~4h threshold
     localStorage.setItem("rc:lastSeen:b", JSON.stringify({ t: Date.now() - 5 * 60 * 60 * 1000, bm: 1 }));
     render(<ReaderPage bookId="b" onBack={() => {}} />);
     const banner = (await screen.findByText(/welcome back/i)).closest(".welcome-back")!;
     expect(banner.textContent).toMatch(/left off in chapter I\b/i);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("main").inert).not.toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /catch me up/i }));
+    expect(screen.getByRole("dialog", { name: /welcome back/i })).toBeTruthy();
   });
 
   test("LIT-29: no welcome-back on a fresh first visit (nothing auto-opens)", async () => {
@@ -150,6 +154,16 @@ describe("ReaderPage a11y shell", () => {
     await waitFor(() => expect(mocks.manifest).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("button", { name: /next page/i })).toBeTruthy());
     expect(screen.queryByText(/welcome back/i)).toBeNull();
+  });
+
+  test("dismissing the returning-reader card keeps keyboard focus in the book", async () => {
+    localStorage.setItem("rc:lastSeen:b", JSON.stringify({ t: Date.now() - 5 * 60 * 60 * 1000, bm: 1 }));
+    render(<ReaderPage bookId="b" onBack={() => {}} />);
+    const continueButton = await screen.findByRole("button", { name: "Continue reading" });
+    continueButton.focus();
+    fireEvent.click(continueButton);
+    expect(screen.queryByRole("region", { name: "Welcome back" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("main"));
   });
 
   test("LIT-17: starting a new pass is confirmed and uses the current position epoch", async () => {

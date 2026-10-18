@@ -13,7 +13,8 @@ afterEach(() => {
 });
 
 describe("ReaderControls", () => {
-  test("exposes every preset as native keyboard-operable radio groups", async () => {
+  test("prioritizes theme and size, and reveals native layout presets on request", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     const { container } = render(
       <ReaderControls
@@ -25,12 +26,16 @@ describe("ReaderControls", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /reading appearance/i }),
     );
-    expect(screen.getAllByRole("group")).toHaveLength(6);
+    expect(screen.getAllByRole("group")).toHaveLength(2);
+    expect(screen.queryByRole("radio", { name: "Publisher" })).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: /^large$/i }));
     expect(onChange).toHaveBeenCalledWith({
       ...DEFAULT_READER_PREFERENCES,
       font_size: "large",
     });
+    await user.click(screen.getByText("Customize"));
+    expect(screen.getAllByRole("group")).toHaveLength(6);
+    expect(screen.getByRole("radio", { name: "Publisher" })).toBeTruthy();
     expect(await axeAA(container)).toHaveNoViolations();
   });
 

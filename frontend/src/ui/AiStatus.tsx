@@ -65,7 +65,7 @@ export function AiRuntimeProvider({
   );
 }
 
-export function AiStatus() {
+export function AiStatus({ compact = false }: { compact?: boolean }) {
   const runtime = useContext(RuntimeContext);
   if (!runtime || (!runtime.data && !runtime.failed)) return null;
   if (runtime.failed)
@@ -81,6 +81,14 @@ export function AiStatus() {
   if (!data) return null;
   const demo = data.mode === "demo";
   const degraded = data.completion_status === "degraded";
+  if (compact && !demo && data.completion_status === "ready" && data.embedding_mode !== "demo")
+    return (
+      <details className="ai-status ai-status-compact" data-mode="live">
+        <summary><Icon name="sparkle" size={14} /> AI connected <Icon name="chevronDown" size={13} /></summary>
+        <p>{data.models.synthesis} · Answers use evidence from your completed pages.</p>
+        <Button variant="ghost" onClick={runtime.retry}>Check connection</Button>
+      </details>
+    );
   return (
     <div
       className="ai-status"

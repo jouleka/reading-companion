@@ -5,7 +5,7 @@
  * Dialog a11y is the proven hero pattern (3ba2970): synchronous trigger capture at render, focus
  * effect keyed [], Tab trap, Escape, card-owns-the-keyboard, synchronous un-inert on card close;
  * ReaderPage's onClose un-inerts the grid synchronously before unmount (WCAG 2.4.3). */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   api,
   type BookType,
@@ -31,11 +31,13 @@ export function Codex({
   bookId,
   bookmark,
   bookType = "novel",
+  workspaceNavigation,
   onClose,
 }: {
   bookId: string;
   bookmark: number;
   bookType?: BookType;
+  workspaceNavigation?: ReactNode;
   onClose: () => void;
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
@@ -288,6 +290,7 @@ export function Codex({
             Close
           </Button>
         </header>
+        {workspaceNavigation}
 
         {compactShell && !(emptyNovel && notes != null) && (
           <div

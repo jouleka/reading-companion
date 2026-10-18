@@ -4,7 +4,7 @@
  * LIT-16 pattern) and renders ONLY the server-clamped data: the recap the runtime gate + LLM-judge
  * cleared, never anything client-computed or past the frontier. Fetches by (bookId, bookmark) so the
  * LIT-15 scrubber can walk it back through time; the server still clamps to the high-water. */
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type BookType, type CatchMeUp as CMU } from "../api";
 import { Button } from "../ui/Button";
 import { useDialogMotion } from "../ui/useDialogMotion";
@@ -21,6 +21,7 @@ export function CatchMeUp({
   totalAtoms,
   bookType = "novel",
   welcomeBackChapter,
+  workspaceNavigation,
   onClose,
 }: {
   bookId: string;
@@ -30,6 +31,7 @@ export function CatchMeUp({
   // LIT-29 "since you were last here": when the hero auto-opens after a return gap, the chapter the
   // reader left off in — drives the welcome-back framing. null/omitted on a deliberate open.
   welcomeBackChapter?: number | null;
+  workspaceNavigation?: ReactNode;
   onClose: () => void;
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
@@ -134,7 +136,7 @@ export function CatchMeUp({
       aria-label={dialogLabel}
       ref={rootRef}
     >
-      <article className="hero-page" ref={articleRef}>
+      <article className="hero-page recap-workspace" ref={articleRef}>
         <div className="hero-ribbon" aria-hidden="true" />
         <header className="hero-head">
           <span className="smallcaps hero-eyebrow">
@@ -150,6 +152,7 @@ export function CatchMeUp({
             Close
           </Button>
         </header>
+        {workspaceNavigation}
         {welcomeBackChapter != null && (
           // visual reinforcement only — the SR announcement rides the dialog's accessible name (above)
           <div className="welcome-back">

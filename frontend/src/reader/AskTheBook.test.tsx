@@ -8,10 +8,11 @@ import {
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { axeAA } from "../test-a11y";
 
-const mocks = vi.hoisted(() => ({ askBook: vi.fn(), preparedQuestions: vi.fn() }));
+const mocks = vi.hoisted(() => ({ askBook: vi.fn(), preparedQuestions: vi.fn(), owner: vi.fn() }));
 vi.mock("../api", () => ({ api: mocks }));
+vi.mock("../pwa/offline", () => ({ activeOfflineOwner: mocks.owner }));
 
-import { AskTheBook } from "./AskTheBook";
+import { AskTheBook, type AskSession } from "./AskTheBook";
 
 const answer = {
   as_of_chapter: 2,
@@ -47,9 +48,137 @@ const answer = {
 beforeEach(() => {
   mocks.askBook.mockReset();
   mocks.preparedQuestions.mockReset().mockResolvedValue({ as_of_chapter: 2, questions: [] });
+  mocks.owner.mockReset().mockReturnValue("local");
 });
 
 describe("AskTheBook", () => {
+  test("keeps an unsent draft across workspace remounts without issuing a question", () => {
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), {
+      target: { value: "Why did they meet at the forge?" },
+    });
+    first.unmount();
+
+    render(<AskTheBook {...props} />);
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value)
+      .toBe("Why did they meet at the forge?");
+    expect(mocks.askBook).not.toHaveBeenCalled();
+  });
+
+  test("keeps the answer, citations and measured cost when returning to Ask", async () => {
+    mocks.askBook.mockResolvedValue(answer);
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), {
+      target: { value: "Where did they meet?" },
+    });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    first.unmount();
+
+    render(<AskTheBook {...props} />);
+    expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
+    expect(screen.getByText(/Provider cost: \$0\.000012 USD/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /open citation 1 in chapter ii/i })).toBeTruthy();
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("Where did they meet?");
+    expect(mocks.askBook).toHaveBeenCalledTimes(1);
+  });
+
+  test("reattaches to a pending question without issuing a duplicate paid request", async () => {
+    let finish!: (value: typeof answer) => void;
+    mocks.askBook.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    first.unmount();
+
+    render(<AskTheBook {...props} />);
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: /checking the pages/i }).getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByRole("button", { name: "Close" })).toBe(document.activeElement);
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    expect(mocks.askBook).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(answer); });
+    expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
+    expect(screen.getByText(/Provider cost: \$0\.000012 USD/i)).toBeTruthy();
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).disabled).toBe(false);
+  });
+
+  test("retains a question that finishes while Ask is unmounted", async () => {
+    let finish!: (value: typeof answer) => void;
+    mocks.askBook.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    first.unmount();
+    await act(async () => { finish(answer); });
+
+    render(<AskTheBook {...props} />);
+    expect(screen.getByText(/^Berenice met Aldric at the forge\.$/)).toBeTruthy();
+    expect(screen.getByText(/Provider cost: \$0\.000012 USD/i)).toBeTruthy();
+    expect(mocks.askBook).toHaveBeenCalledTimes(1);
+  });
+
+  test("retains a pending request's error and draft for an explicit retry", async () => {
+    let reject!: (reason: Error) => void;
+    mocks.askBook.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }))
+      .mockResolvedValue(answer);
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    first.unmount();
+    await act(async () => { reject(new Error("Provider is offline.")); });
+
+    render(<AskTheBook {...props} />);
+    expect(screen.getByRole("status").textContent).toBe("Provider is offline.");
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("Where did they meet?");
+    expect(mocks.askBook).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText(/^Berenice met Aldric at the forge\.$/);
+    expect(mocks.askBook).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    { boundary: "book", bookId: "other", bookmark: 2, owner: "local" },
+    { boundary: "bookmark", bookId: "b", bookmark: 1, owner: "local" },
+    { boundary: "owner", bookId: "b", bookmark: 2, owner: "another-owner" },
+  ])("invalidates retained state and late results across the $boundary boundary", async (next) => {
+    let finish!: (value: typeof answer) => void;
+    mocks.askBook.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const sessionRef = { current: null as AskSession | null };
+    const props = { bookId: "b", bookmark: 2, sessionRef, onNavigate: vi.fn(), onClose: vi.fn() };
+    const first = render(<AskTheBook {...props} />);
+    fireEvent.change(screen.getByLabelText(/your question/i), { target: { value: "Where did they meet?" } });
+    fireEvent.submit(screen.getByLabelText(/your question/i).closest("form")!);
+    const previousSession = sessionRef.current;
+    first.unmount();
+
+    mocks.owner.mockReturnValue(next.owner);
+    const second = render(<AskTheBook {...props} bookId={next.bookId} bookmark={next.bookmark} />);
+    expect(sessionRef.current).not.toBe(previousSession);
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByRole("status").textContent).toBe("");
+    await act(async () => { finish(answer); });
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+    expect(screen.queryByText(/Provider cost:/i)).toBeNull();
+    expect(mocks.askBook).toHaveBeenCalledTimes(1);
+
+    // Returning to the original context must not resurrect the discarded session or its result.
+    mocks.owner.mockReturnValue("local");
+    second.rerender(<AskTheBook {...props} />);
+    expect((screen.getByLabelText(/your question/i) as HTMLTextAreaElement).value).toBe("");
+    expect(screen.queryByText(/^Berenice met Aldric at the forge\.$/)).toBeNull();
+  });
+
   test("offers current reviewed questions and submits the exact question", async () => {
     const question = "Where did Berenice meet Aldric?";
     mocks.preparedQuestions.mockResolvedValue({ as_of_chapter: 2, questions: [question] });

@@ -1,7 +1,7 @@
 /** The companion leaf: the spoiler-safe memory, rendered from the CLAMPED server routes only. Shows
  * the catch-me-up recap (drop cap, printed-page voice), the cast/threads counts, ingest state, and
  * the ribbon bookmark whose length is reading progress. */
-import { useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { api, type BookType, type CatchMeUp, type IngestStatus } from "../api";
 import { presentationFor } from "./bookProfile";
 import { roman } from "./roman";
@@ -10,6 +10,7 @@ import { Icon, type IconName } from "../ui/Icon";
 import { Button } from "../ui/Button";
 import { AiStatus } from "../ui/AiStatus";
 import { keepTabFocusInside } from "./focusTrap";
+import "./companion-redesign.css";
 
 export function Companion({
   bookId,
@@ -20,6 +21,7 @@ export function Companion({
   onOpenCodex,
   onOpenAsk,
   onOpenCloseout,
+  onCloseoutReadinessChange,
   compact = false,
   desktopHidden = false,
 }: {
@@ -31,6 +33,7 @@ export function Companion({
   onOpenCodex?: () => void;
   onOpenAsk?: () => void;
   onOpenCloseout?: () => void;
+  onCloseoutReadinessChange?: (chapter: number | null) => void;
   compact?: boolean;
   desktopHidden?: boolean;
 }) {
@@ -44,7 +47,8 @@ export function Companion({
     recapSnapshot.data.as_of_chapter <= bookmark
       ? recapSnapshot.data
       : null;
-  const [ingest, setIngest] = useState<IngestStatus | null>(null);
+  const [ingestSnapshot, setIngestSnapshot] = useState<{ bookId: string; data: IngestStatus } | null>(null);
+  const ingest = ingestSnapshot?.bookId === bookId ? ingestSnapshot.data : null;
   const [recapErr, setRecapErr] = useState<unknown>(null);
   const [refreshState, setRefreshState] = useState<
     "polling" | "ready" | "updating" | "unavailable"
@@ -106,7 +110,7 @@ export function Companion({
       try {
         const st = await api.ingest(bookId);
         if (cancelled) return;
-        setIngest(st);
+        setIngestSnapshot({ bookId, data: st });
         if (
           st.ingest_progress >= bookmark ||
           st.status === "blocked" ||
@@ -168,9 +172,13 @@ export function Companion({
     ingest != null &&
     ingest.ingest_progress >= bookmark;
 
+  useEffect(() => {
+    onCloseoutReadinessChange?.(closeoutReady ? bookmark : null);
+  }, [bookmark, closeoutReady, onCloseoutReadinessChange]);
+
   return (
     <aside
-      className="companion"
+      className="companion companion-studio"
       hidden={!compact && desktopHidden}
       aria-label="the reading companion"
       data-compact={compact || undefined}
@@ -215,15 +223,29 @@ export function Companion({
       >
         <div className="companion-label">
           <Icon name="sparkle" size={17} />
-          YOUR COMPANION
+          YOUR READING SPACE
         </div>
-        <h2 ref={headingRef} tabIndex={compact ? -1 : undefined}>
-          Where you stand
-        </h2>
-        <div className="asof">
-          {bookmark == null || bookmark === 0
-            ? "nothing read yet — the memory begins with your first finished chapter"
-            : `as of ${presentation.unit} ${roman(bookmark)} · ${bookmark} of ${totalAtoms}`}
+        <div className="companion-orientation">
+          <div>
+            <h2 ref={headingRef} tabIndex={compact ? -1 : undefined}>
+              Where you<br />stand.
+            </h2>
+            <div className="asof">
+              {bookmark == null || bookmark === 0
+                ? "Your companion grows as you read."
+                : `as of ${presentation.unit} ${roman(bookmark)} · ${bookmark} of ${totalAtoms}`}
+            </div>
+          </div>
+          <div
+            className="companion-orbit"
+            style={{ "--reading-progress": `${progress * 360}deg` } as CSSProperties}
+            aria-hidden="true"
+          >
+            <span>
+              <strong>{Math.round(progress * 100)}<small>%</small></strong>
+              <em>read</em>
+            </span>
+          </div>
         </div>
 
         <div className="companion-progress" aria-hidden="true">
@@ -232,7 +254,7 @@ export function Companion({
         <div className="companion-progress-label">
           <span>
             {presentation.unit === "chapter" ? "Chapters" : "Sections"}{" "}
-            remembered
+            completed
           </span>
           <span>
             {bookmark ?? 0} / {totalAtoms}
@@ -242,26 +264,14 @@ export function Companion({
           <Icon name="shield" size={13} />
           Only what you’ve read
         </div>
-        <AiStatus />
-
-        {showPeopleStats && cmu && (
-          <div className="companion-stats">
-            <div className="stat-line">
-              <span className="smallcaps">{presentation.peopleLabel}</span>
-              <span className="n">{cmu.cast_size}</span>
-            </div>
-            <div className="stat-line">
-              <span className="smallcaps">{presentation.connectionsLabel}</span>
-              <span className="n">{cmu.open_threads}</span>
-            </div>
-          </div>
-        )}
 
         {/* a persistent polite live region: the 'right now' one-liner (or a placeholder / rejection
           note) is announced when it lands, not silently swapped in. The full flowing recap lives in
           the hero — the sidebar is a tight orientation, never a duplicate of it (LIT-29). */}
-        <hr className="companion-rule" />
         <div className="recap-region" aria-live="polite">
+          <span className="companion-section-label">
+            {presentation.peopleMode === "primary" ? "Your place in the story" : "Your reading, so far"}
+          </span>
           {cmu?.now ? (
             <p className="now-line">
               {behind && (
@@ -299,35 +309,49 @@ export function Companion({
           )}
         </div>
 
-        {((cmu?.recap && onOpenHero) ||
+        {showPeopleStats && cmu && (
+          <div className="companion-stats">
+            <div className="stat-line">
+              <span className="smallcaps">{presentation.peopleLabel}</span>
+              <span className="n">{cmu.cast_size}</span>
+            </div>
+            <div className="stat-line">
+              <span className="smallcaps">{presentation.connectionsLabel}</span>
+              <span className="n">{cmu.open_threads}</span>
+            </div>
+          </div>
+        )}
+
+        {((bookmark != null && bookmark > 0 && onOpenHero) ||
           (bookmark != null &&
             bookmark > 0 &&
             (onOpenCodex ||
               onOpenAsk ||
               (onOpenCloseout && closeoutReady)))) && (
           <nav className="companion-links" aria-label="the full companion">
-            {cmu?.recap && onOpenHero && (
+            <span className="companion-section-label">Go a little deeper</span>
+            {bookmark != null && bookmark > 0 && onOpenHero && (
               <CompanionAction
                 icon="book"
                 title={presentation.recapLink}
-                detail="Find your place in the story"
+                detail="Pick up the thread in a moment"
                 onClick={() => launch(onOpenHero)}
-              />
-            )}
-            {bookmark != null && bookmark > 0 && onOpenCodex && (
-              <CompanionAction
-                icon="library"
-                title={presentation.codexLink}
-                detail="Chapters, people & connections"
-                onClick={() => launch(onOpenCodex)}
               />
             )}
             {bookmark != null && bookmark > 0 && onOpenAsk && (
               <CompanionAction
                 icon="sparkle"
                 title="Ask the book"
-                detail="Answers from your completed pages"
+                detail="Untangle a detail, with cited answers"
                 onClick={() => launch(onOpenAsk)}
+              />
+            )}
+            {bookmark != null && bookmark > 0 && onOpenCodex && (
+              <CompanionAction
+                icon="library"
+                title={presentation.codexLink}
+                detail={`Explore ${presentation.unit === "chapter" ? "chapters" : "sections"}, people & connections`}
+                onClick={() => launch(onOpenCodex)}
               />
             )}
             {closeoutReady && onOpenCloseout && (
@@ -340,6 +364,8 @@ export function Companion({
             )}
           </nav>
         )}
+
+        <div className="companion-ai-note"><AiStatus compact /></div>
 
         <div className="ingest-note" role="status">
           {refreshState === "unavailable" ? (
@@ -399,9 +425,9 @@ function CompanionAction({
   onClick: () => void;
 }) {
   return (
-    <button className="companion-action" onClick={onClick}>
-      <Icon name={icon} size={18} />
-      <span>
+    <button type="button" className="companion-action" onClick={onClick}>
+      <span className="companion-action-icon"><Icon name={icon} size={18} /></span>
+      <span className="companion-action-copy">
         <strong>{title}</strong>
         <small>{detail}</small>
       </span>

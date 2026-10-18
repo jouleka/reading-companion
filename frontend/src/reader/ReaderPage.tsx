@@ -17,10 +17,11 @@ import {
   type SelectionAction,
 } from "../api";
 import { CatchMeUp } from "./CatchMeUp";
-import { AskTheBook } from "./AskTheBook";
+import { AskTheBook, type AskSession } from "./AskTheBook";
 import { ChapterCloseout } from "./ChapterCloseout";
 import { Codex } from "./Codex";
 import { Companion } from "./Companion";
+import { CompanionWorkspaceNavigation, type CompanionView } from "./CompanionWorkspaceNavigation";
 import { admitRelocation, arrowPagingBlocked, jumpsAhead } from "./guard";
 import { JumpNote } from "./JumpNote";
 import {
@@ -56,6 +57,7 @@ import {
 import { PositionReporter, type PendingPosition, type PositionSyncState } from "./reporter";
 import { StartOverNote } from "./StartOverNote";
 import { useWelcomeBack } from "./welcomeBack";
+import { roman } from "./roman";
 import { useCompactReaderShell } from "./mobileShell";
 import {
   HIGHLIGHT_COLORS,
@@ -151,6 +153,15 @@ export function ReaderPage({
   const [codexOpen, setCodexOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
   const [closeoutOpen, setCloseoutOpen] = useState(false);
+  const [closeoutReadyChapter, setCloseoutReadyChapter] = useState<number | null>(null);
+  const workspaceTriggerRef = useRef<HTMLElement | null>(null);
+  const askSessionRef = useRef<AskSession | null>(null);
+  const offlineOwner = activeOfflineOwner();
+  useEffect(() => {
+    const session = askSessionRef.current;
+    if (session && (session.bookId !== bookId || session.bookmark !== (pos?.bookmark ?? 0) || session.owner !== offlineOwner))
+      askSessionRef.current = null;
+  }, [bookId, pos?.bookmark, offlineOwner]);
   const [selectionAssist, setSelectionAssist] = useState<{
     action: SelectionAction;
     selection: ReaderSelection;
@@ -241,15 +252,11 @@ export function ReaderPage({
         (child as HTMLElement).inert = false;
   }, []);
 
-  // LIT-29 "since you were last here": on reopen after a ~4h+ gap, auto-surface the story-so-far once
-  // with a welcome-back framing; closing it (a page turn also clears it) steps it out of the way.
+  // Returning readers can catch up without an automatic modal interrupting their book.
   const { welcomeBack, dismiss, forget } = useWelcomeBack(
     bookId,
     pos?.bookmark ?? null,
   );
-  useEffect(() => {
-    if (welcomeBack) setHeroOpen(true);
-  }, [welcomeBack]);
 
   useEffect(() => {
     let dead = false;
@@ -805,6 +812,7 @@ export function ReaderPage({
     reporterRef.current?.cancel();
     try {
       const reset = await api.resetPosition(bookId, positionEpochRef.current);
+      askSessionRef.current = null;
       positionEpochRef.current = reset.position_epoch;
       positionVersionRef.current =
         reset.position_version ?? positionVersionRef.current + 1;
@@ -1066,6 +1074,37 @@ export function ReaderPage({
     manifest?.book_profile?.book_type ?? "novel",
   ).unit;
 
+  const openWorkspace = (view: CompanionView) => {
+    if (!heroOpen && !codexOpen && !askOpen && !closeoutOpen)
+      workspaceTriggerRef.current = document.activeElement as HTMLElement | null;
+    setHeroOpen(view === "recap");
+    setCodexOpen(view === "memory");
+    setAskOpen(view === "ask");
+    setCloseoutOpen(view === "reflect");
+  };
+  const closeWorkspace = () => {
+    unInertGrid();
+    setHeroOpen(false);
+    setCodexOpen(false);
+    setAskOpen(false);
+    setCloseoutOpen(false);
+    dismiss();
+    // Switching workspace views unmounts the intermediate navigation button. Restore
+    // the original reader control, rather than relying on that discarded opener.
+    const trigger = workspaceTriggerRef.current;
+    if (trigger && document.contains(trigger) && !trigger.closest(".reader-return-card")) trigger.focus();
+    else gridRef.current?.querySelector<HTMLButtonElement>(".reader-library")?.focus();
+    workspaceTriggerRef.current = null;
+  };
+  const workspaceNavigation = (active: CompanionView) => (
+    <CompanionWorkspaceNavigation
+      active={active}
+      onNavigate={openWorkspace}
+      unit={unit}
+      canReflect={(pos?.bookmark ?? 0) > 0 && closeoutReadyChapter === pos?.bookmark}
+    />
+  );
+
   return (
     <div
       className="reader-grid"
@@ -1128,17 +1167,6 @@ export function ReaderPage({
             role="group"
             aria-label="Reading tools"
           >
-            <ReaderControls
-              preferences={preferences}
-              onChange={changePreferences}
-              status={preferenceStatus}
-            />
-            <ReaderTTS
-              getView={() => viewRef.current}
-              getVisibleRange={() => visibleRangeRef.current}
-              inactive={modalOpen || startOverOpen}
-              resetKey={bookId}
-            />
             <ReaderNavigation
               toc={toc}
               atoms={manifest?.atoms ?? []}
@@ -1193,6 +1221,18 @@ export function ReaderPage({
               }}
               onClearSelection={clearReaderSelection}
             />
+            <span className="reader-tool-divider" aria-hidden="true" />
+            <ReaderTTS
+              getView={() => viewRef.current}
+              getVisibleRange={() => visibleRangeRef.current}
+              inactive={modalOpen || startOverOpen}
+              resetKey={bookId}
+            />
+            <ReaderControls
+              preferences={preferences}
+              onChange={changePreferences}
+              status={preferenceStatus}
+            />
             <span className="reader-toolbar-spacer" />
             {pos && pos.bookmark > 0 && (
               <button
@@ -1210,6 +1250,20 @@ export function ReaderPage({
             )}
           </div>
         </header>
+        {welcomeBack && (
+          <section className="reader-return-card welcome-back" aria-label="Welcome back">
+            <Icon name="book" size={22} />
+            <div>
+              <strong>Welcome back.</strong>
+              <span>You left off in {unit} {roman(welcomeBack.lastChapter)}. A little refresher?</span>
+            </div>
+            <Button variant="primary" onClick={() => openWorkspace("recap")}>Catch me up</Button>
+            <Button variant="ghost" onClick={() => {
+              gridRef.current?.querySelector<HTMLElement>("#main")?.focus();
+              dismiss();
+            }}>Continue reading</Button>
+          </section>
+        )}
         <div
           className="book-view"
           ref={holder}
@@ -1312,10 +1366,11 @@ export function ReaderPage({
         bookmark={pos?.bookmark ?? null}
         totalAtoms={manifest?.atoms.length ?? 0}
         bookType={manifest?.book_profile?.book_type ?? "novel"}
-        onOpenHero={() => setHeroOpen(true)}
-        onOpenCodex={() => setCodexOpen(true)}
-        onOpenAsk={() => setAskOpen(true)}
-        onOpenCloseout={() => setCloseoutOpen(true)}
+        onOpenHero={() => openWorkspace("recap")}
+        onOpenCodex={() => openWorkspace("memory")}
+        onOpenAsk={() => openWorkspace("ask")}
+        onOpenCloseout={() => openWorkspace("reflect")}
+        onCloseoutReadinessChange={setCloseoutReadyChapter}
         compact={compactShell}
         desktopHidden={focusMode}
       />
@@ -1326,11 +1381,8 @@ export function ReaderPage({
           totalAtoms={manifest?.atoms.length ?? 0}
           bookType={manifest?.book_profile?.book_type ?? "novel"}
           welcomeBackChapter={welcomeBack?.lastChapter ?? null}
-          onClose={() => {
-            unInertGrid(); // synchronous un-inert so the hero's focus-restore reaches the opener
-            setHeroOpen(false);
-            dismiss();
-          }}
+          workspaceNavigation={workspaceNavigation("recap")}
+          onClose={closeWorkspace}
         />
       )}
       {codexOpen && (
@@ -1338,27 +1390,21 @@ export function ReaderPage({
           bookId={bookId}
           bookmark={pos?.bookmark ?? 0}
           bookType={manifest?.book_profile?.book_type ?? "novel"}
-          onClose={() => {
-            // synchronous un-inert BEFORE the codex unmounts, so its focus-restore reaches the
-            // opener, not <body> — the routed LIT-30 finding, closed here (WCAG 2.4.3)
-            unInertGrid();
-            setCodexOpen(false);
-          }}
+          workspaceNavigation={workspaceNavigation("memory")}
+          onClose={closeWorkspace}
         />
       )}
       {askOpen && (
         <AskTheBook
           bookId={bookId}
           bookmark={pos?.bookmark ?? 0}
+          sessionRef={askSessionRef}
+          workspaceNavigation={workspaceNavigation("ask")}
           onNavigate={(citation) => {
-            unInertGrid();
-            setAskOpen(false);
+            closeWorkspace();
             void viewRef.current?.goTo(citation.href);
           }}
-          onClose={() => {
-            unInertGrid();
-            setAskOpen(false);
-          }}
+          onClose={closeWorkspace}
         />
       )}
       {selectionAssist && (
@@ -1381,15 +1427,12 @@ export function ReaderPage({
         <ChapterCloseout
           bookId={bookId}
           chapter={pos?.bookmark ?? 0}
+          workspaceNavigation={workspaceNavigation("reflect")}
           onNavigate={(citation) => {
-            unInertGrid();
-            setCloseoutOpen(false);
+            closeWorkspace();
             void viewRef.current?.goTo(citation.href);
           }}
-          onClose={() => {
-            unInertGrid();
-            setCloseoutOpen(false);
-          }}
+          onClose={closeWorkspace}
         />
       )}
     </div>

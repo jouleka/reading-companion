@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import type {
   HighlightMark,
   ReaderMark,
@@ -42,13 +42,21 @@ export function ReaderMarks({
     useReaderPopover();
   const [note, setNote] = useState("");
   const [label, setLabel] = useState("");
+  const [selectionTool, setSelectionTool] = useState<"highlight" | "note" | "understand" | null>(null);
+  const [filter, setFilter] = useState<"all" | ReaderMark["kind"]>("all");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const busy = /^(saving|deleting)\b/.test(status);
+  const visibleMarks = marks.filter((mark) => filter === "all" || mark.kind === filter);
 
-  // A failed request leaves the selection and draft intact. The reader clears the selection
-  // only after a note is saved, so dismissing it is also the natural end of this draft.
+  // A failed save keeps its passage and draft. Only a new passage or a cleared
+  // selection starts a new draft; opening another tool does not discard it.
   useEffect(() => {
-    if (!selection) setNote("");
-  }, [selection]);
+    setSelectionTool(null);
+    setNote("");
+  }, [selection?.anchor.cfi, selection?.text]);
+  useEffect(() => {
+    if (selectionTool === "note") noteRef.current?.focus();
+  }, [selectionTool]);
   useEffect(() => {
     if (status === "bookmark saved" || status === "bookmark queued for sync")
       setLabel("");
@@ -70,18 +78,53 @@ export function ReaderMarks({
         ref={triggerRef}
         type="button"
         className="plain reader-tool marks-trigger"
-        aria-label="notes"
+        aria-label="Notebook"
         aria-expanded={open && !closing}
         aria-controls={id}
         onClick={toggle}
       >
         <Icon name="bookmark" />
-        <span>Notes</span>
+        <span>Notebook</span>
       </button>
       {selection && (
         <section className="selection-actions" aria-label="Selection actions">
-          <q>{selection.text}</q>
-          <div
+          <div className="selection-context">
+            <q>{selection.text}</q>
+            <Button
+              variant="ghost"
+              className="selection-dismiss icon-button"
+              aria-label="Dismiss selected passage"
+              disabled={busy}
+              onClick={onClearSelection}
+            ><Icon name="close" size={16} /></Button>
+          </div>
+          <div className="selection-tool-picker" role="group" aria-label="Work with selected text">
+            <Button
+              variant="ghost"
+              aria-expanded={selectionTool === "highlight"}
+              aria-controls={`${id}-highlight`}
+              disabled={busy}
+              onClick={() => setSelectionTool(selectionTool === "highlight" ? null : "highlight")}
+            ><span className="selection-highlight-icon" aria-hidden="true">H</span>Highlight</Button>
+            <Button
+              variant="ghost"
+              icon="bookmark"
+              aria-expanded={selectionTool === "note"}
+              aria-controls={`${id}-note-editor`}
+              disabled={busy}
+              onClick={() => setSelectionTool(selectionTool === "note" ? null : "note")}
+            >Note</Button>
+            <Button
+              variant="ghost"
+              icon="sparkle"
+              aria-expanded={selectionTool === "understand"}
+              aria-controls={`${id}-understand`}
+              disabled={busy}
+              onClick={() => setSelectionTool(selectionTool === "understand" ? null : "understand")}
+            >Understand</Button>
+          </div>
+          {selectionTool === "understand" && <div
+            id={`${id}-understand`}
             className="selection-ai-actions"
             aria-label="Understand this passage"
           >
@@ -98,11 +141,13 @@ export function ReaderMarks({
             <Button disabled={busy} onClick={() => onAssist("translate")}>
               translate to English
             </Button>
-          </div>
-          <div
+          </div>}
+          {selectionTool === "highlight" && <div
+            id={`${id}-highlight`}
             className="selection-highlight-actions"
             aria-label="Highlight color"
           >
+            <span className="selection-tool-hint">Save in</span>
             {(["yellow", "green", "blue", "pink"] as const).map((color) => (
               <button
                 key={color}
@@ -117,13 +162,16 @@ export function ReaderMarks({
                 <span className="sr-only">{color} highlight</span>
               </button>
             ))}
-          </div>
-          <form onSubmit={saveNote}>
+          </div>}
+          {selectionTool === "note" && <form id={`${id}-note-editor`} className="selection-note-editor" onSubmit={saveNote}>
             <label htmlFor={`${id}-note`}>Add a note</label>
             <textarea
+              ref={noteRef}
               id={`${id}-note`}
               value={note}
               maxLength={10000}
+              rows={3}
+              placeholder="What would you like to remember?"
               onChange={(event) => setNote(event.currentTarget.value)}
             />
             <Button
@@ -133,20 +181,12 @@ export function ReaderMarks({
             >
               save note
             </Button>
-          </form>
+          </form>}
           {!open && (
             <p className="marks-status" role="status" aria-live="polite">
               {status}
             </p>
           )}
-          <Button
-            variant="ghost"
-            className="selection-dismiss"
-            disabled={busy}
-            onClick={onClearSelection}
-          >
-            <Icon name="close" size={16} /> dismiss
-          </Button>
         </section>
       )}
       {open && (
@@ -160,16 +200,29 @@ export function ReaderMarks({
           ref={panelRef}
         >
           <header className="reader-panel-heading">
-            <h2>Your marks</h2>
+            <div><span className="notebook-eyebrow">THE WORDS YOU KEPT</span><h2>Your notebook</h2></div>
             <Button
               variant="ghost"
               className="icon-button"
-              aria-label="Close notes"
+              aria-label="Close notebook"
               onClick={() => close()}
             >
               <Icon name="close" />
             </Button>
           </header>
+          <div className="notebook-filters" role="group" aria-label="Filter notebook">
+            {([
+              ["all", "All"], ["highlight", "Highlights"],
+              ["annotation", "Notes"], ["bookmark", "Bookmarks"],
+            ] as const).map(([value, title]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >{title}<span>{value === "all" ? marks.length : marks.filter((mark) => mark.kind === value).length}</span></button>
+            ))}
+          </div>
           <form className="bookmark-form" onSubmit={saveBookmark}>
             <label htmlFor={`${id}-label`}>Bookmark this page</label>
             <div>
@@ -192,10 +245,10 @@ export function ReaderMarks({
           <p className="marks-status" role="status" aria-live="polite">
             {status}
           </p>
-          {marks.length ? (
+          {visibleMarks.length ? (
             <ol className="marks-list">
-              {marks.map((mark) => (
-                <li key={`${mark.kind}-${mark.id}`}>
+              {visibleMarks.map((mark) => (
+                <li key={`${mark.kind}-${mark.id}`} data-mark-kind={mark.kind} data-mark-color={mark.kind === "highlight" ? mark.color : undefined}>
                   <button
                     type="button"
                     className="plain mark-location"
@@ -232,7 +285,7 @@ export function ReaderMarks({
             </ol>
           ) : (
             <p className="quiet">
-              No marks in the pages available to this reading pass.
+              {marks.length ? "Nothing saved in this view yet." : "Your favorite words belong here. Highlight a passage, add a thought, or bookmark a page as you read."}
             </p>
           )}
           <a

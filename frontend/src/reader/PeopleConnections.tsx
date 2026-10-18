@@ -7,6 +7,7 @@ import {
   type StoryThreadLabel,
 } from "./graph";
 import { roman } from "./roman";
+import { Icon } from "../ui/Icon";
 
 export type PeopleConnectionsProps = {
   graph: Graph;
@@ -156,6 +157,10 @@ function aliasesOf(character: Graph["characters"][number]): string[] {
   return "aliases" in character && Array.isArray(character.aliases)
     ? character.aliases
     : [];
+}
+
+function initialsOf(name: string): string {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
 }
 
 function threadStatement(
@@ -359,14 +364,16 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
   };
 
   return (
-    <section className="people-connections" aria-label="people and connections">
+    <section className="people-connections people-studio" aria-label="people and connections">
       <nav className="people-index" aria-label="Cast index">
         <header>
+          <span className="people-index-kicker">THE WORLD OF YOUR BOOK</span>
           <h2>People &amp; connections</h2>
-          <p>Choose a name to read their known ties.</p>
+          <p>{props.graph.characters.length} people from your completed pages.</p>
         </header>
         <label className="people-search">
           <span className="sr-only">Find a person</span>
+          <Icon name="search" size={15} />
           <input
             type="search"
             value={query}
@@ -425,15 +432,16 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
                       focusPerson(character.entity_id);
                     }}
                   >
-                    <span>
+                    <span className="person-monogram" aria-hidden="true">{initialsOf(character.canonical_name)}</span>
+                    <span className="people-person-copy">
                       {character.canonical_name}
                       {aliasesOf(character).length > 0 && (
                         <em className="people-aliases">
                           {aliasesOf(character).join(", ")}
                         </em>
                       )}
+                      <small>Introduced Ch. {roman(character.revealed_at)}</small>
                     </span>
-                    <small>Introduced Ch. {roman(character.revealed_at)}</small>
                   </button>
                   <span className="sr-only" id={descriptionId}>
                     {description}
@@ -562,15 +570,21 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
       ) : (
         <article className="person-entry" aria-live="polite" aria-atomic="true">
           <header className="person-entry-head">
-            <span className="smallcaps person-entry-kicker">
-              known through chapter {props.graph.as_of_chapter}
-            </span>
-            <h2>{focus.canonical_name}</h2>
+            <div className="person-entry-identity">
+              <span className="person-monogram person-monogram-large" aria-hidden="true">{initialsOf(focus.canonical_name)}</span>
+              <div>
+                <span className="smallcaps person-entry-kicker">
+                  <Icon name="shield" size={12} /> known through chapter {props.graph.as_of_chapter}
+                </span>
+                <h2>{focus.canonical_name}</h2>
+              </div>
+            </div>
             {aliasesOf(focus).length > 0 && (
               <p className="person-entry-aliases">
                 Also known as {aliasesOf(focus).join(", ")}
               </p>
             )}
+            <div className="person-entry-actions">
             <button
               type="button"
               className="person-introduction-link"
@@ -613,6 +627,7 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
                   : "Correct this name"}
               </button>
             )}
+            </div>
             {correctionOpen && props.onCorrectMemory && (
               <form
                 className="memory-correction-form"
@@ -679,7 +694,7 @@ export function PeopleConnections(props: PeopleConnectionsProps) {
           </header>
 
           <section className="connection-ledger">
-            <h3 className="smallcaps">known connections</h3>
+            <div className="connections-heading"><h3 className="smallcaps">known connections</h3><span>{connections.length} {connections.length === 1 ? "person" : "people"}</span></div>
             {connections.length > 0 ? (
               <ul aria-label={`Known connections for ${focus.canonical_name}`}>
                 {connections.map((connection) => (

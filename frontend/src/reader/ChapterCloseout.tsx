@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   api,
   type AskCitation,
@@ -14,11 +14,13 @@ import { assistRequest } from "./assistRequests";
 export function ChapterCloseout({
   bookId,
   chapter,
+  workspaceNavigation,
   onNavigate,
   onClose,
 }: {
   bookId: string;
   chapter: number;
+  workspaceNavigation?: ReactNode;
   onNavigate: (citation: AskCitation) => void;
   onClose: () => void;
 }) {
@@ -101,6 +103,7 @@ export function ChapterCloseout({
             Close
           </Button>
         </header>
+        {workspaceNavigation}
         <h2 id={titleId}>Chapter {roman(chapter)} closeout</h2>
         <p className="quiet">
           A few things worth carrying forward, using only this completed

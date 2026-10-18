@@ -45,10 +45,16 @@ describe("ReaderMarks", () => {
         onAssist={onAssist}
       />,
     );
+    expect(screen.queryByRole("button", { name: /^explain$/i })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /add a note/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^highlight$/i }));
     fireEvent.click(screen.getByRole("button", { name: /yellow highlight/i }));
     expect(onHighlight).toHaveBeenCalledWith("yellow");
+    fireEvent.click(screen.getByRole("button", { name: /^understand$/i }));
+    expect(screen.queryByRole("button", { name: /yellow highlight/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^explain$/i }));
     expect(onAssist).toHaveBeenCalledWith("explain");
+    fireEvent.click(screen.getByRole("button", { name: /^note$/i }));
     fireEvent.change(screen.getByLabelText(/add a note/i), {
       target: { value: "Remember this." },
     });
@@ -61,7 +67,7 @@ describe("ReaderMarks", () => {
   test("lists portable marks, navigates, exports, and restores focus on Escape", () => {
     const onNavigate = vi.fn();
     render(<ReaderMarks {...props} onNavigate={onNavigate} />);
-    const opener = screen.getByRole("button", { name: /^notes$/i });
+    const opener = screen.getByRole("button", { name: /^notebook$/i });
     fireEvent.click(opener);
     expect(
       screen.getByRole("link", { name: /export marks/i }).getAttribute("href"),
@@ -86,6 +92,7 @@ describe("ReaderMarks", () => {
     const { rerender } = render(
       <ReaderMarks {...props} status="" selection={selection} />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /^note$/i }));
     const note = screen.getByRole("textbox", {
       name: /add a note/i,
     }) as HTMLTextAreaElement;
@@ -102,5 +109,15 @@ describe("ReaderMarks", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "note could not be saved",
     );
+  });
+
+  test("filters the notebook without changing or losing saved marks", () => {
+    render(<ReaderMarks {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /^notebook$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^bookmarks/i }));
+    expect(screen.queryByRole("button", { name: /highlight · chapter 1/i })).toBeNull();
+    expect(screen.getByText("Nothing saved in this view yet.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^all/i }));
+    expect(screen.getByRole("button", { name: /highlight · chapter 1/i })).toBeTruthy();
   });
 });
