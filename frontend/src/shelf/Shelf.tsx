@@ -11,6 +11,7 @@ import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 import { ProviderSettings } from "./ProviderSettings";
 import { AiStatus } from "../ui/AiStatus";
+import "./shelf-redesign.css";
 
 const recentKey = (owner: string) => `litlet.library-recent:${owner}`;
 function readRecent(owner: string): string[] {
@@ -45,11 +46,17 @@ export function BookCover({
       className={`book-cover cover-${tone} ${className}`}
       aria-hidden="true"
     >
-      <span className="cover-edition">READING COMPANION</span>
+      <span className="cover-edition">THE READING COLLECTION</span>
       <span className="cover-title">{book.title}</span>
       <span className="cover-ornament">
         <span />
-        <Icon name="book" size={24} />
+        <svg viewBox="0 0 100 100" width="72" height="72" fill="none">
+          <circle cx="50" cy="50" r="31" />
+          <ellipse cx="50" cy="50" rx="15" ry="39" transform="rotate(35 50 50)" />
+          <ellipse cx="50" cy="50" rx="15" ry="39" transform="rotate(-35 50 50)" />
+          <path d="M11 50h78M50 11v78" />
+          <circle cx="50" cy="50" r="4" fill="currentColor" stroke="none" />
+        </svg>
         <span />
       </span>
       <span className="cover-author">{book.author || "Your collection"}</span>
@@ -70,6 +77,7 @@ export function Shelf({
   const [err, setErr] = useState<string | null>(null);
   const [settingsAvailable, setSettingsAvailable] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUtilities, setShowUtilities] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState<string | null>(null);
   const [offlineState, setOfflineState] = useState(() => ({
     owner,
@@ -197,6 +205,7 @@ export function Shelf({
     }
   };
   const featured = books?.find((book) => book.book_id === recent[0]);
+  const spotlight = featured ?? books?.[0];
   const filtered = (books ?? [])
     .filter(
       (book) =>
@@ -218,7 +227,7 @@ export function Shelf({
 
   return (
     <div
-      className={`library-shell ${dragging ? "is-dragging" : ""}`}
+      className={`library-shell library-studio ${dragging ? "is-dragging" : ""}`}
       onDragEnter={(event) => {
         if (!event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
@@ -256,7 +265,16 @@ export function Shelf({
             <strong>companion</strong>
           </span>
         </a>
-        <div className="sidebar-section-label">YOUR SPACE</div>
+        <button
+          className="studio-utilities-toggle"
+          aria-label="Library settings and account"
+          aria-expanded={showUtilities}
+          aria-controls="library-utilities"
+          onClick={() => setShowUtilities((current) => !current)}
+        >
+          <Icon name={showUtilities ? "close" : "settings"} size={20} />
+        </button>
+        <div className="sidebar-section-label">THE READING ROOM</div>
         <nav className="library-nav" aria-label="Your books">
           <button
             aria-label="All books"
@@ -302,12 +320,15 @@ export function Shelf({
         >
           Add a book
         </Button>
-        <div className="sidebar-bottom">
-          <AiStatus />
+        <div
+          className={`sidebar-bottom ${showUtilities ? "is-open" : ""}`}
+          id="library-utilities"
+        >
+          <AiStatus compact />
           <div className="sidebar-note">
-            <Icon name="shield" size={20} />
-            <strong>Your story. At your pace.</strong>
-            <p>Your companion only remembers the chapters you have finished.</p>
+            <span className="studio-note-mark"><Icon name="sparkle" size={25} /></span>
+            <strong>A little company.<br />A lot more story.</strong>
+            <p>Characters, connections, and a helping hand. Always within the chapters you’ve read.</p>
           </div>
           {settingsAvailable && (
             <Button
@@ -348,7 +369,7 @@ export function Shelf({
       </aside>
       <main id="library-main" className="library-main" tabIndex={-1}>
         <header className="library-topbar">
-          <span>My library</span>
+          <span className="studio-breadcrumb"><Icon name="library" size={16} /> Your personal reading room</span>
           <span className="safe-label">
             <Icon name="shield" size={15} />
             Spoiler safe, always
@@ -357,24 +378,23 @@ export function Shelf({
         <div className="library-content">
           <section className="library-intro">
             <div>
-              <p className="eyebrow">A GOOD PLACE TO GET LOST</p>
-              <h1>
-                {featured
-                  ? "Back to your story."
-                  : "Your next chapter starts here."}
-              </h1>
-              <p>Stay in the story. We’ll remember the details.</p>
+              <p className="eyebrow">A SPACE FOR YOUR STORIES</p>
+              <h1>Your reading room<span className="studio-heading-dot">.</span></h1>
+              <p>Get lost in a good book. Keep the whole story with you.</p>
             </div>
-            <Button
-              variant="primary"
-              icon="plus"
-              aria-label={busy ? "adding a book" : "add an epub"}
-              aria-busy={busy}
-              disabled={busy}
-              onClick={() => fileInput.current?.click()}
-            >
-              {busy ? "Adding your book…" : "Add a book"}
-            </Button>
+            <div className="studio-import-action">
+              <Button
+                variant="primary"
+                icon="plus"
+                aria-label={busy ? "adding a book" : "add an epub"}
+                aria-busy={busy}
+                disabled={busy}
+                onClick={() => fileInput.current?.click()}
+              >
+                {busy ? "Adding your book…" : "Add a book"}
+              </Button>
+              <span>Drop an EPUB anywhere</span>
+            </div>
           </section>
           {err && (
             <div className="notice notice--error" role="alert">
@@ -393,32 +413,50 @@ export function Shelf({
               )}
             </div>
           )}
-          {featured && filter === "all" && !query && (
+          {books !== null && filter === "all" && !query && (
             <section
-              className="continue-card"
-              aria-label="Recently opened book"
+              className={`continue-card ${spotlight ? "has-book" : "is-invitation"}`}
+              aria-label={featured ? "Recently opened book" : "Your next read"}
             >
-              <BookCover book={featured} className="continue-cover" />
               <div className="continue-copy">
-                <span className="eyebrow">PICK UP WHERE YOU LEFT OFF</span>
-                <h2>{featured.title}</h2>
-                <p className="continue-author">{featured.author}</p>
+                <span className="eyebrow"><span className="studio-live-dot" />{featured ? "YOUR STORY IS WAITING" : "THERE’S A WORLD IN EVERY BOOK"}</span>
+                <h2>{spotlight ? spotlight.title : <>A thousand worlds.<br /><em>One quiet place.</em></>}</h2>
+                {spotlight && <p className="continue-author">{spotlight.author || "From your collection"}</p>}
                 <p className="continue-description">
-                  The next page is waiting. Your place and story memory are
-                  right where you left them.
+                  {featured
+                    ? "Slip back into the story. Your place, characters, and connections are right where you left them."
+                    : spotlight
+                      ? "Open a new world. Your companion will help you remember the people, places, and details along the way."
+                      : "Bring a book you love. We’ll help you follow the characters, connect the details, and find your way back in."}
                 </p>
                 <Button
                   variant="primary"
                   icon="arrowRight"
-                  onClick={() => openBook(featured.book_id)}
+                  disabled={!spotlight && busy}
+                  onClick={() => spotlight ? openBook(spotlight.book_id) : fileInput.current?.click()}
                 >
-                  Continue reading
+                  {featured ? "Continue reading" : spotlight ? "Start reading" : "Bring your first book"}
                 </Button>
+                <span className="studio-hero-footnote"><Icon name="shield" size={13} /> A companion that never reads ahead</span>
               </div>
-              <div className="continue-art" aria-hidden="true">
-                <span />
-                <span />
-                <Icon name="book" size={48} />
+              <div className="studio-book-stage" aria-hidden="true">
+                <span className="studio-orbit studio-orbit-one" />
+                <span className="studio-orbit studio-orbit-two" />
+                <span className="studio-orbit-dot" />
+                <span className="studio-star studio-star-one">✦</span>
+                <span className="studio-star studio-star-two">✧</span>
+                <div className="studio-book-object">
+                  <span className="studio-book-pages" />
+                  {spotlight ? <BookCover book={spotlight} className="continue-cover" /> : (
+                    <span className="book-cover studio-invitation-cover">
+                      <span className="cover-edition">A NEW ADVENTURE AWAITS</span>
+                      <span className="cover-title">The next<br /><em>chapter</em></span>
+                      <span className="studio-cover-sun">✷</span>
+                      <span className="cover-author">Yours to discover</span>
+                    </span>
+                  )}
+                </div>
+                <span className="studio-stage-caption">A GOOD PLACE TO GET LOST</span>
               </div>
             </section>
           )}
@@ -427,14 +465,14 @@ export function Shelf({
             aria-labelledby="collection-title"
           >
             <div className="collection-heading">
-              <h2 id="collection-title">
+              <div className="studio-collection-title"><p className="eyebrow">YOUR COLLECTION</p><h2 id="collection-title">
                 {filter === "recent"
                   ? "Recently opened"
                   : filter === "offline"
                     ? "Available offline"
                     : "Your books"}
                 <span>{books ? filtered.length : ""}</span>
-              </h2>
+              </h2></div>
               <div className="collection-tools">
                 <label className="library-search">
                   <Icon name="search" size={17} />
@@ -508,7 +546,7 @@ export function Shelf({
                       }
                       onClick={() => openBook(book.book_id)}
                     >
-                      <BookCover book={book} />
+                      <span className="studio-card-cover"><BookCover book={book} /><span className="studio-open-cue"><Icon name="book" size={15} /> Open book <Icon name="arrowRight" size={15} /></span></span>
                       <span className="book-metadata">
                         <span
                           className="book-title"
@@ -591,6 +629,7 @@ export function Shelf({
                           ? "Open a book and it will be easy to find here."
                           : "Add a DRM-free EPUB. Your companion will follow along, one chapter at a time."}
                   </p>
+                  {!query && filter === "all" && <div className="studio-empty-steps" aria-label="Getting started"><span><b>01</b> Add an EPUB</span><span><b>02</b> Find your next chapter</span><span><b>03</b> Let your companion follow along</span></div>}
                   {query || filter !== "all" ? (
                     <Button
                       onClick={() => {

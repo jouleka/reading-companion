@@ -1,7 +1,7 @@
 /** The catch-me-up HERO (LIT-14): a full "the story so far" view over the clamped /catch-me-up route.
  * It is a dialog — focus moves in, Escape closes, focus restores (the LIT-16 pattern) — and it renders
  * ONLY the server-clamped recap/cast/threads (never client-computed or future data). */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { axeAA } from "../test-a11y";
 
@@ -24,11 +24,28 @@ beforeEach(() => {
   mocks.catchMeUp.mockReset();
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("CatchMeUp hero", () => {
+  test("explains a slow recap and keeps a reading exit available", async () => {
+    vi.useFakeTimers();
+    mocks.catchMeUp.mockReturnValue(new Promise(() => {}));
+    render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    expect(screen.getByText("Preparing your recap")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(8_000); });
+    expect(screen.getByText("This is taking longer than usual.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Keep reading" })).toBeTruthy();
+  });
+
+  test("a timeout is not misreported as a spoiler rejection", async () => {
+    mocks.catchMeUp.mockRejectedValue(Object.assign(new Error("timeout"), { status: 504, code: "recap_timeout" }));
+    render(<CatchMeUp bookId="b" bookmark={4} totalAtoms={96} onClose={() => {}} />);
+    expect(await screen.findByText(/taking longer than expected/i)).toBeTruthy();
+    expect(screen.queryByText(/did not pass the spoiler gate/i)).toBeNull();
+  });
   test("renders the recap prose, cast size and open threads once loaded", async () => {
     mocks.catchMeUp.mockResolvedValue(recap);
     render(

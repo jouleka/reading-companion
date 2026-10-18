@@ -49,6 +49,7 @@ describe("ReaderNavigation", () => {
     const onSearchNavigate = vi.fn();
     render(<ReaderNavigation {...props} onSearchNavigate={onSearchNavigate} />);
     fireEvent.click(screen.getByRole("button", { name: /^contents$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /search pages/i }));
     fireEvent.change(screen.getByRole("searchbox", { name: /find in pages/i }), {
       target: { value: "lantern" },
     });
@@ -72,5 +73,21 @@ describe("ReaderNavigation", () => {
     fireEvent.keyDown(screen.getByRole("region", { name: /book navigation/i }), { key: "Escape" });
     expect(screen.queryByRole("region", { name: /book navigation/i })).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+
+  test("Contents and Search use keyboard tabs without competing for attention", () => {
+    render(<ReaderNavigation {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /^contents$/i }));
+    const contents = screen.getByRole("tab", { name: /^contents$/i });
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    fireEvent.keyDown(contents, { key: "ArrowRight" });
+    const search = screen.getByRole("tab", { name: /search pages/i });
+    expect(search.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(search);
+    expect(screen.queryByRole("navigation", { name: /table of contents/i })).toBeNull();
+    expect(screen.getByRole("searchbox")).toBeTruthy();
+    fireEvent.keyDown(search, { key: "Home" });
+    expect(document.activeElement).toBe(contents);
+    expect(contents.getAttribute("aria-selected")).toBe("true");
   });
 });

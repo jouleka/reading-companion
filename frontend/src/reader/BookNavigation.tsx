@@ -87,6 +87,7 @@ export function ReaderNavigation({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ReaderSearchResult[]>([]);
   const [searchState, setSearchState] = useState<SearchState>("idle");
+  const [view, setView] = useState<"contents" | "search">("contents");
   const searchRequest = useRef(0);
 
   useEffect(
@@ -167,6 +168,36 @@ export function ReaderNavigation({
               <span>forward</span> <Icon name="arrowRight" size={16} />
             </Button>
           </div>
+          <div
+            className="navigation-views"
+            role="tablist"
+            aria-label="Navigate your book"
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const next = event.key === "Home" ? "contents" : event.key === "End" ? "search" : view === "contents" ? "search" : "contents";
+              setView(next);
+              event.currentTarget.querySelector<HTMLButtonElement>(`[data-view="${next}"]`)?.focus();
+            }}
+          >
+            {(["contents", "search"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                id={`${id}-${item}-tab`}
+                data-view={item}
+                aria-controls={`${id}-${item}-panel`}
+                aria-selected={view === item}
+                tabIndex={view === item ? 0 : -1}
+                onClick={() => setView(item)}
+              >
+                <Icon name={item === "contents" ? "list" : "search"} size={16} />
+                {item === "contents" ? "Contents" : "Search pages"}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id={`${id}-search-panel`} aria-labelledby={`${id}-search-tab`} hidden={view !== "search"}>
           <form
             className="book-search"
             role="search"
@@ -240,6 +271,8 @@ export function ReaderNavigation({
               ))}
             </ol>
           )}
+          </div>
+          <div role="tabpanel" id={`${id}-contents-panel`} aria-labelledby={`${id}-contents-tab`} hidden={view !== "contents"}>
           <nav className="reader-toc" aria-label="Table of contents">
             {toc.length > 0 ? (
               <TocBranch
@@ -255,6 +288,7 @@ export function ReaderNavigation({
               <p className="quiet">This book has no table of contents.</p>
             )}
           </nav>
+          </div>
         </section>
       )}
     </div>

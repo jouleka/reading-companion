@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Icon } from "../ui/Icon";
 import { Button } from "../ui/Button";
 import { useReaderPopover } from "../ui/useReaderPopover";
+import "./reading-tools-redesign.css";
 import type {
   PreferenceSaveStatus,
   ReaderPreferences,
@@ -79,12 +81,44 @@ export function ReaderControls({
 }) {
   const { open, closing, id, triggerRef, panelRef, toggle, close } =
     useReaderPopover();
+  const [customizing, setCustomizing] = useState(false);
   const statusLabel =
     status === "error"
       ? "appearance not synced"
       : status === "saved"
         ? "appearance saved"
         : "saving appearance";
+  const renderGroup = (group: (typeof GROUPS)[number]) => (
+    <fieldset
+      key={group.key}
+      className={`appearance-group appearance-group--${group.key}`}
+    >
+      <legend>{group.label}</legend>
+      <div className="preset-row">
+        {group.choices.map((choice) => (
+          <label key={choice.value}>
+            <input
+              type="radio"
+              name={`${id}-${group.key}`}
+              value={choice.value}
+              checked={preferences[group.key] === choice.value}
+              onChange={() =>
+                onChange({ ...preferences, [group.key]: choice.value })
+              }
+            />
+            <span data-preset={choice.value}>
+              {group.key === "theme" && (
+                <span className="appearance-theme-sample" aria-hidden="true">
+                  Aa
+                </span>
+              )}
+              {choice.label}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 
   return (
     <div className="reader-controls">
@@ -122,31 +156,43 @@ export function ReaderControls({
               <Icon name="close" />
             </Button>
           </div>
-          <div className="appearance-groups">
-            {GROUPS.map((group) => (
-              <fieldset key={group.key}>
-                <legend>{group.label}</legend>
-                <div className="preset-row">
-                  {group.choices.map((choice) => (
-                    <label key={choice.value}>
-                      <input
-                        type="radio"
-                        name={`${id}-${group.key}`}
-                        value={choice.value}
-                        checked={preferences[group.key] === choice.value}
-                        onChange={() =>
-                          onChange({
-                            ...preferences,
-                            [group.key]: choice.value,
-                          })
-                        }
-                      />
-                      <span>{choice.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            ))}
+          <div className="appearance-preview-frame">
+            <div
+              className="appearance-preview"
+              aria-label="Reading preview"
+              data-preview-theme={preferences.theme}
+              data-preview-size={preferences.font_size}
+              data-preview-spacing={preferences.line_height}
+              data-preview-measure={preferences.measure}
+              data-preview-margins={preferences.margins}
+              data-preview-typeface={preferences.typeface}
+            >
+              <span className="appearance-preview-kicker">A moment to read</span>
+              <p>
+                The evening settled softly around the room. For a little while,
+                there was only the quiet pleasure of another page.
+              </p>
+            </div>
+            <span className="appearance-preview-caption">Make the page feel like yours.</span>
+          </div>
+          <div className="appearance-groups appearance-essentials">
+            {renderGroup(GROUPS.find((group) => group.key === "theme")!)}
+            {renderGroup(GROUPS.find((group) => group.key === "font_size")!)}
+          </div>
+          <div className="appearance-customize">
+            <button
+              type="button"
+              className="appearance-customize-toggle"
+              aria-expanded={customizing}
+              aria-controls={`${id}-customize`}
+              onClick={() => setCustomizing((value) => !value)}
+            >
+              <span><strong>Customize</strong><small>Font, spacing &amp; layout</small></span>
+              <Icon name="chevronDown" size={16} />
+            </button>
+            <div id={`${id}-customize`} className="appearance-groups appearance-advanced" hidden={!customizing}>
+              {GROUPS.filter((group) => group.key !== "theme" && group.key !== "font_size").map(renderGroup)}
+            </div>
           </div>
           <p
             className={`preference-status ${status}`}

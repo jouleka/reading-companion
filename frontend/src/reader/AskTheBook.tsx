@@ -1,4 +1,13 @@
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type MutableRefObject,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { api, type AskAnswer, type AskCitation } from "../api";
 import { Button } from "../ui/Button";
 import { AiStatus } from "../ui/AiStatus";
@@ -6,29 +15,84 @@ import { useDialogMotion } from "../ui/useDialogMotion";
 import { keepTabFocusInside } from "./focusTrap";
 import { ProviderCost } from "./ProviderCost";
 import { roman } from "./roman";
+import { Icon } from "../ui/Icon";
+import { activeOfflineOwner } from "../pwa/offline";
+
+type AskSnapshot = {
+  question: string;
+  answer: AskAnswer | null;
+  busy: boolean;
+  error: string;
+};
+
+/** Owned by the mounted reader, never persisted. A pending request survives workspace tab changes. */
+export type AskSession = {
+  readonly bookId: string;
+  readonly bookmark: number;
+  readonly owner: string;
+  getSnapshot: () => AskSnapshot;
+  subscribe: (listener: () => void) => () => void;
+  update: (changes: Partial<AskSnapshot>) => void;
+};
+
+function createAskSession(bookId: string, bookmark: number, owner: string): AskSession {
+  let snapshot: AskSnapshot = { question: "", answer: null, busy: false, error: "" };
+  const listeners = new Set<() => void>();
+  return {
+    bookId,
+    bookmark,
+    owner,
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    update: (changes) => {
+      snapshot = { ...snapshot, ...changes };
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
 
 export function AskTheBook({
   bookId,
   bookmark,
   onNavigate,
   onClose,
+  workspaceNavigation,
+  sessionRef,
 }: {
   bookId: string;
   bookmark: number;
   onNavigate: (citation: AskCitation) => void;
   onClose: () => void;
+  workspaceNavigation?: ReactNode;
+  sessionRef?: MutableRefObject<AskSession | null>;
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<AskAnswer | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [prepared, setPrepared] = useState<{ bookId: string; bookmark: number; questions: string[] } | null>(null);
+  const localSessionRef = useRef<AskSession | null>(null);
+  const retainedSession = sessionRef ?? localSessionRef;
+  const owner = activeOfflineOwner();
+  if (
+    !retainedSession.current ||
+    retainedSession.current.bookId !== bookId ||
+    retainedSession.current.bookmark !== bookmark ||
+    retainedSession.current.owner !== owner
+  ) {
+    retainedSession.current = createAskSession(bookId, bookmark, owner);
+  }
+  const session = retainedSession.current;
+  const { question, answer, busy, error } = useSyncExternalStore(
+    session.subscribe,
+    session.getSnapshot,
+    session.getSnapshot,
+  );
+  const setQuestion = (value: string) => session.update({ question: value });
+  const [prepared, setPrepared] = useState<{ bookId: string; bookmark: number; owner: string; questions: string[] } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const onCloseRef = useRef(requestClose);
   onCloseRef.current = requestClose;
-  const requestRef = useRef(0);
   const triggerRef = useRef<HTMLElement | null>(null);
   if (triggerRef.current === null)
     triggerRef.current = document.activeElement as HTMLElement | null;
@@ -37,6 +101,8 @@ export function AskTheBook({
 
   useEffect(() => {
     inputRef.current?.focus();
+    if (inputRef.current?.disabled)
+      rootRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -54,50 +120,48 @@ export function AskTheBook({
   }, []);
 
   useEffect(() => {
-    requestRef.current += 1;
-    setAnswer(null);
-    setError("");
-    setBusy(false);
-    return () => {
-      requestRef.current += 1;
-    };
-  }, [bookId, bookmark]);
-
-  useEffect(() => {
     let active = true;
     void api.preparedQuestions(bookId, bookmark).then((result) => {
-      if (active && result.as_of_chapter <= bookmark) {
-        setPrepared({ bookId, bookmark, questions: result.questions });
+      if (active && owner === activeOfflineOwner() && result.as_of_chapter <= bookmark) {
+        setPrepared({ bookId, bookmark, owner, questions: result.questions });
       }
     }).catch(() => { /* Suggestions remain available when preparation is unavailable. */ });
     return () => { active = false; };
-  }, [bookId, bookmark]);
+  }, [bookId, bookmark, owner]);
 
-  const suggestions = prepared?.bookId === bookId && prepared.bookmark === bookmark && prepared.questions.length
+  const suggestions = prepared?.bookId === bookId && prepared.bookmark === bookmark && prepared.owner === owner && prepared.questions.length
     ? prepared.questions
     : ["What should I remember so far?", "What are the key connections?"];
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const value = question.trim();
-    if (value.length < 2 || busy) return;
-    const request = ++requestRef.current;
-    setBusy(true);
-    setError("");
-    setAnswer(null);
+    if (retainedSession.current !== session || owner !== activeOfflineOwner()) {
+      session.update({ question: "", answer: null, busy: false, error: "" });
+      return;
+    }
+    const snapshot = session.getSnapshot();
+    const value = snapshot.question.trim();
+    if (value.length < 2 || snapshot.busy) return;
+    session.update({ busy: true, error: "", answer: null });
+    const isCurrentSession = () =>
+      retainedSession.current === session && owner === activeOfflineOwner();
     try {
       const result = await api.askBook(bookId, value, bookmark);
-      if (request === requestRef.current) setAnswer(result);
+      if (isCurrentSession()) {
+        if (result.as_of_chapter > bookmark)
+          throw new Error("The answer could not be verified against your completed chapters. Please try again.");
+        session.update({ answer: result });
+      }
     } catch (reason) {
-      if (request === requestRef.current) {
-        setError(
-          reason instanceof Error
+      if (isCurrentSession()) {
+        session.update({
+          error: reason instanceof Error
             ? reason.message
             : "The book could not answer right now.",
-        );
+        });
       }
     } finally {
-      if (request === requestRef.current) setBusy(false);
+      if (isCurrentSession()) session.update({ busy: false });
     }
   };
 
@@ -117,9 +181,9 @@ export function AskTheBook({
       aria-labelledby={titleId}
       ref={rootRef}
     >
-      <article className="hero-page ask-page">
+      <article className="hero-page ask-page ask-studio">
         <header className="hero-head">
-          <span className="smallcaps hero-eyebrow">cited companion</span>
+          <span className="smallcaps hero-eyebrow"><Icon name="sparkle" size={15} /> ROOM FOR CURIOSITY</span>
           <Button
             variant="ghost"
             icon="close"
@@ -129,15 +193,22 @@ export function AskTheBook({
             Close
           </Button>
         </header>
-        <h2 id={titleId}>Ask the Book</h2>
+        {workspaceNavigation}
+        <div className="ask-heading">
+          <div>
+            <h2 id={titleId}>Ask the Book</h2>
+            <p className="ask-tagline">Follow your curiosity.<br /> Keep the mystery.</p>
+          </div>
+          <div className="ask-spark" aria-hidden="true"><Icon name="sparkle" size={42} /></div>
+        </div>
+        <div className="ask-boundary"><Icon name="shield" size={14} /> Spoiler safe through chapter {roman(bookmark)}</div>
         <p id={helpId} className="quiet ask-intro">
-          Ask about pages you have completed through chapter {roman(bookmark)}.
-          Answers use only the cited passages; if those pages do not establish
-          an answer, the companion will say so.
+          Explore a person, a moment, or an idea from your completed chapters.
+          Every answer points back to the pages. When there is not enough evidence, we’ll say so.
         </p>
-        <AiStatus />
+        <AiStatus compact />
         <form className="ask-form" onSubmit={(event) => void submit(event)}>
-          <label htmlFor={`${titleId}-question`}>Your question</label>
+          <div className="ask-composer-head"><label htmlFor={`${titleId}-question`}>Your question</label><span>{question.length} / 500</span></div>
           <textarea
             ref={inputRef}
             id={`${titleId}-question`}
@@ -150,8 +221,28 @@ export function AskTheBook({
             disabled={busy}
             onChange={(event) => setQuestion(event.currentTarget.value)}
           />
-          {!answer && !busy && (
-            <div className="ask-suggestions" aria-label="Suggested questions">
+          <div className="ask-composer-footer">
+            <span><Icon name="book" size={14} /> Grounded in your book</span>
+            <Button
+              type="submit"
+              variant="primary"
+              icon="sparkle"
+              disabled={busy || question.trim().length < 2}
+              aria-busy={busy}
+            >
+              {busy
+                ? "Checking the pages…"
+                : error
+                  ? "Try again"
+                  : "Ask with citations"}
+            </Button>
+          </div>
+        </form>
+
+        {!answer && !busy && (
+          <section className="ask-starters" aria-label="Suggested questions">
+            <h3>A place to begin</h3>
+            <div className="ask-suggestions">
               {suggestions.map((prompt) => (
                 <Button
                   key={prompt}
@@ -161,31 +252,20 @@ export function AskTheBook({
                     inputRef.current?.focus();
                   }}
                 >
-                  {prompt}
+                  <span>{prompt}</span><Icon name="arrowRight" size={15} />
                 </Button>
               ))}
             </div>
-          )}
-          <Button
-            type="submit"
-            variant="primary"
-            icon="sparkle"
-            disabled={busy || question.trim().length < 2}
-            aria-busy={busy}
-          >
-            {busy
-              ? "Checking the pages…"
-              : error
-                ? "Try again"
-                : "Ask with citations"}
-          </Button>
-        </form>
+          </section>
+        )}
 
         <div
           className="ask-status"
           role="status"
           aria-live="polite"
           aria-atomic="true"
+          data-busy={busy || undefined}
+          data-error={error ? true : undefined}
         >
           {busy
             ? "Searching only the chapters you have completed…"
@@ -199,12 +279,13 @@ export function AskTheBook({
 
         {answer?.insufficient_evidence && (
           <section className="ask-answer" aria-label="Answer">
+            <span className="ask-answer-eyebrow"><Icon name="book" size={15} /> A little more reading may reveal it</span>
             <p>The pages you have completed do not establish an answer yet.</p>
           </section>
         )}
         {answer && !answer.insufficient_evidence && (
           <section className="ask-answer" aria-label="Answer">
-            <h3>From what you have read</h3>
+            <h3><Icon name="sparkle" size={15} /> From what you have read</h3>
             {answer.claims.map((claim, index) => (
               <p key={`${index}-${claim.text}`}>
                 {claim.text}{" "}
@@ -229,6 +310,7 @@ export function AskTheBook({
                 </span>
               </p>
             ))}
+            <div className="ask-sources-heading"><h4>Back to the pages</h4><span>{answer.citations.length} cited {answer.citations.length === 1 ? "passage" : "passages"}</span></div>
             <ol className="ask-sources" aria-label="Cited passages">
               {answer.citations.map((citation) => (
                 <li key={citation.id}>
@@ -237,9 +319,7 @@ export function AskTheBook({
                     className="plain"
                     onClick={() => openCitation(citation)}
                   >
-                    <span>
-                      {citation.title || `Chapter ${roman(citation.ordinal)}`}
-                    </span>
+                    <span className="ask-source-location"><span className="ask-source-number" aria-hidden="true">{citation.id}</span><span>{citation.title || `Chapter ${roman(citation.ordinal)}`}</span><Icon name="arrowRight" size={14} /></span>
                     <q>{citation.excerpt}</q>
                   </button>
                 </li>

@@ -29,8 +29,8 @@ export function presentationFor(bookType: BookType): BookPresentation {
     return {
       unit: "chapter",
       recapLink: "the story so far",
-      codexLink: "the codex",
-      codexTitle: "the codex",
+      codexLink: "People & chapters",
+      codexTitle: "People & chapters",
       breakdownTitle: "the story so far, chapter by chapter",
       peopleMode: "primary",
       peopleLabel: "cast so far",

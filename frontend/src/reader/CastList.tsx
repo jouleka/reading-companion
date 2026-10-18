@@ -87,8 +87,8 @@ export function CastList({
           className={`cast-item${c.entity_id === focusId ? " is-focus" : ""}`}
           onClick={() => onFocus(c.entity_id)}
         >
-          {c.canonical_name}
-          {c.type !== "character" ? ` (${c.type})` : ""}
+          <span className="cast-monogram" aria-hidden="true">{c.canonical_name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("")}</span>
+          <span>{c.canonical_name}{c.type !== "character" ? ` (${c.type})` : ""}</span>
         </li>
       ))}
     </ul>

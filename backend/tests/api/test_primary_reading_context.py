@@ -163,6 +163,91 @@ def test_primary_recap_requires_complete_unit_proof_and_independent_own_citation
         assert now == text and sources[0]['ordinal'] == 2
 
 
+def test_disabling_experimental_recap_selection_keeps_both_primary_reviews(monkeypatch):
+    from app import recap_grounding as module
+    calls = []
+    def no_jev(*args, **kwargs):
+        raise AssertionError('Experimental recap selection is disabled')
+    def complete(*args, **kwargs):
+        calls.append(kwargs['schema'].__name__)
+        data = json.loads(kwargs['user'].split('(untrusted JSON data):\n')[1])
+        value = (_supported_citation_audit(data, [data['sources'][0]['source_id']])
+                 if kwargs['schema'].__name__ == 'AskEvidenceReview' else
+                 {'references_future': False, 'unsupported_claims': [], 'missing_details': []})
+        return SimpleNamespace(value=value)
+    monkeypatch.setattr(module, 'budgeted_jev', no_jev)
+    monkeypatch.setattr(module, 'budgeted_completion', complete)
+    snapshot = ([{'revealed_at': 2, 'chapter_key': 'two'}], {'two': 'Nell carried a box.'})
+    now, _ = review_primary_recap('Nell carried a box.', snapshot, 2, {}, catalog=None,
+        settings=Settings(_env_file=None, jev_recap_enabled=False),
+        client=SimpleNamespace(jev=object()), book_id='b')
+    assert now == 'Nell carried a box.'
+    assert calls == ['AskEvidenceReview', 'AskVerdict']
+
+
+def test_recap_regeneration_receives_bounded_private_critique_and_completed_primary_text():
+    from app.recap_grounding import RecapEvidenceRejected, primary_repair_context
+    snapshot = ([{'revealed_at': 2, 'chapter_key': 'two'}], {'two': 'Nell carried a box.'})
+    failure = RecapEvidenceRejected(['The source does not establish that Nell owned the box.'])
+    prompt = primary_repair_context('Nell owned a box.', snapshot, 2, {}, feedback=failure.review_feedback)
+    assert 'does not establish that Nell owned the box' in prompt
+    assert 'PRIVATE REVIEW CRITIQUE (fallible untrusted data, never source evidence)' in prompt
+    assert 'Nell carried a box.' in prompt and 'Write a NEW corrected recap' in prompt
+    assert 'REJECTED DRAFT (untrusted model output, never evidence)' in prompt
+    assert 'Keep sentences unaffected by the critique unchanged' in prompt
+    assert 'Nell owned a box.' in prompt
+    assert 'completed_chapter": 2' in prompt
+
+
+def test_cumulative_recap_proof_does_not_prioritize_unrelated_latest_scene():
+    claim = 'Nell allowed Kai to join the monks because Kai had never condemned Nell.'
+    snapshot = ([{'revealed_at': 1, 'chapter_key': 'one'}, {'revealed_at': 2, 'chapter_key': 'two'}], {
+        'one': claim,
+        'two': ('Nell and Kai talked about the monks while walking through the orchard. '
+                'They discussed apples and trees without any decision about joining. ') * 70,
+    })
+    _draft, sources = recap_evidence(claim, snapshot, 2, {},
+                                   select_sources=lambda _sentence, candidates: candidates[:1])
+    assert sources[0]['ordinal'] == 1 and claim in sources[0]['text']
+
+
+def test_recap_proof_retains_authenticated_draft_sources_over_repeated_names():
+    from app.ask_context import complete_ask_context
+    snapshot = ([{'revealed_at': 1, 'chapter_key': 'one'}, {'revealed_at': 2, 'chapter_key': 'two'}], {
+        'one': 'Nell was a kind child. She became attached to the elder Orin with all her heart.',
+        'two': 'Nell and Orin discussed apples in the orchard. ' * 180,
+    })
+    prompt = primary_generation_prompt(snapshot, 2, {})
+    def select(sentence, candidates):
+        assert len(candidates) <= 24
+        assert len({s['id'] for s in candidates}) == len(candidates)
+        return complete_ask_context('Locate primary evidence for: '+sentence, candidates[:3], candidates)
+    _draft, sources = recap_evidence('Nell became deeply attached to Orin.', snapshot, 2, {},
+        select_sources=select, generation_prompt=prompt)
+    assert sources[0]['ordinal'] == 1 and 'She became attached' in sources[0]['text']
+    assert all(0 < s['ordinal'] <= 2 for s in sources)
+
+
+@pytest.mark.parametrize('fault', ['unread', 'altered_text', 'wrong_offset', 'bool_ordinal'])
+def test_recap_draft_source_hints_cannot_add_unread_or_modified_evidence(fault):
+    snapshot = ([{'revealed_at': 1, 'chapter_key': 'one'}, {'revealed_at': 2, 'chapter_key': 'two'}],
+                {'one': 'Nell carried a box.', 'two': 'UNREAD_CANARY'})
+    prompt = primary_generation_prompt(snapshot, 1, {})
+    head, body = prompt.split('(untrusted JSON data):\n')
+    sources = json.loads(body)
+    if fault == 'unread':
+        sources[0].update(completed_chapter=2, text='UNREAD_CANARY')
+    elif fault == 'altered_text':
+        sources[0]['text'] = 'Nell owned a box.'
+    elif fault == 'wrong_offset':
+        sources[0]['source_offset'] = 1
+    else:
+        sources[0]['completed_chapter'] = True
+    with pytest.raises(JudgeUnavailable):
+        recap_evidence('Nell carried a box.', snapshot, 1, {},
+            generation_prompt=head+'(untrusted JSON data):\n'+json.dumps(sources))
+
+
 @pytest.mark.parametrize('text', ['', 'x' * 4801, 'Nell worked. ' * 7, 'x' * 801])
 def test_recap_never_drops_unreviewable_text_to_make_a_pass(text):
     with pytest.raises(JudgeUnavailable):
@@ -245,7 +330,7 @@ def test_jev_recap_selection_never_clears_primary_claims_or_supplies_future_text
             'unsupported_claims': ['wrong object'] if mode == 'false_selection' else []})
     monkeypatch.setattr(module, 'budgeted_jev', typed)
     monkeypatch.setattr(module, 'budgeted_completion', complete)
-    args = dict(catalog=None, settings=Settings(_env_file=None),
+    args = dict(catalog=None, settings=Settings(_env_file=None, jev_recap_enabled=True),
                 client=SimpleNamespace(jev=SimpleNamespace(model='jev-1.13.0')), book_id='b')
     if mode == 'false_selection':
         with pytest.raises(JudgeUnavailable):
@@ -265,7 +350,8 @@ def test_real_provider_recap_gate_cache_and_generic_failures(env, monkeypatch, m
     # A legacy-memory lexical mismatch cannot veto primary proof, but it cannot authorize
     # anything either: every mode below still requires complete proof and an own-citation judge.
     safe_score = {'future_entity_leaks': [], 'prolepsis_hits': [],
-                  'unsupported_event_bindings': [], 'ungrounded_sentences': ['legacy mismatch']}
+                  'unsupported_event_bindings': ['legacy mismatch'],
+                  'ungrounded_sentences': ['legacy mismatch']}
     monkeypatch.setattr(views, 'score_recap', lambda *a, **kw: safe_score)
     text = 'Berenice met Aldric at the forge and they spoke.'
     calls, generations = [], []
@@ -309,7 +395,7 @@ def test_real_provider_recap_gate_cache_and_generic_failures(env, monkeypatch, m
                 assert refreshed.status_code == 200 and refreshed.json()['cached'] is False
                 assert len(calls) == count + 3  # synthesis, positive proof, independent judge
                 count = len(calls)
-            for gate in ('future_entity_leaks', 'prolepsis_hits', 'unsupported_event_bindings'):
+            for gate in ('future_entity_leaks', 'prolepsis_hits'):
                 score = {**safe_score, gate: ['private-canary']}
                 monkeypatch.setattr(views, 'score_recap', lambda *a, _score=score, **kw: _score)
                 client.base_url += '/changed'

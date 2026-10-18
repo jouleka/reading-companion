@@ -120,7 +120,7 @@ describe("Companion", () => {
       />,
     );
     await screen.findByText(/did not pass the spoiler gate/i);
-    fireEvent.click(screen.getByRole("button", { name: /the codex/i }));
+    fireEvent.click(screen.getByRole("button", { name: /people & chapters/i }));
     expect(onOpenCodex).toHaveBeenCalledTimes(1);
   });
 
@@ -141,6 +141,16 @@ describe("Companion", () => {
       screen.getByRole("button", { name: /close out chapter iii/i }),
     );
     expect(onOpenCloseout).toHaveBeenCalledTimes(1);
+  });
+
+  test("workspace reflection readiness follows preparation at the current bookmark", async () => {
+    const onReady = vi.fn();
+    mocks.ingest.mockResolvedValue({ ...ingestDone, ingest_progress: 3 });
+    mocks.catchMeUp.mockResolvedValue(cmu(3));
+    const { rerender } = render(<Companion bookId="b" bookmark={3} totalAtoms={96} onCloseoutReadinessChange={onReady} />);
+    await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(3));
+    rerender(<Companion bookId="b" bookmark={4} totalAtoms={96} onCloseoutReadinessChange={onReady} />);
+    await waitFor(() => expect(onReady).toHaveBeenLastCalledWith(null));
   });
 
   test("keeps the Codex available and reports rejected provider credentials truthfully", async () => {
@@ -166,7 +176,7 @@ describe("Companion", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/spoiler gate/i)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /the codex/i }));
+    fireEvent.click(screen.getByRole("button", { name: /people & chapters/i }));
     expect(onOpenCodex).toHaveBeenCalledTimes(1);
   });
 
@@ -234,7 +244,7 @@ describe("Companion", () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry companion" }));
     });
     expect(mocks.ingest).toHaveBeenCalledTimes(10);
-    expect(mocks.catchMeUp).toHaveBeenCalledWith("b");
+    expect(mocks.catchMeUp).toHaveBeenCalledWith("b", 3);
     expect(screen.getByText(/just met at the forge/i)).toBeTruthy();
     expect(
       screen.queryByText(/updates are temporarily unavailable/i),

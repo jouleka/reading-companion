@@ -89,6 +89,7 @@ class _BookRequestLockEntry:
 
     def __init__(self, lock=None, refcount=0):
         self.lock = lock or asyncio.Lock()
+        self.position_lock = asyncio.Lock()
         self.refcount = refcount
         self.readers = 0
         self.readers_done = asyncio.Event()
@@ -96,7 +97,7 @@ class _BookRequestLockEntry:
 
 
 async def book_lifecycle(book_id: str, request: Request):
-    """Keep mutations exclusive while allowing answers and recap preparation to share reads.
+    """Protect the book lifecycle without making provider IO block reading or progress.
 
     The lock registry is created by the app lifespan and is intentionally scoped to that app's one
     event loop. Tests must acquire these locks on the TestClient lifespan loop rather than carrying
@@ -109,15 +110,24 @@ async def book_lifecycle(book_id: str, request: Request):
     entry.refcount += 1
     try:
         path = getattr(getattr(request, "url", None), "path", "")
+        method = getattr(request, "method", "")
+        position_write = method == "PUT" and path.endswith("/position")
         shared_read = (getattr(request, "recap_preparation", False)
-                       or (request.method == "POST" and path.endswith("/ask"))
-                       or (request.method == "GET" and path.endswith("/catch-me-up")))
+                       or method == "GET"
+                       or (method == "POST" and path.endswith("/ask"))
+                       or position_write)
         if shared_read:
             async with entry.lock:
                 entry.readers += 1
                 entry.readers_done.clear()
             try:
-                yield
+                if position_write:
+                    # Progress keeps its incarnation/reset lease through validation, commit and
+                    # enqueue, but only other progress reports need to wait for that transition.
+                    async with entry.position_lock:
+                        yield
+                else:
+                    yield
             finally:
                 entry.readers -= 1
                 if entry.readers == 0:

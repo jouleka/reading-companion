@@ -238,6 +238,32 @@ function optimisticBase(anchor: ReaderMarkAnchor) {
   };
 }
 
+const recapRequests = new Map<string, Promise<CatchMeUp>>();
+function requestRecap(id: string, bookmark?: number): Promise<CatchMeUp> {
+  const owner = activeOfflineOwner();
+  const key = JSON.stringify([owner, id, bookmark ?? null]);
+  const pending = recapRequests.get(key);
+  if (pending) return pending;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
+  const request = fetch(`/api/books/${id}/catch-me-up${bookmark != null ? `?bookmark=${bookmark}` : ""}`, { signal: controller.signal })
+    .then((response) => j<CatchMeUp>(response))
+    .then((value) => {
+      if (owner !== activeOfflineOwner()) throw new ApiError("Your reading session changed. Reopen the book.", 409, "session_changed");
+      return value;
+    })
+    .catch((error: unknown) => {
+      if (controller.signal.aborted) throw new ApiError("The recap is taking longer than expected.", 504, "recap_timeout");
+      throw error;
+    })
+    .finally(() => {
+      window.clearTimeout(timeout);
+      if (recapRequests.get(key) === request) recapRequests.delete(key);
+    });
+  recapRequests.set(key, request);
+  return request;
+}
+
 export const api = {
   aiRuntime: (signal?: AbortSignal) =>
     fetch("/api/health/ai", { signal, cache: "no-store" }).then((r) => j<AiRuntime>(r)),
@@ -420,10 +446,7 @@ export const api = {
   },
   // bookmark is optional: omitted = the current frontier; set = the scrubber's past point (LIT-15).
   // Either way the server CLAMPS to the high-water — the client never widens its own frontier.
-  catchMeUp: (id: string, bookmark?: number) =>
-    fetch(`/api/books/${id}/catch-me-up${bookmark != null ? `?bookmark=${bookmark}` : ""}`).then(
-      (r) => j<CatchMeUp>(r),
-    ),
+  catchMeUp: requestRecap,
   preparedQuestions: (id: string, bookmark: number) =>
     fetch(`/api/books/${id}/prepared-questions?bookmark=${bookmark}`).then(
       (r) => j<{ as_of_chapter: number; questions: string[] }>(r),

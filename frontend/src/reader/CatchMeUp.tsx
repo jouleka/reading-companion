@@ -4,7 +4,7 @@
  * LIT-16 pattern) and renders ONLY the server-clamped data: the recap the runtime gate + LLM-judge
  * cleared, never anything client-computed or past the frontier. Fetches by (bookId, bookmark) so the
  * LIT-15 scrubber can walk it back through time; the server still clamps to the high-water. */
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type BookType, type CatchMeUp as CMU } from "../api";
 import { Button } from "../ui/Button";
 import { useDialogMotion } from "../ui/useDialogMotion";
@@ -21,6 +21,7 @@ export function CatchMeUp({
   totalAtoms,
   bookType = "novel",
   welcomeBackChapter,
+  workspaceNavigation,
   onClose,
 }: {
   bookId: string;
@@ -30,12 +31,14 @@ export function CatchMeUp({
   // LIT-29 "since you were last here": when the hero auto-opens after a return gap, the chapter the
   // reader left off in — drives the welcome-back framing. null/omitted on a deliberate open.
   welcomeBackChapter?: number | null;
+  workspaceNavigation?: ReactNode;
   onClose: () => void;
 }) {
   const { closing, requestClose } = useDialogMotion(onClose);
   const [cmu, setCmu] = useState<CMU | null>(null);
   const [err, setErr] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
+  const [slow, setSlow] = useState(false);
   // LIT-30: the open name card (a clicked chip), anchored to it. While a card is open it owns the
   // keyboard; the hero yields (below) so its own Escape/Tab-trap take over.
   const [card, setCard] = useState<{
@@ -97,12 +100,16 @@ export function CatchMeUp({
     let dead = false;
     setCmu(null);
     setErr(null);
+    setSlow(false);
+    const slowTimer = window.setTimeout(() => { if (!dead) setSlow(true); }, 8_000);
     api
       .catchMeUp(bookId, bookmark)
       .then((d) => !dead && setCmu(d))
-      .catch((error: unknown) => !dead && setErr(error));
+      .catch((error: unknown) => !dead && setErr(error))
+      .finally(() => window.clearTimeout(slowTimer));
     return () => {
       dead = true;
+      window.clearTimeout(slowTimer);
     };
   }, [bookId, bookmark, retry]);
 
@@ -134,7 +141,7 @@ export function CatchMeUp({
       aria-label={dialogLabel}
       ref={rootRef}
     >
-      <article className="hero-page" ref={articleRef}>
+      <article className="hero-page recap-workspace" ref={articleRef}>
         <div className="hero-ribbon" aria-hidden="true" />
         <header className="hero-head">
           <span className="smallcaps hero-eyebrow">
@@ -150,6 +157,7 @@ export function CatchMeUp({
             Close
           </Button>
         </header>
+        {workspaceNavigation}
         {welcomeBackChapter != null && (
           // visual reinforcement only — the SR announcement rides the dialog's accessible name (above)
           <div className="welcome-back">
@@ -189,9 +197,12 @@ export function CatchMeUp({
             </Button>
           </div>
         ) : cmu == null ? (
-          <p className="quiet hero-quiet" role="status">
-            Gathering the memory…
-          </p>
+          <section className="recap-loading" role="status">
+            <strong>{slow ? "This is taking longer than usual." : "Preparing your recap"}</strong>
+            <p>A new recap needs AI generation and checks against your completed chapters.</p>
+            {slow && <p>You can keep reading while this finishes. A cleared recap is saved for next time.</p>}
+            <Button variant="ghost" onClick={requestClose}>Keep reading</Button>
+          </section>
         ) : empty ? (
           <p className="quiet hero-quiet">
             Finish a {presentation.unit} and {presentation.recapLink} will

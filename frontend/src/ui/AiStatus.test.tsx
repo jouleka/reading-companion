@@ -72,4 +72,21 @@ describe("AI runtime honesty", () => {
     await waitFor(() => expect(mock.aiRuntime).not.toHaveBeenCalled());
     expect(screen.queryByRole("status")).toBeNull();
   });
+
+  test("compact live status keeps connection details behind a disclosure", async () => {
+    mock.aiRuntime.mockResolvedValue({ ...live, completion_status: "ready" });
+    render(<AiRuntimeProvider><AiStatus compact /></AiRuntimeProvider>);
+    const summary = await screen.findByText("AI connected");
+    expect(summary.closest("details")?.open).toBe(false);
+    fireEvent.click(summary);
+    expect(summary.closest("details")?.open).toBe(true);
+    expect(screen.getByRole("button", { name: "Check connection" })).toBeTruthy();
+  });
+
+  test("compact mode keeps demo warnings visible", async () => {
+    mock.aiRuntime.mockResolvedValue({ ...live, mode: "demo", completion_status: "ready" });
+    render(<AiRuntimeProvider><AiStatus compact /></AiRuntimeProvider>);
+    expect(await screen.findByText(/cannot provide real AI answers/)).toBeTruthy();
+    expect(screen.queryByText("AI connected")).toBeNull();
+  });
 });
