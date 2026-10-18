@@ -288,16 +288,19 @@ class LLMClient:
         cap_name = "max_completion_tokens" if self._is_native_openai else "max_tokens"
         cap = ({cap_name: max_output_tokens} if max_output_tokens is not None else {})
         if self._is_native_openai and model in _NATIVE_REASONING_EFFORT:
+            short_recap_draft = (model == "gpt-6-luna" and schema is None
+                                 and getattr(self, "recap_generation_profile", False))
+            unreasoned = (model == "gpt-6-luna" and
+                          (getattr(self, "reuse_review_profile", False) or short_recap_draft))
             # Native Luna defaults to medium; its isolated short reuse review uses none.
             # Sol stays low. The shared cap bounds visible
             # output AND reasoning. The isolated local reader may request Fast processing;
             # billing_model preserves its premium in the durable cost ledger. Extraction and
             # hosted clients retain Standard processing.
             cap = {"max_completion_tokens": max_output_tokens if max_output_tokens is not None else 4096,
-                   "reasoning_effort": ("none" if model == "gpt-6-luna" and
-                       getattr(self, "reuse_review_profile", False) else _NATIVE_REASONING_EFFORT[model]),
+                   "reasoning_effort": ("none" if unreasoned else _NATIVE_REASONING_EFFORT[model]),
                    "service_tier": getattr(self, "service_tier", "default")}
-            if cap["reasoning_effort"] == "none" and getattr(self, "reuse_review_profile", False):
+            if unreasoned:
                 cap["temperature"] = 0
         requested_fast = cap.get("service_tier") == "fast"
         allowed_tiers = ((None, "fast", "priority", "default") if requested_fast

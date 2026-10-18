@@ -14,8 +14,9 @@ never carry the rejected recap or a future name). Cached in-process by the full 
 (book, catalog incarnation, bookmark, validity_snapshot, current synth model, prompt version,
 atom_set_version) — the
 pass-3 churn fixes are what make this cache affordable mid-ingest."""
-from copy import deepcopy
+from copy import copy, deepcopy
 import hashlib
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
@@ -117,6 +118,7 @@ RECAP_PROMPT_VERSION = "recap-v3"                 # unchanged novel prompt/cache
 NON_NOVEL_RECAP_PROMPT_VERSION = "recap-v4"       # LIT-9 profile-aware neutral wording
 RECAP_FAILURE_TTL_S = 60.0                        # negative cache: a double-rejected key 502s without
 #                                                   re-paying until the TTL lapses (pass-2 convoy fix)
+_log = logging.getLogger(__name__)
 
 
 def _recap_prompt_version(book_type, content_language="und"):
@@ -1193,6 +1195,15 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
     if use_primary:
         review_endpoint = hashlib.sha256(str(getattr(client, "base_url", "")).encode()).hexdigest()
         synth_model += f":{PRIMARY_RECAP_VERSION}:{client.extractor_version('cheap')}:{review_endpoint}"
+    fast_draft = (use_primary and getattr(client, "_is_native_openai", False)
+                  and client._model_for("large") == "gpt-6-luna")
+    synthesis_client = client
+    if fast_draft:
+        # Drafting four sentences does not need a long reasoning pass. The positive source
+        # audit and separate citation judge below retain the original client and reasoning.
+        synthesis_client = copy(client)
+        synthesis_client.recap_generation_profile = True
+        synth_model += ":recap-draft-none-v1"
     if getattr(client, "jev", None) is not None:
         synth_model += (f":jev-hybrid-recap-v2:{settings.jev_recap_enabled}:{client.jev.model}:"
                         f"{settings.jev_min_probability}:{settings.jev_min_confidence}")
@@ -1300,7 +1311,7 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 raise HTTPException(429, "recap evidence exceeds the per-call input ceiling")
             try:
                 recap, _usage = _budgeted_runner(
-                    catalog, settings, client, book_id, "synthesis"
+                    catalog, settings, synthesis_client, book_id, "synthesis"
                 )(system, prompt, tier="large")
             except CostCeilingExceeded as exc:
                 raise HTTPException(429, "book cost ceiling reached") from exc
@@ -1308,10 +1319,14 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 try:
                     if use_primary:
                         score = score_recap(mem, eff, recap, read_text=read_text_upto(mem, eff))
-                        if (score["future_entity_leaks"] or score["prolepsis_hits"]
-                                or score["unsupported_event_bindings"]):
+                        if score["future_entity_leaks"] or score["prolepsis_hits"]:
+                            _log.warning(
+                                "Recap temporal gate withheld chapter %s, attempt %s (names=%s, language=%s)",
+                                eff, attempt + 1, len(score["future_entity_leaks"]), len(score["prolepsis_hits"]),
+                            )
                             continue
-                        # Legacy-memory word overlap cannot validate or veto primary facts.
+                        # Legacy-memory word overlap and event-role signatures cannot validate
+                        # or veto primary facts: extraction may omit a source-supported action.
                         # Complete positive support is mandatory in the raw-source audits below,
                         # followed by the independent own-citation judge (the same Ask policy).
                     else:
@@ -1323,12 +1338,15 @@ def catch_me_up(book_id: str, request: Request, bookmark: int | None = _BM,
                 try:
                     primary_now, _sources = review_primary_recap(
                         recap, primary, eff, atoms, catalog=catalog, settings=settings,
-                        client=client, book_id=book_id,
+                        client=client, book_id=book_id, generation_prompt=source_prompt,
                     )
                 except CostCeilingExceeded as exc:
                     raise HTTPException(429, "book cost ceiling reached") from exc
-                except (JudgeUnavailable, AskEvidenceError, ValueError):
-                    primary_correction = primary_repair_context(recap, primary, eff, atoms)
+                except (JudgeUnavailable, AskEvidenceError, ValueError) as exc:
+                    _log.warning("Recap review withheld chapter %s, attempt %s (%s)",
+                                 eff, attempt + 1, type(exc).__name__)
+                    primary_correction = primary_repair_context(recap, primary, eff, atoms,
+                        feedback=getattr(exc, "review_feedback", ()), generation_prompt=source_prompt)
                     continue
                 recap_final = recap
                 break

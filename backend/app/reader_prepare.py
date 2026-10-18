@@ -154,13 +154,15 @@ def prepare(app, scope):
                         st.settings, client, st.worker)
         except Exception:
             scope.check(app)  # A failed recap does not prevent independently reviewed answers.
+    # The recap is the first thing a returning reader opens. Do not put eight multi-call
+    # question preparations ahead of it (which could postpone warming for several minutes).
+    warm_recap()
+    scope.check(app)
     if not st.settings.reader_prepare_enabled or not st.settings.reader_answer_cache:
-        warm_recap()
         return
     bank = st.reader_client.answers
     attempt_key = preparation_key(scope, st.settings)
     if bank.prepared(attempt_key):
-        warm_recap()
         return
     finished = False
     try:
@@ -239,5 +241,3 @@ def prepare(app, scope):
         # Persist the attempt to prevent scroll/restart spend loops. A failed stage retains
         # its plan, which can resume after an explicit change to the configured allowance.
         bank.mark_prepared(attempt_key, keep_plan=not finished)
-        # Publish the first independently cleared answers before starting a slower full recap.
-        warm_recap()

@@ -118,7 +118,7 @@ export function Companion({
           attempts >= 8
         ) {
           try {
-            const c = await api.catchMeUp(bookId);
+            const c = await api.catchMeUp(bookId, bookmark);
             if (cancelled) return;
             setRecapSnapshot({ bookId, data: c });
             setRecapErr(null);

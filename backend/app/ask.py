@@ -298,6 +298,7 @@ def retrieve_ask_sources(
     atoms: dict[str, dict[str, Any]],
     limit: int = 6,
     candidate_pool: bool = False,
+    prefer_recent: bool = True,
     known_names: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     """Fuse full completed-text lexical windows with independently ranked semantic hits.
@@ -543,7 +544,7 @@ def retrieve_ask_sources(
                     item = candidate(passage, chapter_key, ordinal, start=start)
                     lexical_neighbors.append((order, rank, item))
                     lexical_links.append((anchor, item))
-        core_items = (recent[:3]
+        core_items = ((recent[:3] if prefer_recent else [])
                       + [item for _rank, item in sorted(semantic_candidates, key=lambda row: row[0])]
                       + items[:6] + lexical[:3])
         for item in lexical[:3] + core_items:

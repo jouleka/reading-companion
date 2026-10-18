@@ -38,6 +38,7 @@ export function CatchMeUp({
   const [cmu, setCmu] = useState<CMU | null>(null);
   const [err, setErr] = useState<unknown>(null);
   const [retry, setRetry] = useState(0);
+  const [slow, setSlow] = useState(false);
   // LIT-30: the open name card (a clicked chip), anchored to it. While a card is open it owns the
   // keyboard; the hero yields (below) so its own Escape/Tab-trap take over.
   const [card, setCard] = useState<{
@@ -99,12 +100,16 @@ export function CatchMeUp({
     let dead = false;
     setCmu(null);
     setErr(null);
+    setSlow(false);
+    const slowTimer = window.setTimeout(() => { if (!dead) setSlow(true); }, 8_000);
     api
       .catchMeUp(bookId, bookmark)
       .then((d) => !dead && setCmu(d))
-      .catch((error: unknown) => !dead && setErr(error));
+      .catch((error: unknown) => !dead && setErr(error))
+      .finally(() => window.clearTimeout(slowTimer));
     return () => {
       dead = true;
+      window.clearTimeout(slowTimer);
     };
   }, [bookId, bookmark, retry]);
 
@@ -192,9 +197,12 @@ export function CatchMeUp({
             </Button>
           </div>
         ) : cmu == null ? (
-          <p className="quiet hero-quiet" role="status">
-            Gathering the memory…
-          </p>
+          <section className="recap-loading" role="status">
+            <strong>{slow ? "This is taking longer than usual." : "Preparing your recap"}</strong>
+            <p>A new recap needs AI generation and checks against your completed chapters.</p>
+            {slow && <p>You can keep reading while this finishes. A cleared recap is saved for next time.</p>}
+            <Button variant="ghost" onClick={requestClose}>Keep reading</Button>
+          </section>
         ) : empty ? (
           <p className="quiet hero-quiet">
             Finish a {presentation.unit} and {presentation.recapLink} will

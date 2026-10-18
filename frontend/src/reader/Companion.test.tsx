@@ -244,7 +244,7 @@ describe("Companion", () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry companion" }));
     });
     expect(mocks.ingest).toHaveBeenCalledTimes(10);
-    expect(mocks.catchMeUp).toHaveBeenCalledWith("b");
+    expect(mocks.catchMeUp).toHaveBeenCalledWith("b", 3);
     expect(screen.getByText(/just met at the forge/i)).toBeTruthy();
     expect(
       screen.queryByText(/updates are temporarily unavailable/i),

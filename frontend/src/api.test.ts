@@ -5,10 +5,45 @@ import { flushOfflineMutations, pendingPosition, queuePosition } from "./pwa/off
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   localStorage.clear();
 });
 
 describe("API errors", () => {
+  test("shares a recap request between the sidebar and dialog at the same reading boundary", async () => {
+    let finish!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const sidebar = api.catchMeUp("shared", 4);
+    const dialog = api.catchMeUp("shared", 4);
+    expect(dialog).toBe(sidebar);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ recap: "Nell arrived.", as_of_chapter: 4 }), { status: 200 }));
+    expect((await dialog).recap).toBe("Nell arrived.");
+    fetch.mockResolvedValueOnce(new Response(JSON.stringify({ recap: "Checked again.", as_of_chapter: 4 }), { status: 200 }));
+    await api.catchMeUp("shared", 4);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("a stalled recap ends with a timeout rather than waiting forever", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    const result = expect(api.catchMeUp("stalled", 4)).rejects.toMatchObject({ code: "recap_timeout", status: 504 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await result;
+  });
+
+  test("an old owner’s recap never appears in a new reading session", async () => {
+    localStorage.setItem("litlet.offline.owner", "05dbebd1-e9e8-4be8-8172-eb65ca8d2a67");
+    let finish!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const pending = api.catchMeUp("private", 4);
+    localStorage.setItem("litlet.offline.owner", "local");
+    finish(new Response(JSON.stringify({ recap: "Private recap.", as_of_chapter: 4 }), { status: 200 }));
+    await expect(pending).rejects.toMatchObject({ code: "session_changed" });
+  });
+
   test("preserves a structured provider error code without exposing raw response details", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       detail: {

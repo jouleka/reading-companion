@@ -217,8 +217,11 @@ def test_preparation_uses_only_completed_facts_and_normal_reviewed_answer_route(
     app.state.settings.reader_prepare_enabled = True
     app.state.settings.reader_answer_cache = True
     app.state.settings.reader_prepare_max_questions = 2
-    questions, inputs = [], []
+    app.state.settings.recap_prewarm = True
+    questions, inputs, order = [], [], []
+    monkeypatch.setattr("app.api.views.catch_me_up", lambda *args: order.append("recap"))
     def plan(*args, **kwargs):
+        order.append("question")
         inputs.append(json.loads(kwargs["user"]))
         if kwargs["schema"].__name__ == "PreparationReview":
             return SimpleNamespace(value={"audits": [{"question_id": c["id"],
@@ -234,6 +237,7 @@ def test_preparation_uses_only_completed_facts_and_normal_reviewed_answer_route(
     monkeypatch.setattr("app.reader_prepare.budgeted_completion", plan)
     monkeypatch.setattr("app.api.views.ask_the_book", reviewed)
     prepare(app, scope)
+    assert order[0] == "recap" and "question" in order[1:]
     prepare(app, scope)
     assert len(inputs) == 2 and len(questions) == 2
     assert "Corvus" not in json.dumps(inputs)
